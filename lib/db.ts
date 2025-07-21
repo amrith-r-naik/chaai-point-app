@@ -10,7 +10,10 @@ export async function openDatabase() {
 }
 
 async function initializeSchema() {
-  if (!db) return;
+  if (!db) {
+    console.error("Database is not initialized");
+    return;
+  }
 
   await db.execAsync(`
     PRAGMA foreign_keys = ON;

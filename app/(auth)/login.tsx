@@ -2,6 +2,7 @@ import TextInputField from "@/components/TextInputField";
 import { loginUser } from "@/services/authService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
+import { router } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -63,9 +64,9 @@ export default function LoginScreen() {
     try {
       const user = await loginUser(email, password);
       if (user) {
-        authState.user.set(user);
         authState.error.set("");
-        // Navigate to main screen, e.g., router.push('/home')
+        // Router will automatically redirect via _layout.tsx
+        router.replace("/" as any);
       } else {
         authState.error.set("Invalid email or password. Please try again.");
       }

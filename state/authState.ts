@@ -12,6 +12,7 @@ export const authState = observable({
   loading: false,
   error: "" as string,
   isInitialized: false,
+  isDbReady: false,
 });
 
 // Session persistence functions

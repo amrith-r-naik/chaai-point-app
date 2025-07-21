@@ -163,7 +163,61 @@ export async function seedTestUser() {
     console.log("Test user created successfully");
     console.log("Email: admin@chaaipoint.com");
     console.log("Password: password123");
+
+    // Also seed test customers
+    // await seedTestCustomers();
   } catch (error) {
     console.error("Seed error:", error);
+  }
+}
+
+export async function seedTestCustomers() {
+  if (!db) {
+    console.log("Database is not initialized");
+    return;
+  }
+
+  try {
+    const currentTime = new Date().toISOString();
+
+    const testCustomers = [
+      {
+        id: "customer-1",
+        name: "Arjun Kumar",
+        contact: "9876543210",
+      },
+      {
+        id: "customer-2",
+        name: "Priya Sharma",
+        contact: "9123456789",
+      },
+      {
+        id: "customer-3",
+        name: "Rajesh Gupta",
+        contact: "9234567890",
+      },
+      {
+        id: "customer-4",
+        name: "Meera Patel",
+        contact: "9345678901",
+      },
+      {
+        id: "customer-5",
+        name: "Vikash Singh",
+        contact: null,
+      },
+    ];
+
+    for (const customer of testCustomers) {
+      await db.runAsync(
+        `INSERT OR REPLACE INTO customers (id, name, contact, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?)`,
+        [customer.id, customer.name, customer.contact, currentTime, currentTime]
+      );
+    }
+
+    console.log("Test customers seeded successfully");
+  } catch (error) {
+    console.error("Customer seed error:", error);
   }
 }

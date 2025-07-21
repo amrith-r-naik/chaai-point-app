@@ -1,6 +1,6 @@
-import { authState } from "@/authState";
 import TextInputField from "@/components/TextInputField";
 import { loginUser } from "@/services/authService";
+import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import React, { useState } from "react";
 import {

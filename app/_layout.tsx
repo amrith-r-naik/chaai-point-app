@@ -20,7 +20,10 @@ export default function RootLayout() {
         await openDatabase();
         console.log("Database opened successfully");
         await debugDatabase();
-        // await seedTestUser(); // This will also seed customers
+        // await seedTestUser();
+        // await seedTestCustomers();
+        // await seedTestMenuItems();
+        // await seedTestOrders();
 
         // Mark database as ready
         authState.isDbReady.set(true);

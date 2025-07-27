@@ -1,3 +1,12 @@
+import CreateOrderModal from "@/components/CreateOrderModal";
+import CustomerModal from "@/components/CustomerModal";
+import OrderDetailsModal from "@/components/OrderDetailsModal";
+import SelectCustomerModal from "@/components/SelectCustomerModal";
+import SelectItemsModal from "@/components/SelectItemsModal";
+import { KotOrder, orderService } from "@/services/orderService";
+import { authState } from "@/state/authState";
+import { customerState } from "@/state/customerState";
+import { orderState } from "@/state/orderState";
 import { use$ } from "@legendapp/state/react";
 import React, { useEffect } from "react";
 import {
@@ -8,15 +17,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import CreateOrderModal from "../components/CreateOrderModal";
-import CustomerModal from "../components/CustomerModal";
-import OrderDetailsModal from "../components/OrderDetailsModal";
-import SelectCustomerModal from "../components/SelectCustomerModal";
-import SelectItemsModal from "../components/SelectItemsModal";
-import { KotOrder, orderService } from "../services/orderService";
-import { authState } from "../state/authState";
-import { customerState } from "../state/customerState";
-import { orderState } from "../state/orderState";
 
 function OrderItem({ order }: { order: KotOrder }) {
   const handleViewOrder = () => {

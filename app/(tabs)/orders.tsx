@@ -104,13 +104,6 @@ export default function OrdersScreen() {
     }
   };
 
-  const handleCreateOrder = () => {
-    // Reset creation state
-    orderState.selectedCustomerId.set(null);
-    orderState.selectedItems.set([]);
-    orderState.showCreateOrderModal.set(true);
-  };
-
   if (!auth.isDbReady) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50">
@@ -160,19 +153,9 @@ export default function OrdersScreen() {
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => <OrderItem order={item} />}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 100 }}
+            contentContainerStyle={{ paddingBottom: 20 }}
           />
         )}
-      </View>
-
-      {/* Floating Action Button */}
-      <View className="absolute bottom-6 right-6">
-        <TouchableOpacity
-          onPress={handleCreateOrder}
-          className="bg-black w-14 h-14 rounded-full justify-center items-center shadow-lg"
-        >
-          <Text className="text-white text-2xl font-light">+</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Modals */}

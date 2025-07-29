@@ -1,8 +1,9 @@
 // app/(modals)/select-customer.tsx
 import { use$ } from "@legendapp/state/react";
 import { Stack, useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { Plus, Search } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -120,6 +121,15 @@ export default function SelectCustomerScreen() {
       loadCustomers();
     }
   }, [auth.isDbReady]);
+
+  // Reload customers when screen comes back into focus (e.g., after adding a new customer)
+  useFocusEffect(
+    useCallback(() => {
+      if (auth.isDbReady) {
+        loadCustomers();
+      }
+    }, [auth.isDbReady])
+  );
 
   const loadCustomers = async () => {
     try {

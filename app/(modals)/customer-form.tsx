@@ -193,18 +193,12 @@ export default function CustomerFormScreen() {
                   onChangeText={setName}
                   onBlur={() => validateName(name)}
                   editable={!customerStateData.loading}
-                  style={{
-                    backgroundColor: customerStateData.loading
-                      ? "#f9fafb"
-                      : "white",
-                  }}
                 />
                 {nameError ? (
                   <Text
                     style={{
                       color: theme.colors.error || "#ef4444",
                       fontSize: 14,
-                      marginTop: 6,
                     }}
                   >
                     {nameError}
@@ -219,19 +213,13 @@ export default function CustomerFormScreen() {
                   onChangeText={setContact}
                   onBlur={() => validateContact(contact)}
                   keyboardType="phone-pad"
-                  // editable={!customerStateData.loading}
-                  style={{
-                    backgroundColor: customerStateData.loading
-                      ? "#f9fafb"
-                      : "white",
-                  }}
+                  editable={!customerStateData.loading}
                 />
                 {contactError ? (
                   <Text
                     style={{
                       color: theme.colors.error || "#ef4444",
                       fontSize: 14,
-                      marginTop: 6,
                     }}
                   >
                     {contactError}

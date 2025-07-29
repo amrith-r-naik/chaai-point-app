@@ -1,5 +1,7 @@
+// components/TextInputField.tsx
 import React from "react";
-import { Text, TextInput, View } from "react-native";
+import { TextInputProps } from "react-native";
+import { Input } from "./ui";
 
 export default function TextInputField({
   label,
@@ -10,6 +12,11 @@ export default function TextInputField({
   keyboardType,
   autoCapitalize = "sentences",
   autoComplete,
+  error,
+  hint,
+  leftIcon,
+  rightIcon,
+  ...props
 }: {
   label: string;
   value: string;
@@ -19,21 +26,28 @@ export default function TextInputField({
   keyboardType?: "default" | "email-address" | "numeric" | "phone-pad";
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
   autoComplete?: "email" | "password" | "off";
-}) {
+  error?: string;
+  hint?: string;
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
+} & Omit<TextInputProps, "value" | "onChangeText">) {
   return (
-    <View className="mb-4">
-      <Text className="mb-2 text-gray-700 font-medium">{label}</Text>
-      <TextInput
-        className="border border-gray-300 rounded-xl px-4 py-3 text-base bg-gray-50 focus:bg-white focus:border-black"
-        value={value}
-        secureTextEntry={secureTextEntry}
-        onChangeText={onChangeText}
-        onBlur={onBlur}
-        keyboardType={keyboardType}
-        autoCapitalize={autoCapitalize}
-        autoComplete={autoComplete}
-        placeholderTextColor="#9CA3AF"
-      />
-    </View>
+    <Input
+      label={label}
+      value={value}
+      secureTextEntry={secureTextEntry}
+      onChangeText={onChangeText}
+      onBlur={onBlur}
+      keyboardType={keyboardType}
+      autoCapitalize={autoCapitalize}
+      autoComplete={autoComplete}
+      error={error}
+      hint={hint}
+      leftIcon={leftIcon}
+      rightIcon={rightIcon}
+      variant="outlined"
+      containerStyle={{ marginBottom: 16 }}
+      {...props}
+    />
   );
 }

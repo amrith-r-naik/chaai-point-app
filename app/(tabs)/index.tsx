@@ -1,12 +1,94 @@
+import { Button, Card, Loading, Typography } from "@/components/ui";
+import { theme } from "@/constants/theme";
 import { logoutUser } from "@/services/authService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import { router } from "expo-router";
+import {
+  BarChart3,
+  Hash,
+  Headphones,
+  LogOut,
+  Mail,
+  Settings,
+  Shield,
+} from "lucide-react-native";
 import React from "react";
-import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import {
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+interface QuickActionProps {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  onPress?: () => void;
+  iconBgColor?: string;
+  iconColor?: string;
+}
+
+const QuickAction: React.FC<QuickActionProps> = ({
+  title,
+  description,
+  icon,
+  onPress,
+  iconBgColor = theme.colors.primaryLight,
+  iconColor = theme.colors.primary,
+}) => (
+  <TouchableOpacity
+    onPress={onPress}
+    style={{
+      backgroundColor: "white",
+      padding: 16,
+      borderRadius: theme.borderRadius.lg,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...theme.shadows.sm,
+    }}
+    activeOpacity={0.7}
+  >
+    <View style={{ flexDirection: "row", alignItems: "center" }}>
+      <View
+        style={{
+          width: 48,
+          height: 48,
+          backgroundColor: iconBgColor,
+          borderRadius: theme.borderRadius.md,
+          justifyContent: "center",
+          alignItems: "center",
+          marginRight: 16,
+        }}
+      >
+        {icon}
+      </View>
+      <View style={{ flex: 1 }}>
+        <Typography
+          variant="body"
+          weight="semibold"
+          style={{ marginBottom: 2 }}
+        >
+          {title}
+        </Typography>
+        <Typography variant="caption" color="textSecondary">
+          {description}
+        </Typography>
+      </View>
+      <Typography variant="h4" color="textSecondary">
+        →
+      </Typography>
+    </View>
+  </TouchableOpacity>
+);
 
 export default function HomeScreen() {
   const auth = use$(authState);
+  const insets = useSafeAreaInsets();
 
   const handleLogout = async () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
@@ -32,158 +114,198 @@ export default function HomeScreen() {
 
   if (!auth.user) {
     return (
-      <View className="flex-1 justify-center items-center bg-gray-100">
-        <Text className="text-lg text-gray-600">Loading...</Text>
-      </View>
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.surface }}>
+        <Loading message="Loading your dashboard..." />
+      </SafeAreaView>
     );
   }
 
   return (
-    <ScrollView className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-blue-600 pt-12 pb-6 px-6">
-        <View className="flex-row justify-between items-center">
-          <View>
-            <Text className="text-white text-2xl font-bold">
-              Welcome Back! 👋
-            </Text>
-            <Text className="text-blue-100 text-sm mt-1">
-              Good to see you again
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={handleLogout}
-            className="bg-blue-700 px-4 py-2 rounded-lg"
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.surface }}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Header Section */}
+        <View
+          style={{
+            backgroundColor: theme.colors.primary,
+            paddingTop: insets.top + 20,
+            paddingBottom: 32,
+            paddingHorizontal: 24,
+            borderBottomLeftRadius: theme.borderRadius.xl,
+            borderBottomRightRadius: theme.borderRadius.xl,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+            }}
           >
-            <Text className="text-white font-medium">Logout</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* User Profile Card */}
-      <View className="mx-6 -mt-4 bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-        <Text className="text-lg font-bold text-gray-800 mb-4">
-          Profile Information
-        </Text>
-
-        <View className="space-y-3">
-          <View className="flex-row justify-between py-2 border-b border-gray-100">
-            <Text className="text-gray-600 font-medium">User ID:</Text>
-            <Text className="text-gray-800 font-mono text-sm">
-              {auth.user.id}
-            </Text>
-          </View>
-
-          <View className="flex-row justify-between py-2 border-b border-gray-100">
-            <Text className="text-gray-600 font-medium">Email:</Text>
-            <Text className="text-gray-800">{auth.user.email}</Text>
-          </View>
-
-          <View className="flex-row justify-between py-2">
-            <Text className="text-gray-600 font-medium">Role:</Text>
-            <View className="bg-blue-100 px-3 py-1 rounded-full">
-              <Text className="text-blue-800 font-medium capitalize">
-                {auth.user.role}
-              </Text>
+            <View style={{ flex: 1 }}>
+              <Typography
+                variant="h2"
+                style={{ color: "white", marginBottom: 4 }}
+              >
+                Welcome Back! 👋
+              </Typography>
+              <Typography style={{ color: "rgba(255,255,255,0.8)" }}>
+                Good to see you again
+              </Typography>
             </View>
+            <Button
+              title="Logout"
+              onPress={handleLogout}
+              variant="secondary"
+              size="sm"
+              style={{
+                backgroundColor: "rgba(255,255,255,0.2)",
+                borderColor: "rgba(255,255,255,0.3)",
+              }}
+              textStyle={{ color: "white" }}
+              icon={<LogOut size={16} color="white" />}
+            />
           </View>
         </View>
-      </View>
 
-      {/* Quick Actions */}
-      <View className="mx-6 mt-6">
-        <Text className="text-lg font-bold text-gray-800 mb-4">
-          Quick Actions
-        </Text>
+        {/* Profile Card */}
+        <View style={{ paddingHorizontal: 24, marginTop: -16 }}>
+          <Card shadow="md" rounded="xl" style={{ marginBottom: 24 }}>
+            <Typography variant="h4" style={{ marginBottom: 16 }}>
+              Profile Information
+            </Typography>
 
-        <View className="space-y-3">
-          <TouchableOpacity className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-            <View className="flex-row items-center">
-              <View className="bg-green-100 p-2 rounded-lg mr-3">
-                <Text className="text-green-600 text-lg">📊</Text>
-              </View>
-              <View className="flex-1">
-                <Text className="text-gray-800 font-medium">
-                  View Dashboard
-                </Text>
-                <Text className="text-gray-500 text-sm">
-                  Check your analytics
-                </Text>
-              </View>
-              <Text className="text-gray-400">→</Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* Admin Settings - Only show for admin users */}
-          {auth.user?.role === "admin" && (
-            <TouchableOpacity
-              onPress={() => router.push("/admin-settings")}
-              className="bg-white p-4 rounded-lg shadow-sm border border-gray-100"
-            >
-              <View className="flex-row items-center">
-                <View className="bg-purple-100 p-2 rounded-lg mr-3">
-                  <Text className="text-purple-600 text-lg">⚙️</Text>
+            <View style={{ gap: 12 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  paddingVertical: 8,
+                  borderBottomWidth: 1,
+                  borderBottomColor: theme.colors.borderLight,
+                }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Hash
+                    size={16}
+                    color={theme.colors.textSecondary}
+                    style={{ marginRight: 8 }}
+                  />
+                  <Typography color="textSecondary">User ID:</Typography>
                 </View>
-                <View className="flex-1">
-                  <Text className="text-gray-800 font-medium">
-                    Admin Settings
-                  </Text>
-                  <Text className="text-gray-500 text-sm">
-                    Manage menu items and database
-                  </Text>
+                <Typography
+                  variant="caption"
+                  style={{
+                    fontFamily: "monospace",
+                    backgroundColor: theme.colors.surface,
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderRadius: 4,
+                  }}
+                >
+                  {auth.user.id}
+                </Typography>
+              </View>
+
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  paddingVertical: 8,
+                  borderBottomWidth: 1,
+                  borderBottomColor: theme.colors.borderLight,
+                }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Mail
+                    size={16}
+                    color={theme.colors.textSecondary}
+                    style={{ marginRight: 8 }}
+                  />
+                  <Typography color="textSecondary">Email:</Typography>
                 </View>
-                <Text className="text-gray-400">→</Text>
+                <Typography>{auth.user.email}</Typography>
               </View>
-            </TouchableOpacity>
-          )}
 
-          <TouchableOpacity className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-            <View className="flex-row items-center">
-              <View className="bg-orange-100 p-2 rounded-lg mr-3">
-                <Text className="text-orange-600 text-lg">📱</Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  paddingVertical: 8,
+                }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Shield
+                    size={16}
+                    color={theme.colors.textSecondary}
+                    style={{ marginRight: 8 }}
+                  />
+                  <Typography color="textSecondary">Role:</Typography>
+                </View>
+                <View
+                  style={{
+                    backgroundColor: theme.colors.primaryLight,
+                    paddingHorizontal: 12,
+                    paddingVertical: 4,
+                    borderRadius: theme.borderRadius.full,
+                  }}
+                >
+                  <Typography
+                    variant="caption"
+                    color="primary"
+                    weight="semibold"
+                    style={{ textTransform: "capitalize" }}
+                  >
+                    {auth.user.role}
+                  </Typography>
+                </View>
               </View>
-              <View className="flex-1">
-                <Text className="text-gray-800 font-medium">Support</Text>
-                <Text className="text-gray-500 text-sm">
-                  Get help and assistance
-                </Text>
-              </View>
-              <Text className="text-gray-400">→</Text>
             </View>
-          </TouchableOpacity>
+          </Card>
         </View>
-      </View>
 
-      {/* Sample Content */}
-      <View className="mx-6 mt-6 mb-8">
-        <Text className="text-lg font-bold text-gray-800 mb-4">
-          Sample Content
-        </Text>
+        {/* Quick Actions */}
+        <View style={{ paddingHorizontal: 24 }}>
+          <Typography variant="h4" style={{ marginBottom: 16 }}>
+            Quick Actions
+          </Typography>
 
-        <View className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-          <Text className="text-gray-700 leading-6">
-            This is your home screen! You&apos;re successfully logged in as{" "}
-            <Text className="font-semibold text-blue-600">
-              {auth.user.email}
-            </Text>
-            {". "}
-            This screen demonstrates the post-login flow with user session
-            persistence. Your session will be maintained even if you close and
-            reopen the app.
-          </Text>
+          <View style={{ gap: 8 }}>
+            <QuickAction
+              title="View Dashboard"
+              description="Check your analytics"
+              icon={<BarChart3 size={24} color={theme.colors.success} />}
+              iconBgColor={theme.colors.successLight}
+              iconColor={theme.colors.success}
+            />
 
-          <View className="mt-4 p-4 bg-gray-50 rounded-lg">
-            <Text className="text-sm text-gray-600 font-medium mb-2">
-              🚀 What&apos;s next?
-            </Text>
-            <Text className="text-sm text-gray-600 leading-5">
-              You can now add your app&apos;s main features, navigation, and
-              business logic. The authentication system is ready and will
-              persist user sessions automatically.
-            </Text>
+            {/* Admin Settings - Only show for admin users */}
+            {auth.user?.role === "admin" && (
+              <QuickAction
+                title="Admin Settings"
+                description="Manage menu items and database"
+                icon={<Settings size={24} color="#8b5cf6" />}
+                iconBgColor="#f3e8ff"
+                iconColor="#8b5cf6"
+                onPress={() => router.push("/admin-settings")}
+              />
+            )}
+
+            <QuickAction
+              title="Support"
+              description="Get help when you need it"
+              icon={<Headphones size={24} color={theme.colors.warning} />}
+              iconBgColor={theme.colors.warningLight}
+              iconColor={theme.colors.warning}
+            />
           </View>
         </View>
-      </View>
-    </ScrollView>
+
+        {/* Bottom Spacing for Tab Bar */}
+        <View style={{ height: 120 }} />
+      </ScrollView>
+    </SafeAreaView>
   );
 }

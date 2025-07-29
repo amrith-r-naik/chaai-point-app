@@ -7,8 +7,6 @@ export const customerState = observable({
   error: "" as string,
   searchQuery: "" as string,
   selectedCustomer: null as Customer | null,
-  showAddModal: false,
-  showEditModal: false,
 });
 
 export const clearCustomerError = () => {
@@ -17,19 +15,4 @@ export const clearCustomerError = () => {
 
 export const setSelectedCustomer = (customer: Customer | null) => {
   customerState.selectedCustomer.set(customer);
-};
-
-export const toggleAddModal = () => {
-  customerState.showAddModal.set(!customerState.showAddModal.get());
-  if (!customerState.showAddModal.get()) {
-    clearCustomerError();
-  }
-};
-
-export const toggleEditModal = () => {
-  customerState.showEditModal.set(!customerState.showEditModal.get());
-  if (!customerState.showEditModal.get()) {
-    clearCustomerError();
-    setSelectedCustomer(null);
-  }
 };

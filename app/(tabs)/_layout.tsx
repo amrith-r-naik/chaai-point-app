@@ -1,6 +1,5 @@
 import { theme } from "@/constants/theme";
-import { orderState } from "@/state/orderState";
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import {
   ClipboardList,
   CreditCard,
@@ -12,8 +11,10 @@ import React from "react";
 import { TouchableOpacity, View } from "react-native";
 
 export default function TabLayout() {
+  const router = useRouter();
+
   const handleCreateOrder = () => {
-    orderState.showCreateOrderModal.set(true);
+    router.push("/(modals)/create-order");
   };
 
   const getIcon = (routeName: string, focused: boolean) => {

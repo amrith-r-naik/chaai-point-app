@@ -1,4 +1,3 @@
-import CustomerModal from "@/components/CustomerModal";
 import {
   Customer,
   deleteCustomer,
@@ -6,13 +5,9 @@ import {
   searchCustomers,
 } from "@/services/customerService";
 import { authState } from "@/state/authState";
-import {
-  customerState,
-  setSelectedCustomer,
-  toggleAddModal,
-  toggleEditModal,
-} from "@/state/customerState";
+import { customerState, setSelectedCustomer } from "@/state/customerState";
 import { use$ } from "@legendapp/state/react";
+import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -31,6 +26,7 @@ export default function CustomersScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const customerStateData = use$(customerState);
   const auth = use$(authState);
+  const router = useRouter();
 
   const loadCustomers = useCallback(async () => {
     try {
@@ -83,7 +79,12 @@ export default function CustomersScreen() {
 
   const handleEdit = (customer: Customer) => {
     setSelectedCustomer(customer);
-    toggleEditModal();
+    router.push("/(modals)/customer-form");
+  };
+
+  const handleAddCustomer = () => {
+    customerState.selectedCustomer.set(null);
+    router.push("/(modals)/customer-form");
   };
 
   const handleDelete = (customer: Customer) => {
@@ -223,7 +224,7 @@ export default function CustomersScreen() {
 
         {/* Add Customer Button */}
         <TouchableOpacity
-          onPress={toggleAddModal}
+          onPress={handleAddCustomer}
           className="flex-row items-center py-3"
         >
           <Text className="text-blue-600 text-base mr-2">👤</Text>
@@ -276,21 +277,6 @@ export default function CustomersScreen() {
           />
         )}
       </View>
-
-      {/* Add Customer Modal */}
-      <CustomerModal
-        visible={customerStateData.showAddModal}
-        onClose={toggleAddModal}
-        onSuccess={loadCustomers}
-      />
-
-      {/* Edit Customer Modal */}
-      {/* <CustomerModal
-        visible={customerStateData.showEditModal}
-        customer={customerStateData.selectedCustomer}
-        onClose={toggleEditModal}
-        onSuccess={loadCustomers}
-      /> */}
     </SafeAreaView>
   );
 }

@@ -15,12 +15,6 @@ export interface OrderState {
     item: MenuItem;
     quantity: number;
   }[];
-
-  // Modal states
-  showCreateOrderModal: boolean;
-  showCustomerModal: boolean;
-  showItemsModal: boolean;
-  showOrderDetailsModal: boolean;
 }
 
 export const orderState = observable<OrderState>({
@@ -32,9 +26,4 @@ export const orderState = observable<OrderState>({
   isCreatingOrder: false,
   selectedCustomerId: null,
   selectedItems: [],
-
-  showCreateOrderModal: false,
-  showCustomerModal: false,
-  showItemsModal: false,
-  showOrderDetailsModal: false,
 });

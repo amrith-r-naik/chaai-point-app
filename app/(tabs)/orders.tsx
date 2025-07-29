@@ -1,13 +1,8 @@
-import CreateOrderModal from "@/components/CreateOrderModal";
-import CustomerModal from "@/components/CustomerModal";
-import OrderDetailsModal from "@/components/OrderDetailsModal";
-import SelectCustomerModal from "@/components/SelectCustomerModal";
-import SelectItemsModal from "@/components/SelectItemsModal";
 import { KotOrder, orderService } from "@/services/orderService";
 import { authState } from "@/state/authState";
-import { customerState } from "@/state/customerState";
 import { orderState } from "@/state/orderState";
 import { use$ } from "@legendapp/state/react";
+import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 import {
   FlatList,
@@ -19,9 +14,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 function OrderItem({ order }: { order: KotOrder }) {
+  const router = useRouter();
+
   const handleViewOrder = () => {
     orderState.selectedOrder.set(order);
-    orderState.showOrderDetailsModal.set(true);
+    router.push("/(modals)/order-details");
   };
 
   const formatDate = (dateString: string) => {
@@ -83,6 +80,7 @@ function OrderItem({ order }: { order: KotOrder }) {
 export default function OrdersScreen() {
   const state = use$(orderState);
   const auth = use$(authState);
+  const router = useRouter();
 
   useEffect(() => {
     if (auth.isDbReady) {
@@ -102,6 +100,13 @@ export default function OrdersScreen() {
     } finally {
       orderState.isLoading.set(false);
     }
+  };
+
+  const handleCreateOrder = () => {
+    // Reset order state before navigation
+    orderState.selectedCustomerId.set(null);
+    orderState.selectedItems.set([]);
+    router.push("/(modals)/create-order");
   };
 
   if (!auth.isDbReady) {
@@ -143,9 +148,17 @@ export default function OrdersScreen() {
             <Text className="text-xl font-semibold text-gray-800 mb-2">
               No Orders Yet
             </Text>
-            <Text className="text-gray-500 text-center mb-4">
-              Start taking orders by tapping the + button
+            <Text className="text-gray-500 text-center mb-6">
+              Start taking orders by creating your first order
             </Text>
+            <TouchableOpacity
+              onPress={handleCreateOrder}
+              className="bg-blue-600 px-6 py-3 rounded-lg"
+            >
+              <Text className="text-white font-medium text-lg">
+                Create Order
+              </Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <FlatList
@@ -157,37 +170,6 @@ export default function OrdersScreen() {
           />
         )}
       </View>
-
-      {/* Modals */}
-      <OrderDetailsModal />
-      <CreateOrderModal />
-      <SelectCustomerModal />
-      <SelectItemsModal />
-      <CustomerModalWrapper />
     </SafeAreaView>
-  );
-}
-
-function CustomerModalWrapper() {
-  const customerStateData = use$(customerState);
-
-  const handleClose = () => {
-    customerState.showAddModal.set(false);
-    customerState.selectedCustomer.set(null);
-  };
-
-  const handleSuccess = () => {
-    customerState.showAddModal.set(false);
-    customerState.selectedCustomer.set(null);
-    // Reload customers will be handled by the SelectCustomerModal
-  };
-
-  return (
-    <CustomerModal
-      visible={customerStateData.showAddModal}
-      customer={customerStateData.selectedCustomer}
-      onClose={handleClose}
-      onSuccess={handleSuccess}
-    />
   );
 }

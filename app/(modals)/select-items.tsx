@@ -1,18 +1,18 @@
-// components/SelectItemsModal.tsx
+// app/(modals)/select-items.tsx
 import { use$ } from "@legendapp/state/react";
-import { Minus, Plus, Search, ShoppingCart, X } from "lucide-react-native";
+import { Stack, useRouter } from "expo-router";
+import { ArrowLeft, Minus, Plus, Search, X } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
   FlatList,
-  Modal,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { theme } from "../constants/theme";
-import { MenuItem, orderService } from "../services/orderService";
-import { orderState } from "../state/orderState";
+import { theme } from "../../constants/theme";
+import { MenuItem, orderService } from "../../services/orderService";
+import { orderState } from "../../state/orderState";
 
 function ItemCard({
   item,
@@ -96,7 +96,7 @@ function ItemCard({
       style={{
         backgroundColor: "white",
         padding: 16,
-        borderRadius: 12,
+        borderRadius: 16,
         marginBottom: 12,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
@@ -108,7 +108,7 @@ function ItemCard({
       }}
     >
       <View style={{ flexDirection: "row" }}>
-        {/* Item Image Placeholder with enhanced design */}
+        {/* Item Image Placeholder */}
         <View
           style={{
             width: 80,
@@ -170,7 +170,7 @@ function ItemCard({
             </Text>
           </View>
 
-          {/* Quantity Controls with enhanced design */}
+          {/* Quantity Controls */}
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             {selectedQuantity > 0 ? (
               <View
@@ -298,14 +298,10 @@ function SelectedItemChip({
         borderRadius: 12,
         padding: 12,
         marginRight: 12,
-        minWidth: 140,
+        minWidth: 80,
         borderWidth: 2,
-        borderColor: theme.colors.primary,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
+        borderColor: theme.colors.border,
+        overflow: "hidden",
       }}
       activeOpacity={0.8}
     >
@@ -329,83 +325,37 @@ function SelectedItemChip({
           {item.name}
         </Text>
 
-        {/* Quantity Controls */}
+        {/* Quantity Badge */}
         <View
           style={{
-            flexDirection: "row",
+            backgroundColor: theme.colors.primary,
+            borderBottomLeftRadius: 4,
+            height: 24,
+            width: 24,
+            justifyContent: "center",
             alignItems: "center",
-            backgroundColor: theme.colors.primaryLight,
-            borderRadius: 15,
-            paddingHorizontal: 2,
-            paddingVertical: 2,
+            position: "absolute",
+            top: -13,
+            right: -13,
           }}
         >
-          <TouchableOpacity
-            onPress={(e) => {
-              e.stopPropagation();
-              onQuantityChange(item, quantity - 1);
-            }}
-            style={{
-              width: 24,
-              height: 24,
-              backgroundColor: theme.colors.primary,
-              borderRadius: 12,
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-            activeOpacity={0.7}
-          >
-            <Minus size={12} color="white" />
-          </TouchableOpacity>
-
           <Text
             style={{
-              marginHorizontal: 10,
-              fontSize: 14,
-              fontWeight: "700",
-              color: theme.colors.primary,
-              minWidth: 16,
-              textAlign: "center",
+              color: "white",
+              fontWeight: "600",
+              fontSize: 12,
             }}
           >
             {quantity}
           </Text>
-
-          <TouchableOpacity
-            onPress={(e) => {
-              e.stopPropagation();
-              onQuantityChange(item, quantity + 1);
-            }}
-            style={{
-              width: 24,
-              height: 24,
-              backgroundColor: theme.colors.primary,
-              borderRadius: 12,
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-            activeOpacity={0.7}
-          >
-            <Plus size={12} color="white" />
-          </TouchableOpacity>
         </View>
-
-        {/* Price */}
-        <Text
-          style={{
-            fontSize: 11,
-            color: theme.colors.textSecondary,
-            marginTop: 4,
-          }}
-        >
-          ₹{item.price * quantity}
-        </Text>
       </View>
     </TouchableOpacity>
   );
 }
 
-export default function SelectItemsModal() {
+export default function SelectItemsScreen() {
+  const router = useRouter();
   const orderStateData = use$(orderState);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -413,10 +363,8 @@ export default function SelectItemsModal() {
   const flatListRef = React.useRef<FlatList>(null);
 
   useEffect(() => {
-    if (orderStateData.showItemsModal) {
-      loadMenuItems();
-    }
-  }, [orderStateData.showItemsModal]);
+    loadMenuItems();
+  }, []);
 
   const loadMenuItems = async () => {
     try {
@@ -425,12 +373,6 @@ export default function SelectItemsModal() {
     } catch (error) {
       console.error("Error loading menu items:", error);
     }
-  };
-
-  const closeModal = () => {
-    orderState.showItemsModal.set(false);
-    setSearchQuery("");
-    setSelectedCategory("All");
   };
 
   const handleSelectItem = (item: MenuItem, quantity: number) => {
@@ -471,7 +413,7 @@ export default function SelectItemsModal() {
       flatListRef.current.scrollToIndex({
         index: itemIndex,
         animated: true,
-        viewPosition: 0.5, // Center the item in view
+        viewPosition: 0.5,
       });
     }
   };
@@ -499,19 +441,64 @@ export default function SelectItemsModal() {
   );
 
   return (
-    <Modal
-      visible={orderStateData.showItemsModal}
-      animationType="slide"
-      transparent={false}
-      statusBarTranslucent={true}
-    >
-      <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
-        {/* Enhanced Header */}
+    <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
+      <Stack.Screen
+        options={{
+          title: "Select Items",
+          headerStyle: {
+            backgroundColor: "white",
+          },
+          headerTitleStyle: {
+            fontSize: 20,
+            fontWeight: "600",
+            color: theme.colors.text,
+          },
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={{
+                padding: 8,
+                marginLeft: -8,
+                borderRadius: 8,
+              }}
+            >
+              <ArrowLeft size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+          ),
+          // TODO:CHANGE THIS TO DONE BUTTON
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => {
+                router.back();
+              }}
+              style={{
+                padding: 8,
+                marginRight: -8,
+                borderRadius: 8,
+                backgroundColor: theme.colors.primary,
+              }}
+            >
+              <Text
+                style={{
+                  color: "white",
+                  fontWeight: "600",
+                }}
+              >
+                Done
+              </Text>
+            </TouchableOpacity>
+          ),
+          headerShadowVisible: true,
+        }}
+      />
+
+      <View style={{ flex: 1 }}>
+        {/* Search and Categories */}
         <View
           style={{
             backgroundColor: "white",
-            paddingTop: 50,
             paddingHorizontal: 16,
+            paddingTop: 16,
             paddingBottom: 16,
             shadowColor: "#000",
             shadowOffset: { width: 0, height: 2 },
@@ -520,95 +507,7 @@ export default function SelectItemsModal() {
             elevation: 4,
           }}
         >
-          {/* Top Bar */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginBottom: 16,
-            }}
-          >
-            <TouchableOpacity
-              onPress={closeModal}
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 20,
-                backgroundColor: "#f3f4f6",
-                justifyContent: "center",
-                alignItems: "center",
-                marginRight: 12,
-              }}
-              activeOpacity={0.7}
-            >
-              <X size={24} color={theme.colors.text} />
-            </TouchableOpacity>
-
-            <View style={{ flex: 1 }}>
-              <Text
-                style={{
-                  fontSize: 24,
-                  fontWeight: "800",
-                  color: theme.colors.text,
-                  marginBottom: 2,
-                }}
-              >
-                Select Items
-              </Text>
-              <Text
-                style={{
-                  fontSize: 14,
-                  color: theme.colors.textSecondary,
-                }}
-              >
-                Choose from our delicious menu
-              </Text>
-            </View>
-
-            {/* Cart Summary */}
-            {totalSelectedItems > 0 && (
-              <View
-                style={{
-                  backgroundColor: theme.colors.primary,
-                  borderRadius: 20,
-                  paddingHorizontal: 12,
-                  paddingVertical: 8,
-                  alignItems: "center",
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    marginBottom: 2,
-                  }}
-                >
-                  <ShoppingCart size={14} color="white" />
-                  <Text
-                    style={{
-                      color: "white",
-                      fontWeight: "600",
-                      marginLeft: 4,
-                      fontSize: 12,
-                    }}
-                  >
-                    {totalSelectedItems}
-                  </Text>
-                </View>
-                <Text
-                  style={{
-                    color: "rgba(255,255,255,0.9)",
-                    fontSize: 10,
-                    fontWeight: "500",
-                  }}
-                >
-                  ₹{totalAmount}
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Enhanced Search Bar */}
+          {/* Search Bar */}
           <View
             style={{
               flexDirection: "row",
@@ -643,7 +542,7 @@ export default function SelectItemsModal() {
             )}
           </View>
 
-          {/* Enhanced Category Tabs */}
+          {/* Category Tabs */}
           <View style={{ flexDirection: "row" }}>
             <FlatList
               data={categories}
@@ -693,7 +592,7 @@ export default function SelectItemsModal() {
           <View
             style={{
               backgroundColor: "white",
-              paddingVertical: 12,
+              paddingBottom: 12,
               borderBottomWidth: 1,
               borderBottomColor: "#f3f4f6",
             }}
@@ -804,6 +703,6 @@ export default function SelectItemsModal() {
           )}
         </View>
       </View>
-    </Modal>
+    </View>
   );
 }

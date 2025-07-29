@@ -1,5 +1,6 @@
 // services/orderService.ts
 import { db } from "../lib/db";
+import { menuService } from "./menuService";
 
 export interface MenuItem {
   id: string;
@@ -212,45 +213,8 @@ class OrderService {
   }
 
   async getHardcodedMenuItems(): Promise<MenuItem[]> {
-    // Hardcoded menu items as requested
-    return [
-      {
-        id: "item_1",
-        name: "Lemon Tea",
-        category: "Tea",
-        price: 30,
-        isActive: 1,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: "item_2",
-        name: "White Sauce Pasta",
-        category: "Pasta",
-        price: 110,
-        isActive: 1,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: "item_3",
-        name: "Peri Peri Fries",
-        category: "Snacks",
-        price: 100,
-        isActive: 1,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: "item_4",
-        name: "Black Tea",
-        category: "Tea",
-        price: 25,
-        isActive: 1,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ];
+    // Use the menuService for better menu management
+    return await menuService.getHardcodedMenuItems();
   }
 }
 

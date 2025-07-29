@@ -114,20 +114,28 @@ export default function HomeScreen() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-            <View className="flex-row items-center">
-              <View className="bg-purple-100 p-2 rounded-lg mr-3">
-                <Text className="text-purple-600 text-lg">⚙️</Text>
+          {/* Admin Settings - Only show for admin users */}
+          {auth.user?.role === "admin" && (
+            <TouchableOpacity
+              onPress={() => router.push("/admin-settings")}
+              className="bg-white p-4 rounded-lg shadow-sm border border-gray-100"
+            >
+              <View className="flex-row items-center">
+                <View className="bg-purple-100 p-2 rounded-lg mr-3">
+                  <Text className="text-purple-600 text-lg">⚙️</Text>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-gray-800 font-medium">
+                    Admin Settings
+                  </Text>
+                  <Text className="text-gray-500 text-sm">
+                    Manage menu items and database
+                  </Text>
+                </View>
+                <Text className="text-gray-400">→</Text>
               </View>
-              <View className="flex-1">
-                <Text className="text-gray-800 font-medium">Settings</Text>
-                <Text className="text-gray-500 text-sm">
-                  Manage your preferences
-                </Text>
-              </View>
-              <Text className="text-gray-400">→</Text>
-            </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
             <View className="flex-row items-center">

@@ -149,7 +149,8 @@ export async function seedTestUser() {
   }
 
   try {
-    const testUserId = "test-user-1";
+    const testAdminUserId = "test-user-1";
+    const testStaffUserId = "test-user-2";
     const currentTime = new Date().toISOString();
 
     await db.runAsync(
@@ -157,11 +158,33 @@ export async function seedTestUser() {
       INSERT OR REPLACE INTO users (id, email, password, role, createdAt)
       VALUES (?, ?, ?, ?, ?)
     `,
-      [testUserId, "admin@chaaipoint.com", "password123", "admin", currentTime]
+      [
+        testAdminUserId,
+        "admin@chaaipoint.com",
+        "password123",
+        "admin",
+        currentTime,
+      ]
     );
 
-    console.log("Test user created successfully");
+    await db.runAsync(
+      `
+      INSERT OR REPLACE INTO users (id, email, password, role, createdAt)
+      VALUES (?, ?, ?, ?, ?)
+    `,
+      [
+        testStaffUserId,
+        "staff@chaaipoint.com",
+        "password123",
+        "staff",
+        currentTime,
+      ]
+    );
+
+    console.log("Test users created successfully");
     console.log("Email: admin@chaaipoint.com");
+    console.log("Password: password123");
+    console.log("Email: staff@chaaipoint.com");
     console.log("Password: password123");
   } catch (error) {
     console.error("Seed error:", error);

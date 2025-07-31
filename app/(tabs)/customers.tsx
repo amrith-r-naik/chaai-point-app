@@ -1,18 +1,15 @@
-import {
-  Customer,
-  deleteCustomer,
-  getAllCustomers,
-  searchCustomers,
-} from "@/services/customerService";
+import { getAllCustomers, searchCustomers } from "@/services/customerService";
+import { orderService } from "@/services/orderService";
 import { authState } from "@/state/authState";
-import { customerState, setSelectedCustomer } from "@/state/customerState";
+import { customerState } from "@/state/customerState";
 import { use$ } from "@legendapp/state/react";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
-  FlatList,
+  RefreshControl,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -22,28 +19,58 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function CustomersScreen() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"active" | "all">("active");
+  const [activeTab, setActiveTab] = useState<"active" | "completed" | "all">(
+    "active"
+  );
   const [refreshing, setRefreshing] = useState(false);
+  const [dateGroups, setDateGroups] = useState<
+    Record<
+      string,
+      {
+        date: string;
+        displayDate: string;
+        customers: Record<
+          string,
+          {
+            customer: any;
+            totalAmount: number;
+            orderCount: number;
+            hasCompletedBilling: boolean;
+            hasActiveOrders: boolean;
+          }
+        >;
+      }
+    >
+  >({});
   const customerStateData = use$(customerState);
   const auth = use$(authState);
   const router = useRouter();
 
+  const loadOrdersData = useCallback(async () => {
+    try {
+      if (!auth.isDbReady) return;
+
+      const ordersGrouped = await orderService.getOrdersGroupedByDate();
+      setDateGroups(ordersGrouped);
+    } catch (error) {
+      console.error("Error loading orders data:", error);
+    }
+  }, [auth.isDbReady]);
+
   const loadCustomers = useCallback(async () => {
     try {
-      // Don't load customers if database isn't ready
-      if (!auth.isDbReady) {
-        return;
-      }
+      if (!auth.isDbReady) return;
 
       customerState.loading.set(true);
       customerState.error.set("");
 
-      let customers;
-      if (searchQuery.trim()) {
-        customers = await searchCustomers(searchQuery.trim());
-      } else {
-        customers = await getAllCustomers();
-      }
+      // Load customers and orders data in parallel
+      const [customers] = await Promise.all([
+        searchQuery.trim()
+          ? searchCustomers(searchQuery.trim())
+          : getAllCustomers(),
+        loadOrdersData(),
+      ]);
 
       customerState.customers.set(customers);
     } catch (error: any) {
@@ -51,13 +78,13 @@ export default function CustomersScreen() {
     } finally {
       customerState.loading.set(false);
     }
-  }, [searchQuery, auth.isDbReady]);
+  }, [searchQuery, auth.isDbReady, loadOrdersData]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadCustomers();
+    await Promise.all([loadCustomers(), loadOrdersData()]);
     setRefreshing(false);
-  }, [loadCustomers]);
+  }, [loadCustomers, loadOrdersData]);
 
   const handleSearch = useCallback(async (query: string) => {
     setSearchQuery(query);
@@ -67,107 +94,215 @@ export default function CustomersScreen() {
     loadCustomers();
   }, [loadCustomers]);
 
-  // Filter customers based on active tab
-  const filteredCustomers = customerStateData.customers.filter((customer) => {
-    if (activeTab === "active") {
-      // For now, we'll show customers with recent activity
-      // In a real scenario, you'd track active sessions/orders
-      return true; // Show all for demo
-    }
-    return true; // Show all customers
-  });
-
-  const handleEdit = (customer: Customer) => {
-    setSelectedCustomer(customer);
-    router.push("/(modals)/customer-form");
-  };
+  // Auto-refresh when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (auth.isDbReady) {
+        loadOrdersData();
+      }
+    }, [auth.isDbReady, loadOrdersData])
+  );
 
   const handleAddCustomer = () => {
     customerState.selectedCustomer.set(null);
     router.push("/(modals)/customer-form");
   };
 
-  const handleDelete = (customer: Customer) => {
-    Alert.alert(
-      "Delete Customer",
-      `Are you sure you want to delete "${customer.name}"?`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              customerState.loading.set(true);
-              await deleteCustomer(customer.id);
-              loadCustomers();
-            } catch (error: any) {
-              Alert.alert(
-                "Error",
-                error.message || "Failed to delete customer"
-              );
-            } finally {
-              customerState.loading.set(false);
-            }
-          },
-        },
-      ]
-    );
+  // Check if EOD button should be shown for a specific date
+  const shouldShowEOD = (dateString: string) => {
+    const today = new Date().toISOString().split("T")[0];
+    const now = new Date();
+
+    // For older dates, always show EOD button
+    if (dateString < today) {
+      return true;
+    }
+
+    // For today, show only after 8 PM
+    if (dateString === today) {
+      return now.getHours() >= 20; // 8 PM = 20:00
+    }
+
+    // For future dates (shouldn't happen but just in case), don't show
+    return false;
   };
 
-  const renderCustomerItem = ({ item }: { item: Customer }) => {
-    const initials = item.name
+  // Filter customers based on active tab and search
+  const getFilteredData = () => {
+    if (activeTab === "all") {
+      // For "All" tab, show all customers regardless of orders
+      return customerStateData.customers.filter((customer) => {
+        if (searchQuery.trim()) {
+          return (
+            customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (customer.contact && customer.contact.includes(searchQuery))
+          );
+        }
+        return true;
+      });
+    } else {
+      // For "Active" and "Completed" tabs, use date groups
+      const filtered: typeof dateGroups = {};
+
+      Object.entries(dateGroups).forEach(([date, group]) => {
+        const filteredCustomers: typeof group.customers = {};
+
+        Object.entries(group.customers).forEach(
+          ([customerId, customerData]) => {
+            // Apply search filter
+            if (searchQuery.trim()) {
+              const matchesSearch =
+                customerData.customer.name
+                  .toLowerCase()
+                  .includes(searchQuery.toLowerCase()) ||
+                (customerData.customer.contact &&
+                  customerData.customer.contact.includes(searchQuery));
+              if (!matchesSearch) return;
+            }
+
+            // Apply tab filter
+            switch (activeTab) {
+              case "active":
+                if (customerData.hasActiveOrders) {
+                  filteredCustomers[customerId] = customerData;
+                }
+                break;
+              case "completed":
+                if (customerData.hasCompletedBilling) {
+                  filteredCustomers[customerId] = customerData;
+                }
+                break;
+            }
+          }
+        );
+
+        if (Object.keys(filteredCustomers).length > 0) {
+          filtered[date] = {
+            ...group,
+            customers: filteredCustomers,
+          };
+        }
+      });
+
+      return filtered;
+    }
+  };
+
+  const renderCustomerItem = (customerData: any) => {
+    const customer = customerData.customer;
+    const initials = customer.name
       .split(" ")
-      .map((n) => n[0])
+      .map((n: string) => n[0])
       .join("")
       .toUpperCase()
       .slice(0, 2);
 
-    // Generate a random amount for demo purposes (in real app, this would come from orders)
-    const amounts = [30, 45, 60, 75, 90, 115, 130, 145, 160, 180];
-    // TODO: Get amount from kot_orders
-    const randomAmount = amounts[item.id.charCodeAt(0) % amounts.length];
-
     return (
-      <TouchableOpacity className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
+      <View
+        key={customer.id}
+        className="flex-row items-center justify-between px-4 py-3"
+      >
         {/* Customer Avatar and Info */}
         <View className="flex-row items-center flex-1">
-          <View className="w-10 h-10 rounded-full bg-blue-600 items-center justify-center mr-3">
-            <Text className="text-white font-semibold text-sm">{initials}</Text>
+          <View className="w-12 h-12 rounded-full bg-amber-600 items-center justify-center mr-3">
+            <Text className="text-white font-semibold text-base">
+              {initials}
+            </Text>
           </View>
           <View className="flex-1">
             <Text className="text-gray-900 font-medium text-base">
-              {item.name}
+              {customer.name}
             </Text>
-            {item.contact && (
-              <Text className="text-gray-500 text-sm">{item.contact}</Text>
+            {customer.contact && (
+              <Text className="text-gray-500 text-sm">{customer.contact}</Text>
             )}
           </View>
         </View>
 
-        {/* Amount and Actions */}
-        <View className="flex-row items-center">
-          <Text className="text-gray-900 font-semibold text-base mr-4">
-            ₹{randomAmount}
-          </Text>
-          <TouchableOpacity onPress={() => handleEdit(item)} className="p-2">
-            <Text className="text-blue-600">✏️</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleDelete(item)} className="p-2">
-            <Text className="text-red-600">🗑️</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
+        {/* Amount */}
+        <Text className="text-gray-900 font-semibold text-lg">
+          ₹{customerData.totalAmount.toFixed(0)}
+        </Text>
+      </View>
     );
   };
 
+  const renderSimpleCustomerItem = (customer: any) => {
+    const initials = customer.name
+      .split(" ")
+      .map((n: string) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+
+    return (
+      <View
+        key={customer.id}
+        className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100"
+      >
+        {/* Customer Avatar and Info */}
+        <View className="flex-row items-center flex-1">
+          <View className="w-12 h-12 rounded-full bg-amber-600 items-center justify-center mr-3">
+            <Text className="text-white font-semibold text-base">
+              {initials}
+            </Text>
+          </View>
+          <View className="flex-1">
+            <Text className="text-gray-900 font-medium text-base">
+              {customer.name}
+            </Text>
+            {customer.contact && (
+              <Text className="text-gray-500 text-sm">{customer.contact}</Text>
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderDateSection = (date: string, group: any) => {
+    const customers = Object.values(group.customers);
+
+    return (
+      <View key={date} className="mb-6">
+        {/* Date Header with EOD Button */}
+        <View className="flex-row items-center justify-between px-4 py-3 bg-gray-50">
+          <Text className="text-lg font-semibold text-gray-800">
+            {group.displayDate}
+          </Text>
+          {shouldShowEOD(date) && (
+            <TouchableOpacity className="bg-red-500 px-4 py-2 rounded-full">
+              <Text className="text-white font-medium text-sm">EOD</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Customers for this date */}
+        <View className="bg-white">
+          {customers.map((customerData: any) =>
+            renderCustomerItem(customerData)
+          )}
+        </View>
+      </View>
+    );
+  };
+
+  const filteredData = getFilteredData();
+  const isAllTab = activeTab === "all";
+  const filteredDateGroups = isAllTab
+    ? {}
+    : (filteredData as typeof dateGroups);
+  const allCustomers = isAllTab ? (filteredData as any[]) : [];
+  const sortedDates = isAllTab
+    ? []
+    : Object.keys(filteredDateGroups).sort(
+        (a, b) => new Date(b).getTime() - new Date(a).getTime()
+      );
+
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-gray-100">
       {/* Header */}
-      <View className="px-4 py-3 border-b border-gray-200">
+      <View className="px-4 py-3 bg-white border-b border-gray-200">
         <View className="flex-row items-center justify-between mb-4">
           <Text className="text-xl font-bold text-gray-900">Customers</Text>
           <TouchableOpacity className="p-2">
@@ -207,9 +342,24 @@ export default function CustomersScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
+            onPress={() => setActiveTab("completed")}
+            className={`px-4 py-2 mr-2 rounded-full ${
+              activeTab === "completed" ? "bg-blue-600" : "bg-gray-200"
+            }`}
+          >
+            <Text
+              className={`font-medium ${
+                activeTab === "completed" ? "text-white" : "text-gray-700"
+              }`}
+            >
+              Completed
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             onPress={() => setActiveTab("all")}
             className={`px-4 py-2 mr-2 rounded-full ${
-              activeTab === "all" ? "bg-blue-600" : "bg-gray-200"
+              activeTab === "all" ? "bg-gray-600" : "bg-gray-200"
             }`}
           >
             <Text
@@ -222,17 +372,19 @@ export default function CustomersScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Add Customer Button */}
-        <TouchableOpacity
-          onPress={handleAddCustomer}
-          className="flex-row items-center py-3"
-        >
-          <Text className="text-blue-600 text-base mr-2">👤</Text>
-          <Text className="text-blue-600 font-medium">Add new customer</Text>
-        </TouchableOpacity>
+        {/* Add Customer Button - Only show in "all" tab */}
+        {activeTab === "all" && (
+          <TouchableOpacity
+            onPress={handleAddCustomer}
+            className="flex-row items-center py-3"
+          >
+            <Text className="text-blue-600 text-base mr-2">👤</Text>
+            <Text className="text-blue-600 font-medium">Add new customer</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Customer List */}
+      {/* Content */}
       <View className="flex-1">
         {customerStateData.loading && !refreshing ? (
           <View className="flex-1 justify-center items-center">
@@ -255,26 +407,46 @@ export default function CustomersScreen() {
               <Text className="text-white font-medium">Try Again</Text>
             </TouchableOpacity>
           </View>
+        ) : (isAllTab && allCustomers.length === 0) ||
+          (!isAllTab && sortedDates.length === 0) ? (
+          <View className="flex-1 justify-center items-center px-4 py-20">
+            <Text className="text-6xl mb-4">👥</Text>
+            <Text className="text-xl font-semibold text-gray-700 mb-2">
+              {activeTab === "all"
+                ? "No customers yet"
+                : `No ${activeTab} customers`}
+            </Text>
+            <Text className="text-gray-500 text-center">
+              {activeTab === "all"
+                ? "Add your first customer to get started with orders and billing"
+                : `No customers found with ${activeTab} orders`}
+            </Text>
+          </View>
         ) : (
-          <FlatList
-            data={filteredCustomers}
-            renderItem={renderCustomerItem}
-            keyExtractor={(item) => item.id}
+          <ScrollView
             showsVerticalScrollIndicator={false}
-            onRefresh={handleRefresh}
-            refreshing={refreshing}
-            ListEmptyComponent={
-              <View className="flex-1 justify-center items-center px-4 py-20">
-                <Text className="text-6xl mb-4">👥</Text>
-                <Text className="text-xl font-semibold text-gray-700 mb-2">
-                  No customers yet
-                </Text>
-                <Text className="text-gray-500 text-center">
-                  Add your first customer to get started with orders and billing
-                </Text>
-              </View>
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                colors={["#2563eb"]}
+              />
             }
-          />
+          >
+            {isAllTab ? (
+              // Render simple customer list for "All" tab
+              <View className="bg-white">
+                {allCustomers.map((customer) =>
+                  renderSimpleCustomerItem(customer)
+                )}
+              </View>
+            ) : (
+              // Render date-grouped customers for "Active" and "Completed" tabs
+              sortedDates.map((date) =>
+                renderDateSection(date, filteredDateGroups[date])
+              )
+            )}
+          </ScrollView>
         )}
       </View>
     </SafeAreaView>

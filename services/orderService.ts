@@ -216,6 +216,121 @@ class OrderService {
     // Use the menuService for better menu management
     return await menuService.getHardcodedMenuItems();
   }
+
+  async getOrdersGroupedByDate(): Promise<
+    Record<
+      string,
+      {
+        date: string;
+        displayDate: string;
+        customers: Record<
+          string,
+          {
+            customer: any;
+            totalAmount: number;
+            orderCount: number;
+            hasCompletedBilling: boolean;
+            hasActiveOrders: boolean;
+          }
+        >;
+      }
+    >
+  > {
+    if (!db) throw new Error("Database not initialized");
+
+    const orders = (await db.getAllAsync(`
+      SELECT 
+        ko.*,
+        c.name as customerName,
+        c.contact as customerContact,
+        COALESCE(SUM(ki.quantity * ki.priceAtTime), 0) as totalAmount,
+        DATE(ko.createdAt) as orderDate
+      FROM kot_orders ko
+      LEFT JOIN customers c ON ko.customerId = c.id
+      LEFT JOIN kot_items ki ON ko.id = ki.kotId
+      GROUP BY ko.id, c.name, c.contact, DATE(ko.createdAt)
+      ORDER BY ko.createdAt DESC
+    `)) as any[];
+
+    // Group orders by date
+    const dateGroups: Record<
+      string,
+      {
+        date: string;
+        displayDate: string;
+        customers: Record<
+          string,
+          {
+            customer: any;
+            totalAmount: number;
+            orderCount: number;
+            hasCompletedBilling: boolean;
+            hasActiveOrders: boolean;
+          }
+        >;
+      }
+    > = {};
+
+    orders.forEach((order: any) => {
+      const orderDate = order.orderDate;
+      const today = new Date().toISOString().split("T")[0];
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
+
+      let displayDate: string;
+      if (orderDate === today) {
+        displayDate = "Today";
+      } else if (orderDate === yesterday) {
+        displayDate = "Yesterday";
+      } else {
+        const date = new Date(orderDate);
+        const options: Intl.DateTimeFormatOptions = {
+          day: "2-digit",
+          month: "2-digit",
+          year: "2-digit",
+          weekday: "long",
+        };
+        displayDate = date.toLocaleDateString("en-GB", options);
+      }
+
+      if (!dateGroups[orderDate]) {
+        dateGroups[orderDate] = {
+          date: orderDate,
+          displayDate,
+          customers: {},
+        };
+      }
+
+      const customerId = order.customerId;
+      if (!dateGroups[orderDate].customers[customerId]) {
+        dateGroups[orderDate].customers[customerId] = {
+          customer: {
+            id: order.customerId,
+            name: order.customerName,
+            contact: order.customerContact,
+          },
+          totalAmount: 0,
+          orderCount: 0,
+          hasCompletedBilling: false,
+          hasActiveOrders: false,
+        };
+      }
+
+      const customerData = dateGroups[orderDate].customers[customerId];
+      customerData.totalAmount += order.totalAmount || 0;
+      customerData.orderCount += 1;
+
+      // Check billing status
+      if (order.billId) {
+        customerData.hasCompletedBilling = true;
+      } else {
+        customerData.hasActiveOrders = true;
+      }
+    });
+
+    return dateGroups;
+  }
 }
 
 export const orderService = new OrderService();

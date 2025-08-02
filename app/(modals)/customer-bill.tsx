@@ -1,7 +1,9 @@
+import { theme } from "@/constants/theme";
 import { orderService } from "@/services/orderService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { ArrowLeft } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -10,7 +12,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 interface BillItem {
   id: string;
@@ -50,7 +51,7 @@ export default function CustomerBillScreen() {
     const now = new Date();
     const dateStr = now.toISOString().split("T")[0].replace(/-/g, "");
     const timeStr = now.getTime().toString().slice(-4);
-    return `B${dateStr}${timeStr}`;
+    return `${timeStr.slice(-2)}`;
   };
 
   const loadCustomerBill = useCallback(async () => {
@@ -140,208 +141,236 @@ export default function CustomerBillScreen() {
     // TODO: Navigate to payment screen with bill details
     // For now, just go back to the customers screen
     router.push("/(tabs)/customers");
-
-    /* 
-    router.push({
-      pathname: "/(modals)/payment",
-      params: {
-        billId: bill.billNumber,
-        customerId: bill.customerId,
-        customerName: bill.customerName,
-        totalAmount: bill.totalAmount.toString(),
-      },
-    });
-    */
   };
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 justify-center items-center">
+      <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
+        <Stack.Screen
+          options={{
+            title: "Billing",
+            headerStyle: { backgroundColor: "white" },
+            headerTitleStyle: {
+              fontSize: 18,
+              fontWeight: "600",
+              color: theme.colors.text,
+            },
+            headerLeft: () => (
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={{ padding: 8, marginLeft: -8, borderRadius: 8 }}
+              >
+                <ArrowLeft size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            ),
+            headerShadowVisible: true,
+          }}
+        />
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
           <ActivityIndicator size="large" color="#2563eb" />
-          <Text className="text-gray-600 mt-2">Generating bill...</Text>
+          <Text style={{ color: theme.colors.textSecondary, marginTop: 8 }}>
+            Generating bill...
+          </Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (error || !bill) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 justify-center items-center px-4">
-          <Text className="text-6xl mb-4">⚠️</Text>
-          <Text className="text-xl font-semibold text-gray-700 mb-2">
+      <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
+        <Stack.Screen
+          options={{
+            title: "Billing",
+            headerStyle: { backgroundColor: "white" },
+            headerTitleStyle: {
+              fontSize: 18,
+              fontWeight: "600",
+              color: theme.colors.text,
+            },
+            headerLeft: () => (
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={{ padding: 8, marginLeft: -8, borderRadius: 8 }}
+              >
+                <ArrowLeft size={24} color={theme.colors.text} />
+              </TouchableOpacity>
+            ),
+            headerShadowVisible: true,
+          }}
+        />
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 16 }}>
+          <Text style={{ fontSize: 48, marginBottom: 16 }}>⚠️</Text>
+          <Text style={{
+            fontSize: 20,
+            fontWeight: "600",
+            color: theme.colors.text,
+            marginBottom: 8,
+          }}>
             Failed to generate bill
           </Text>
-          <Text className="text-gray-500 text-center mb-4">
+          <Text style={{
+            color: theme.colors.textSecondary,
+            textAlign: "center",
+            marginBottom: 16,
+          }}>
             {error || "Unable to generate bill"}
           </Text>
           <TouchableOpacity
             onPress={loadCustomerBill}
-            className="bg-blue-600 px-6 py-3 rounded-lg"
+            style={{
+              backgroundColor: "#2563eb",
+              paddingHorizontal: 24,
+              paddingVertical: 12,
+              borderRadius: 8,
+            }}
           >
-            <Text className="text-white font-medium">Try Again</Text>
+            <Text style={{ color: "white", fontWeight: "500" }}>Try Again</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-white shadow-sm border-b border-gray-200">
-        <View className="flex-row items-center px-4 py-4">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className="mr-4 p-2 -ml-2"
-          >
-            <Text className="text-gray-600 text-xl">←</Text>
-          </TouchableOpacity>
-          <View className="flex-1">
-            <Text className="text-xl font-bold text-gray-900">Billing</Text>
-            <Text className="text-gray-500 text-sm mt-1">
-              Bill No: {bill.billNumber}
-            </Text>
+    <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
+      <Stack.Screen
+        options={{
+          title: "Billing",
+          headerStyle: { backgroundColor: "white" },
+          headerTitleStyle: {
+            fontSize: 18,
+            fontWeight: "600",
+            color: theme.colors.text,
+          },
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={{ padding: 8, marginLeft: -8, borderRadius: 8 }}
+            >
+              <ArrowLeft size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+          ),
+          headerShadowVisible: true,
+        }}
+      />
+
+      <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+        {/* Bill Header */}
+        <View style={{
+          backgroundColor: "white",
+          paddingHorizontal: 16,
+          paddingVertical: 16,
+          borderBottomWidth: 1,
+          borderBottomColor: "#f3f4f6",
+        }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <View>
+              <Text style={{
+                fontSize: 24,
+                fontWeight: "700",
+                color: theme.colors.text,
+                marginBottom: 4,
+              }}>
+                Bill No: {bill.billNumber}
+              </Text>
+            </View>
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={{
+                color: theme.colors.textSecondary,
+                fontSize: 14,
+              }}>
+                {bill.date} {bill.time}
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
 
-      {/* Bill Content */}
-      <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
-        <View className="bg-white mx-4 mt-4 rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          {/* Bill Header */}
-          <View className="px-6 py-4 bg-blue-50 border-b border-gray-200">
-            <View className="items-center mb-4">
-              <Text className="text-2xl font-bold text-gray-900">
-                CHAI POINT
-              </Text>
-              <Text className="text-gray-600 text-sm">
-                Your Neighborhood Tea Shop
-              </Text>
-            </View>
-
-            <View className="flex-row justify-between items-start">
-              <View>
-                <Text className="text-gray-700 font-medium">Bill To:</Text>
-                <Text className="text-gray-900 font-semibold text-lg">
-                  {bill.customerName}
-                </Text>
-              </View>
-              <View className="items-end">
-                <Text className="text-gray-700 font-medium">Bill No:</Text>
-                <Text className="text-gray-900 font-semibold">
-                  {bill.billNumber}
-                </Text>
-                <Text className="text-gray-500 text-sm mt-1">
-                  {bill.date} • {bill.time}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Bill Items */}
-          <View className="px-6 py-4">
-            <View className="flex-row py-2 border-b border-gray-200">
-              <Text className="flex-1 text-gray-700 font-medium">Item</Text>
-              <Text className="w-16 text-center text-gray-700 font-medium">
-                Qty
-              </Text>
-              <Text className="w-20 text-right text-gray-700 font-medium">
-                Rate
-              </Text>
-              <Text className="w-20 text-right text-gray-700 font-medium">
-                Amount
-              </Text>
-            </View>
-
-            {bill.items.map((item, index) => (
-              <View
-                key={item.id}
-                className={`flex-row py-3 ${
-                  index < bill.items.length - 1
-                    ? "border-b border-gray-100"
-                    : ""
-                }`}
-              >
-                <Text className="flex-1 text-gray-900">
+        {/* Bill Items */}
+        <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+          {bill.items.map((item, index) => (
+            <View
+              key={item.id}
+              style={{
+                backgroundColor: "#f3f4f6",
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={{
+                  fontSize: 18,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                  marginBottom: 4,
+                }}>
                   {item.menuItemName}
                 </Text>
-                <Text className="w-16 text-center text-gray-900">
-                  {item.quantity}
-                </Text>
-                <Text className="w-20 text-right text-gray-900">
-                  ₹{item.price}
-                </Text>
-                <Text className="w-20 text-right text-gray-900 font-medium">
-                  ₹{item.totalPrice}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          {/* Bill Summary */}
-          <View className="px-6 py-4 bg-gray-50 border-t border-gray-200">
-            <View className="space-y-2">
-              <View className="flex-row justify-between">
-                <Text className="text-gray-700">Subtotal</Text>
-                <Text className="text-gray-900">
-                  ₹{bill.subtotal.toFixed(2)}
-                </Text>
-              </View>
-
-              {bill.tax > 0 && (
-                <View className="flex-row justify-between">
-                  <Text className="text-gray-700">Tax (5%)</Text>
-                  <Text className="text-gray-900">₹{bill.tax.toFixed(2)}</Text>
-                </View>
-              )}
-
-              {bill.discount > 0 && (
-                <View className="flex-row justify-between">
-                  <Text className="text-gray-700">Discount</Text>
-                  <Text className="text-red-600">
-                    -₹{bill.discount.toFixed(2)}
+                <View style={{
+                  backgroundColor: "#f97316",
+                  paddingHorizontal: 8,
+                  paddingVertical: 2,
+                  borderRadius: 12,
+                  alignSelf: "flex-start",
+                }}>
+                  <Text style={{
+                    color: "white",
+                    fontSize: 12,
+                    fontWeight: "600",
+                  }}>
+                    × {item.quantity}
                   </Text>
                 </View>
-              )}
-
-              <View className="flex-row justify-between pt-2 border-t border-gray-300">
-                <Text className="text-lg font-bold text-gray-900">Total</Text>
-                <Text className="text-lg font-bold text-gray-900">
-                  ₹{bill.totalAmount.toFixed(2)}
-                </Text>
               </View>
+              <Text style={{
+                fontSize: 20,
+                fontWeight: "700",
+                color: theme.colors.text,
+              }}>
+                ₹{item.totalPrice}
+              </Text>
             </View>
-          </View>
-
-          {/* Thank You Note */}
-          <View className="px-6 py-4 text-center border-t border-gray-200">
-            <Text className="text-gray-600 text-sm text-center">
-              Thank you for visiting Chai Point!
-            </Text>
-            <Text className="text-gray-500 text-xs text-center mt-1">
-              Have a great day! ☕
-            </Text>
-          </View>
+          ))}
         </View>
 
-        {/* Spacer for button */}
-        <View className="h-20" />
+        {/* Spacer for payment button */}
+        <View style={{ height: 100 }} />
       </ScrollView>
 
       {/* Payment Button */}
-      <View className="bg-white border-t border-gray-200 px-4 py-4">
+      <View style={{
+        backgroundColor: "black",
+        paddingHorizontal: 16,
+        paddingVertical: 20,
+      }}>
         <TouchableOpacity
           onPress={handlePayment}
-          className="bg-green-600 py-4 rounded-lg flex-row items-center justify-center"
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
         >
-          <Text className="text-white font-semibold text-lg mr-2">PAYMENT</Text>
-          <Text className="text-white font-bold text-lg">
-            ₹{bill.totalAmount.toFixed(0)}
+          <Text style={{
+            color: "white",
+            fontWeight: "600",
+            fontSize: 20,
+          }}>
+            PAYMENT
+          </Text>
+          <Text style={{
+            color: "white",
+            fontWeight: "700",
+            fontSize: 20,
+          }}>
+            ₹{Math.round(bill.totalAmount)}
           </Text>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }

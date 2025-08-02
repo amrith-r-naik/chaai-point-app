@@ -1,9 +1,11 @@
-import { KotOrder, orderService } from "@/services/orderService";
+import { theme } from "@/constants/theme";
+import { orderService } from "@/services/orderService";
 import { authState } from "@/state/authState";
 import { customerState } from "@/state/customerState";
 import { orderState } from "@/state/orderState";
 import { use$ } from "@legendapp/state/react";
-import { useRouter } from "expo-router";
+import { Stack, useRouter } from "expo-router";
+import { ArrowLeft } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
 
@@ -13,7 +15,7 @@ export default function CustomerKOTsScreen() {
   const auth = use$(authState);
   const today = new Date().toISOString().split("T")[0];
 
-  const [kots, setKots] = useState<KotOrder[]>([]);
+  const [kots, setKots] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -55,6 +57,21 @@ export default function CustomerKOTsScreen() {
     });
   };
 
+  const handleKOTPress = async (kotFromList: any) => {
+    try {
+      // Fetch the complete order data using the proper orderService method
+      const fullOrder = await orderService.getOrderById(kotFromList.id);
+      if (fullOrder) {
+        orderState.selectedOrder.set(fullOrder);
+        router.push("/(modals)/order-details");
+      } else {
+        console.error("Order not found");
+      }
+    } catch (error) {
+      console.error("Error fetching order details:", error);
+    }
+  };
+
   const getKOTStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case "pending":
@@ -77,86 +94,122 @@ export default function CustomerKOTsScreen() {
     });
   };
 
-  // Use kot.total if present, otherwise calculate from items
-  const getKOTTotal = (kot: KotOrder) => {
-    // Debug log
-    if (typeof window !== 'undefined') {
-      // Only log in browser/Expo
-      // @ts-ignore
-      console.log('[KOT DEBUG]', kot);
-    }
-    if (typeof kot.total === 'number' && isFinite(kot.total) && kot.total > 0) {
-      return kot.total;
+  // Use kot.totalAmount if present, otherwise calculate from items
+  const getKOTTotal = (kot: any) => {
+    if (typeof kot.totalAmount === 'number' && isFinite(kot.totalAmount) && kot.totalAmount > 0) {
+      return kot.totalAmount;
     }
     if (Array.isArray(kot.items)) {
       return kot.items.reduce((sum: number, item: any) => {
-        // Try priceAtTime, then price
-        const price = typeof item.priceAtTime === 'number' && isFinite(item.priceAtTime)
-          ? item.priceAtTime
-          : (typeof item.price === 'number' && isFinite(item.price) ? item.price : 0);
+        const price = typeof item.price === 'number' && isFinite(item.price) ? item.price : 0;
         const qty = typeof item.quantity === 'number' && isFinite(item.quantity) ? item.quantity : 0;
         return sum + price * qty;
       }, 0);
     }
     return 0;
   };
+
   const totalAmount = kots.reduce((sum, kot) => sum + getKOTTotal(kot), 0);
 
   return (
-    <View className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-white shadow-sm border-b border-gray-200">
-        <View className="flex-row items-center px-4 py-4">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className="mr-4 p-2 -ml-2"
-          >
-            <Text className="text-gray-600 text-xl">←</Text>
-          </TouchableOpacity>
-          <View className="flex-1">
-            <Text className="text-xl font-bold text-gray-900">
-              {selectedCustomer?.name}&apos;s KOTs
-            </Text>
-            <Text className="text-gray-500 text-sm mt-1">
-              {new Date(today).toLocaleDateString("en-IN", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </Text>
-          </View>
-        </View>
-      </View>
+    <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
+      <Stack.Screen
+        options={{
+          title: `${selectedCustomer?.name || 'Customer'}'s KOTs`,
+          headerStyle: {
+            backgroundColor: "white",
+          },
+          headerTitleStyle: {
+            fontSize: 18,
+            fontWeight: "600",
+            color: theme.colors.text,
+          },
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={{
+                padding: 8,
+                marginLeft: -8,
+                borderRadius: 8,
+              }}
+            >
+              <ArrowLeft size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+          ),
+          headerShadowVisible: true,
+        }}
+      />
 
-      {/* Content */}
-      <View className="flex-1">
+      <View style={{ flex: 1 }}>
+        <View style={{
+          backgroundColor: "white",
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          borderBottomWidth: 1,
+          borderBottomColor: "#f3f4f6"
+        }}>
+          <Text style={{
+            fontSize: 14,
+            color: theme.colors.textSecondary
+          }}>
+            {new Date(today).toLocaleDateString("en-IN", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </Text>
+        </View>
         {loading && !refreshing ? (
-          <View className="flex-1 justify-center items-center">
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
             <ActivityIndicator size="large" color="#2563eb" />
-            <Text className="text-gray-600 mt-2">Loading KOTs...</Text>
+            <Text style={{ color: theme.colors.textSecondary, marginTop: 8 }}>Loading KOTs...</Text>
           </View>
         ) : error ? (
-          <View className="flex-1 justify-center items-center px-4">
-            <Text className="text-6xl mb-4">⚠️</Text>
-            <Text className="text-xl font-semibold text-gray-700 mb-2">
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 16 }}>
+            <Text style={{ fontSize: 48, marginBottom: 16 }}>⚠️</Text>
+            <Text style={{
+              fontSize: 20,
+              fontWeight: "600",
+              color: theme.colors.text,
+              marginBottom: 8
+            }}>
               Something went wrong
             </Text>
-            <Text className="text-gray-500 text-center mb-4">{error}</Text>
+            <Text style={{
+              color: theme.colors.textSecondary,
+              textAlign: "center",
+              marginBottom: 16
+            }}>
+              {error}
+            </Text>
             <TouchableOpacity
               onPress={fetchKOTs}
-              className="bg-blue-600 px-6 py-3 rounded-lg"
+              style={{
+                backgroundColor: "#2563eb",
+                paddingHorizontal: 24,
+                paddingVertical: 12,
+                borderRadius: 8,
+              }}
             >
-              <Text className="text-white font-medium">Try Again</Text>
+              <Text style={{ color: "white", fontWeight: "500" }}>Try Again</Text>
             </TouchableOpacity>
           </View>
         ) : kots.length === 0 ? (
-          <View className="flex-1 justify-center items-center px-4">
-            <Text className="text-6xl mb-4">📋</Text>
-            <Text className="text-xl font-semibold text-gray-700 mb-2">
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 16 }}>
+            <Text style={{ fontSize: 48, marginBottom: 16 }}>📋</Text>
+            <Text style={{
+              fontSize: 20,
+              fontWeight: "600",
+              color: theme.colors.text,
+              marginBottom: 8
+            }}>
               No KOTs Found
             </Text>
-            <Text className="text-gray-500 text-center">
+            <Text style={{
+              color: theme.colors.textSecondary,
+              textAlign: "center"
+            }}>
               No kitchen orders found for {selectedCustomer?.name} on this date.
             </Text>
           </View>
@@ -170,49 +223,57 @@ export default function CustomerKOTsScreen() {
                 colors={["#2563eb"]}
               />
             }
-            className="flex-1"
+            style={{ flex: 1 }}
           >
-            <View className="p-4 space-y-4">
+            <View style={{ padding: 16 }}>
               {kots.map((kot) => (
                 <View
                   key={kot.id}
-                  className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
+                  style={{
+                    backgroundColor: "white",
+                    borderRadius: 12,
+                    marginBottom: 16,
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 8,
+                    elevation: 3,
+                    overflow: "hidden",
+                  }}
                 >
-                  {/* KOT Header */}
-                  <TouchableOpacity className="px-4 py-3 bg-gray-50 border-b border-gray-200"
-                    onPress={() => {
-                      console.log("[KOT SELECTED]", kot);
-
-                      orderState.selectedOrder.set({
-                        id: kot.id,
-                        kotNumber: kot.kotNumber,
-                        customerId: kot.customerId,
-                        billId: kot.billId,
-                        createdAt: kot.createdAt,
-                        customer: kot.customer,
-                        items: kot.items,
-                        total: getKOTTotal(kot),
-                      });
-                      router.push({
-                        pathname: "/(modals)/order-details",
-                        params: { orderId: kot.id },
-                      });
+                  <TouchableOpacity
+                    onPress={() => handleKOTPress(kot)}
+                    style={{
+                      padding: 16,
+                      backgroundColor: "#f9fafb",
+                      borderBottomWidth: 1,
+                      borderBottomColor: "#f3f4f6",
                     }}
                   >
-                    <View className="flex-row items-center justify-between">
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                       <View>
-                        <Text className="text-lg font-semibold text-gray-900">
+                        <Text style={{
+                          fontSize: 18,
+                          fontWeight: "600",
+                          color: theme.colors.text
+                        }}>
                           {kot.kotNumber}
                         </Text>
-                        <Text className="text-gray-500 text-sm">
+                        <Text style={{
+                          color: theme.colors.textSecondary,
+                          fontSize: 14,
+                          marginTop: 2,
+                        }}>
                           {formatTime(kot.createdAt)}
                         </Text>
                       </View>
-                      <View>
-                        <Text className="text-gray-900 font-bold text-lg">
-                          ₹{getKOTTotal(kot).toFixed(2)}
-                        </Text>
-                      </View>
+                      <Text style={{
+                        color: theme.colors.text,
+                        fontWeight: "700",
+                        fontSize: 18
+                      }}>
+                        ₹{getKOTTotal(kot).toFixed(2)}
+                      </Text>
                     </View>
                   </TouchableOpacity>
                 </View>
@@ -224,28 +285,64 @@ export default function CustomerKOTsScreen() {
 
       {/* Bill Now Button */}
       {kots.length > 0 && (
-        <View className="bg-white border-t border-gray-200 px-4 py-4">
-          <View className="flex-row items-center justify-between mb-4">
+        <View style={{
+          backgroundColor: "white",
+          borderTopWidth: 1,
+          borderTopColor: "#f3f4f6",
+          paddingHorizontal: 16,
+          paddingVertical: 16,
+        }}>
+          <View style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 16
+          }}>
             <View>
-              <Text className="text-gray-600 text-sm">Total Amount</Text>
-              <Text className="text-2xl font-bold text-gray-900">
-                ₹{totalAmount}
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 14 }}>Total Amount</Text>
+              <Text style={{
+                fontSize: 24,
+                fontWeight: "700",
+                color: theme.colors.text
+              }}>
+                ₹{totalAmount.toFixed(2)}
               </Text>
             </View>
-            <View className="bg-green-50 px-3 py-1 rounded-full">
-              <Text className="text-green-700 text-sm font-medium">
+            <View style={{
+              backgroundColor: "#ecfdf5",
+              paddingHorizontal: 12,
+              paddingVertical: 4,
+              borderRadius: 20,
+            }}>
+              <Text style={{
+                color: "#059669",
+                fontSize: 14,
+                fontWeight: "500"
+              }}>
                 {kots.length} KOT{kots.length !== 1 ? "s" : ""}
               </Text>
             </View>
           </View>
           <TouchableOpacity
             onPress={handleBillNow}
-            className="bg-blue-600 py-4 rounded-lg flex-row items-center justify-center"
+            style={{
+              backgroundColor: "#2563eb",
+              paddingVertical: 16,
+              borderRadius: 12,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
           >
-            <Text className="text-white font-semibold text-lg mr-2">
+            <Text style={{
+              color: "white",
+              fontWeight: "600",
+              fontSize: 18,
+              marginRight: 8
+            }}>
               BILL NOW
             </Text>
-            <Text className="text-white text-lg">→</Text>
+            <Text style={{ color: "white", fontSize: 18 }}>→</Text>
           </TouchableOpacity>
         </View>
       )}

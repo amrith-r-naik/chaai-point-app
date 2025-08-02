@@ -21,6 +21,92 @@ export async function debugDatabase() {
   }
 }
 
+export async function seedTestData() {
+  if (!db) {
+    console.log("Database is not initialized");
+    return;
+  }
+
+  try {
+    // First, seed some test customers
+    await db.runAsync(
+      `INSERT OR IGNORE INTO customers (id, name, contact, createdAt, updatedAt) 
+       VALUES ('cust1', 'John Doe', '9876543210', datetime('now'), datetime('now'))`
+    );
+    
+    await db.runAsync(
+      `INSERT OR IGNORE INTO customers (id, name, contact, createdAt, updatedAt) 
+       VALUES ('cust2', 'Jane Smith', '9876543211', datetime('now'), datetime('now'))`
+    );
+
+    // Seed some menu items
+    await db.runAsync(
+      `INSERT OR IGNORE INTO menu_items (id, name, category, price, isActive, createdAt, updatedAt) 
+       VALUES ('item1', 'Masala Chai', 'Beverages', 1500, 1, datetime('now'), datetime('now'))`
+    );
+    
+    await db.runAsync(
+      `INSERT OR IGNORE INTO menu_items (id, name, category, price, isActive, createdAt, updatedAt) 
+       VALUES ('item2', 'Samosa', 'Snacks', 2000, 1, datetime('now'), datetime('now'))`
+    );
+
+    await db.runAsync(
+      `INSERT OR IGNORE INTO menu_items (id, name, category, price, isActive, createdAt, updatedAt) 
+       VALUES ('item3', 'Sandwich', 'Snacks', 5000, 1, datetime('now'), datetime('now'))`
+    );
+
+    // Create some test orders from today
+    const today = new Date().toISOString();
+    
+    // Order 1
+    await db.runAsync(
+      `INSERT OR IGNORE INTO kot_orders (id, kotNumber, customerId, createdAt) 
+       VALUES ('order1', 1001, 'cust1', ?)`
+    , [today]);
+
+    await db.runAsync(
+      `INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime) 
+       VALUES ('item_1_1', 'order1', 'item1', 2, 1500)`
+    );
+
+    await db.runAsync(
+      `INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime) 
+       VALUES ('item_1_2', 'order1', 'item2', 1, 2000)`
+    );
+
+    // Order 2
+    await db.runAsync(
+      `INSERT OR IGNORE INTO kot_orders (id, kotNumber, customerId, createdAt) 
+       VALUES ('order2', 1002, 'cust2', ?)`
+    , [today]);
+
+    await db.runAsync(
+      `INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime) 
+       VALUES ('item_2_1', 'order2', 'item3', 1, 5000)`
+    );
+
+    await db.runAsync(
+      `INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime) 
+       VALUES ('item_2_2', 'order2', 'item1', 3, 1500)`
+    );
+
+    // Add some expenses
+    await db.runAsync(
+      `INSERT OR IGNORE INTO expenses (id, voucherNo, amount, towards, mode, remarks, createdAt) 
+       VALUES ('exp1', 1, 25000, 'Rent', 'Cash', 'Monthly shop rent', ?)`
+    , [today]);
+
+    await db.runAsync(
+      `INSERT OR IGNORE INTO expenses (id, voucherNo, amount, towards, mode, remarks, createdAt) 
+       VALUES ('exp2', 2, 5000, 'Supplies', 'UPI', 'Tea leaves and milk', ?)`
+    , [today]);
+
+    console.log("Test data seeded successfully");
+  } catch (error) {
+    console.error("Error seeding test data:", error);
+  }
+}
+
 export async function recreateDatabase() {
   if (!db) {
     console.log("Database is not initialized");

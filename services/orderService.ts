@@ -166,6 +166,39 @@ class OrderService {
   async createOrder(orderData: CreateOrderData): Promise<string> {
     if (!db) throw new Error("Database not initialized");
 
+    // Validate that customer exists
+    const customerExists = await db.getFirstAsync(
+      `SELECT id FROM customers WHERE id = ?`,
+      [orderData.customerId]
+    );
+    
+    if (!customerExists) {
+      throw new Error(`Customer with ID ${orderData.customerId} does not exist`);
+    }
+
+    // Validate that all menu items exist, and auto-seed if using hardcoded items
+    for (const item of orderData.items) {
+      let menuItemExists = await db.getFirstAsync(
+        `SELECT id FROM menu_items WHERE id = ? AND isActive = 1`,
+        [item.itemId]
+      );
+      
+      // If item doesn't exist but it's a hardcoded item (item_1, item_2, etc.), seed it
+      if (!menuItemExists && item.itemId.startsWith('item_')) {
+        await this.ensureHardcodedMenuItemExists(item.itemId);
+        
+        // Check again after seeding
+        menuItemExists = await db.getFirstAsync(
+          `SELECT id FROM menu_items WHERE id = ? AND isActive = 1`,
+          [item.itemId]
+        );
+      }
+      
+      if (!menuItemExists) {
+        throw new Error(`Menu item with ID ${item.itemId} does not exist or is inactive`);
+      }
+    }
+
     const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const kotNumber = await this.getNextKotNumber();
     const createdAt = new Date().toISOString();
@@ -210,6 +243,29 @@ class OrderService {
     `)) as any;
 
     return (result?.maxKot || 0) + 1;
+  }
+
+  private async ensureHardcodedMenuItemExists(itemId: string): Promise<void> {
+    if (!db) throw new Error("Database not initialized");
+
+    // Define the hardcoded menu items
+    const hardcodedItems = {
+      "item_1": { name: "Lemon Tea", category: "Tea", price: 30 },
+      "item_2": { name: "White Sauce Pasta", category: "Pasta", price: 110 },
+      "item_3": { name: "Peri Peri Fries", category: "Snacks", price: 100 },
+      "item_4": { name: "Black Tea", category: "Tea", price: 25 },
+    };
+
+    const item = hardcodedItems[itemId as keyof typeof hardcodedItems];
+    if (item) {
+      const currentTime = new Date().toISOString();
+      await db.runAsync(
+        `INSERT INTO menu_items (id, name, category, price, isActive, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [itemId, item.name, item.category, item.price, 1, currentTime, currentTime]
+      );
+      console.log(`Auto-seeded menu item: ${itemId} - ${item.name}`);
+    }
   }
 
   async getHardcodedMenuItems(): Promise<MenuItem[]> {

@@ -63,7 +63,19 @@ export default function CreateOrderScreen() {
     } catch (error) {
       console.error("Error creating order:", error);
       orderState.error.set("Failed to create order");
-      Alert.alert("Error", "Failed to create order. Please try again.");
+      
+      let errorMessage = "Failed to create order. Please try again.";
+      if (error instanceof Error) {
+        if (error.message.includes("Customer") && error.message.includes("does not exist")) {
+          errorMessage = "Selected customer no longer exists. Please select a different customer.";
+        } else if (error.message.includes("Menu item") && error.message.includes("does not exist")) {
+          errorMessage = "One or more selected items are no longer available. Please update your selection.";
+        } else if (error.message.includes("FOREIGN KEY constraint failed")) {
+          errorMessage = "Data integrity error. Please ensure you have selected a valid customer and menu items.";
+        }
+      }
+      
+      Alert.alert("Error", errorMessage);
     } finally {
       orderState.isCreatingOrder.set(false);
     }

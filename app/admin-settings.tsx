@@ -4,16 +4,16 @@ import { menuService } from "@/services/menuService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import { router } from "expo-router";
-import { Database, Lock, Plus, Settings, Trash2 } from "lucide-react-native";
+import { Database, Lock, Plus, Settings, Trash2, Users } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  SafeAreaView,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    SafeAreaView,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 export default function AdminSettingsScreen() {
@@ -217,6 +217,31 @@ export default function AdminSettingsScreen() {
     );
   };
 
+  const handleAddDemoCustomers = () => {
+    Alert.alert(
+      "Add Demo Customers",
+      "This will add demo customers to the database. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Add",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await adminService.addDemoCustomers();
+              await loadTableCounts();
+              Alert.alert("Success", "Demo customers added successfully");
+            } catch (error) {
+              Alert.alert("Error", `Failed to add demo customers: ${error}`);
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleClearMenuItems = () => {
     Alert.alert(
       "Clear Menu Items",
@@ -406,6 +431,7 @@ export default function AdminSettingsScreen() {
             <StatCard label="Menu Items" count={tableCounts.menu_items || 0} />
             <StatCard label="Orders" count={tableCounts.kot_orders || 0} />
             <StatCard label="Order Items" count={tableCounts.kot_items || 0} />
+            <StatCard label="Expenses" count={tableCounts.expenses || 0} />
           </ScrollView>
         </View>
 
@@ -435,6 +461,27 @@ export default function AdminSettingsScreen() {
             icon={Trash2}
             onPress={handleClearMenuItems}
             destructive
+          />
+        </View>
+
+        {/* Customer Management */}
+        <View style={{ marginBottom: 32 }}>
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: "bold",
+              color: theme.colors.text,
+              marginBottom: 16,
+            }}
+          >
+            Customer Management
+          </Text>
+
+          <AdminCard
+            title="Add Demo Customers"
+            description="Add sample customers to test order creation functionality"
+            icon={Users}
+            onPress={handleAddDemoCustomers}
           />
         </View>
 

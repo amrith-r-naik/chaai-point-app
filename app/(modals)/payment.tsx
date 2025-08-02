@@ -44,7 +44,7 @@ export default function PaymentScreen() {
       return;
     }
 
-    // Navigate to receipt page
+    // Navigate directly to receipt page
     router.push({
       pathname: "/(modals)/receipt",
       params: {

@@ -164,7 +164,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="billing"
           options={{
-            title: "Billing",
+            title: "Expenses",
             tabBarButton: (props: any) => (
               <TouchableOpacity
                 {...props}

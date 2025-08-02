@@ -287,6 +287,10 @@ class OrderService {
             orderCount: number;
             hasCompletedBilling: boolean;
             hasActiveOrders: boolean;
+            activeAmount: number;
+            completedAmount: number;
+            activeOrderCount: number;
+            completedOrderCount: number;
           }
         >;
       }
@@ -370,22 +374,31 @@ class OrderService {
           orderCount: 0,
           hasCompletedBilling: false,
           hasActiveOrders: false,
-        };
+          // Track separate amounts and counts for active vs completed
+          activeAmount: 0,
+          completedAmount: 0,
+          activeOrderCount: 0,
+          completedOrderCount: 0,
+        } as any;
       }
 
-      const customerData = dateGroups[orderDate].customers[customerId];
+      const customerData = dateGroups[orderDate].customers[customerId] as any;
       customerData.totalAmount += order.totalAmount || 0;
       customerData.orderCount += 1;
 
-      // Check billing status
+      // Check billing status and track amounts and counts separately
       if (order.billId) {
         customerData.hasCompletedBilling = true;
+        customerData.completedAmount += order.totalAmount || 0;
+        customerData.completedOrderCount += 1;
       } else {
         customerData.hasActiveOrders = true;
+        customerData.activeAmount += order.totalAmount || 0;
+        customerData.activeOrderCount += 1;
       }
     });
 
-    return dateGroups;
+    return dateGroups as any;
   }
 
   async getCustomerKOTsForDate(

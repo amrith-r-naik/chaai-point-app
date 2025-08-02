@@ -31,6 +31,10 @@ interface CustomerData {
   orderCount: number;
   hasCompletedBilling: boolean;
   hasActiveOrders: boolean;
+  activeAmount: number;
+  completedAmount: number;
+  activeOrderCount: number;
+  completedOrderCount: number;
 }
 
 interface DateGroup {
@@ -190,14 +194,16 @@ export default function CustomersScreen() {
       Object.values(group.customers).forEach((customerData) => {
         allCustomers.add(customerData.customer.id);
 
+        if (customerData.hasActiveOrders) {
+          activeCustomers.add(customerData.customer.id);
+          activeOrders += customerData.activeOrderCount;
+          activeAmount += customerData.activeAmount;
+        }
+
         if (customerData.hasCompletedBilling) {
           completedCustomers.add(customerData.customer.id);
-          completedOrders += customerData.orderCount;
-          completedAmount += customerData.totalAmount;
-        } else {
-          activeCustomers.add(customerData.customer.id);
-          activeOrders += customerData.orderCount;
-          activeAmount += customerData.totalAmount;
+          completedOrders += customerData.completedOrderCount;
+          completedAmount += customerData.completedAmount;
         }
       });
     });
@@ -336,8 +342,16 @@ export default function CustomersScreen() {
               <Text className="text-gray-500 text-sm">{customer.contact}</Text>
             )}
             <Text className="text-gray-400 text-xs mt-1">
-              {customerData.orderCount} order
-              {customerData.orderCount !== 1 ? "s" : ""}
+              {activeTab === "active"
+                ? customerData.activeOrderCount
+                : activeTab === "completed"
+                  ? customerData.completedOrderCount
+                  : customerData.orderCount} order
+              {(activeTab === "active"
+                ? customerData.activeOrderCount
+                : activeTab === "completed"
+                  ? customerData.completedOrderCount
+                  : customerData.orderCount) !== 1 ? "s" : ""}
             </Text>
           </View>
         </View>
@@ -345,21 +359,31 @@ export default function CustomersScreen() {
         {/* Amount and Status */}
         <View className="items-end">
           <Text className="text-gray-900 font-bold text-lg mb-1">
-            {formatCurrency(customerData.totalAmount)}
+            {formatCurrency(
+              activeTab === "active"
+                ? customerData.activeAmount
+                : activeTab === "completed"
+                  ? customerData.completedAmount
+                  : customerData.totalAmount
+            )}
           </Text>
           <View
-            className={`px-2 py-1 rounded-full ${customerData.hasCompletedBilling
-              ? "bg-green-100"
-              : "bg-orange-100"
+            className={`px-2 py-1 rounded-full ${activeTab === "active"
+                ? "bg-orange-100"  // Always orange for active tab
+                : customerData.hasCompletedBilling
+                  ? "bg-green-100"
+                  : "bg-orange-100"
               }`}
           >
             <Text
-              className={`text-xs font-medium ${customerData.hasCompletedBilling
-                ? "text-green-700"
-                : "text-orange-700"
+              className={`text-xs font-medium ${activeTab === "active"
+                  ? "text-orange-700"  // Always orange text for active tab
+                  : customerData.hasCompletedBilling
+                    ? "text-green-700"
+                    : "text-orange-700"
                 }`}
             >
-              {customerData.hasCompletedBilling ? "Paid" : "Pending"}
+              {activeTab === "active" ? "Pending" : customerData.hasCompletedBilling ? "Paid" : "Pending"}
             </Text>
           </View>
         </View>
@@ -400,11 +424,23 @@ export default function CustomersScreen() {
   const renderDateSection = (date: string, group: DateGroup) => {
     const customers = Object.values(group.customers);
     const totalAmount = customers.reduce(
-      (sum, customerData) => sum + customerData.totalAmount,
+      (sum, customerData) => sum + (
+        activeTab === "active"
+          ? customerData.activeAmount
+          : activeTab === "completed"
+            ? customerData.completedAmount
+            : customerData.totalAmount
+      ),
       0
     );
     const totalOrders = customers.reduce(
-      (sum, customerData) => sum + customerData.orderCount,
+      (sum, customerData) => sum + (
+        activeTab === "active"
+          ? customerData.activeOrderCount
+          : activeTab === "completed"
+            ? customerData.completedOrderCount
+            : customerData.orderCount
+      ),
       0
     );
 

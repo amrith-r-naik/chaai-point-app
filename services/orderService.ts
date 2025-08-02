@@ -390,7 +390,8 @@ class OrderService {
 
   async getCustomerKOTsForDate(
     customerId: string,
-    date: string
+    date: string,
+    onlyActive: boolean = false
   ): Promise<any[]> {
     if (!db) throw new Error("Database not initialized");
 
@@ -400,6 +401,9 @@ class OrderService {
 
       const endDate = new Date(date);
       endDate.setHours(23, 59, 59, 999);
+
+      // Add billId filter if onlyActive is true
+      const billIdFilter = onlyActive ? "AND ko.billId IS NULL" : "";
 
       const result = await db.getAllAsync(
         `
@@ -419,6 +423,7 @@ class OrderService {
         WHERE ko.customerId = ? 
         AND datetime(ko.createdAt) >= datetime(?)
         AND datetime(ko.createdAt) <= datetime(?)
+        ${billIdFilter}
         ORDER BY ko.createdAt DESC
       `,
         [customerId, startDate.toISOString(), endDate.toISOString()]

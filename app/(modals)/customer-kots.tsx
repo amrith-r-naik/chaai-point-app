@@ -26,7 +26,7 @@ export default function CustomerKOTsScreen() {
     setLoading(true);
     setError("");
     try {
-      const result = await orderService.getCustomerKOTsForDate(selectedCustomer.id, today);
+      const result = await orderService.getCustomerKOTsForDate(selectedCustomer.id, today, true);
       setKots(result);
     } catch (err: any) {
       setError(err.message || "Failed to load KOTs");

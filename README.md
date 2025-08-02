@@ -181,3 +181,22 @@ The app should be running with test data including sample orders. Try navigating
 - Integration with POS printer
 
 The foundation is solid and ready for these enhancements! 🎉
+
+### Pending work :
+1. EOD Button implementation
+2. List only unbilled items in the billing screen
+3. Reduce one screen in the payment flow
+4. Dashboard stats
+5. Completed customers page
+6. Customer slug page
+   i. Customer credit clearance flow
+   ii. 
+7. Menu Items, category emojis customization
+8. Change categories to FAB based category selection
+9. Recently ordered items 
+10. Admin item management feature 
+11. Date wise orders management
+12. Select customer UI in create new order page
+13. Cloud sync
+14. Reset KOT ID everyday, Reset other IDs every year(receipt, bill)
+15. 

@@ -100,8 +100,8 @@ export default function CustomerBillScreen() {
         0
       );
 
-      // Calculate tax and discount (you can adjust these rates)
-      const taxRate = 0.05; // 5% tax
+      // TODO: Calculate tax and discount (you can adjust these rates)
+      const taxRate = 0.00; // 5% tax
       const tax = subtotal * taxRate;
       const discount = 0; // No discount for now
       const totalAmount = subtotal + tax - discount;
@@ -138,9 +138,16 @@ export default function CustomerBillScreen() {
   const handlePayment = () => {
     if (!bill) return;
 
-    // TODO: Navigate to payment screen with bill details
-    // For now, just go back to the customers screen
-    router.push("/(tabs)/customers");
+    // Navigate to payment modal with bill details
+    router.push({
+      pathname: "/(modals)/payment",
+      params: {
+        billId: bill.billNumber,
+        customerId: bill.customerId,
+        customerName: bill.customerName,
+        totalAmount: bill.totalAmount.toString(),
+      },
+    });
   };
 
   if (loading) {

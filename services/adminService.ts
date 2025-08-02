@@ -3,12 +3,16 @@ import { createCustomer } from "./customerService";
 import { menuService } from "./menuService";
 
 class AdminService {
-  // Clear all data from all tables
+  // Clear all data from all tables (PRESERVES USERS TABLE)
   async clearAllTables(): Promise<void> {
     if (!db) throw new Error("Database not initialized");
 
     try {
+      // Temporarily disable foreign key constraints
+      await db.runAsync(`PRAGMA foreign_keys = OFF`);
+
       // Clear all tables in order (respecting foreign key constraints)
+      // NOTE: Users table is preserved to maintain authentication
       await db.runAsync(`DELETE FROM kot_items`);
       await db.runAsync(`DELETE FROM payments`);
       await db.runAsync(`DELETE FROM receipts`);
@@ -17,11 +21,19 @@ class AdminService {
       await db.runAsync(`DELETE FROM expenses`);
       await db.runAsync(`DELETE FROM menu_items`);
       await db.runAsync(`DELETE FROM customers`);
-      await db.runAsync(`DELETE FROM users`);
 
-      console.log("All tables cleared successfully");
+      // Re-enable foreign key constraints
+      await db.runAsync(`PRAGMA foreign_keys = ON`);
+
+      console.log("All data tables cleared successfully (users preserved)");
     } catch (error) {
-      console.error("Error clearing all tables:", error);
+      // Make sure to re-enable foreign keys even if there's an error
+      try {
+        await db.runAsync(`PRAGMA foreign_keys = ON`);
+      } catch (pragmaError) {
+        console.error("Error re-enabling foreign keys:", pragmaError);
+      }
+      console.error("Error clearing data tables:", error);
       throw error;
     }
   }
@@ -39,7 +51,7 @@ class AdminService {
       "expenses",
       "menu_items",
       "customers",
-      "users",
+      // "users", // Users table is protected and not allowed to be cleared individually
     ];
 
     if (!allowedTables.includes(tableName)) {
@@ -47,9 +59,19 @@ class AdminService {
     }
 
     try {
+      // Temporarily disable foreign key constraints for individual table clearing
+      await db.runAsync(`PRAGMA foreign_keys = OFF`);
       await db.runAsync(`DELETE FROM ${tableName}`);
+      await db.runAsync(`PRAGMA foreign_keys = ON`);
+      
       console.log(`Table ${tableName} cleared successfully`);
     } catch (error) {
+      // Make sure to re-enable foreign keys even if there's an error
+      try {
+        await db.runAsync(`PRAGMA foreign_keys = ON`);
+      } catch (pragmaError) {
+        console.error("Error re-enabling foreign keys:", pragmaError);
+      }
       console.error(`Error clearing table ${tableName}:`, error);
       throw error;
     }
@@ -87,7 +109,7 @@ class AdminService {
   // Setup demo data
   async setupDemoData(): Promise<void> {
     try {
-      // Clear existing data first
+      // Clear existing data first (preserves users)
       await this.clearAllTables();
 
       // Add demo menu items
@@ -126,11 +148,11 @@ class AdminService {
     }
   }
 
-  // Reset database to initial state
+  // Reset database to initial state (preserves users)
   async resetDatabase(): Promise<void> {
     try {
       await this.clearAllTables();
-      console.log("Database reset completed");
+      console.log("Database reset completed (users preserved)");
     } catch (error) {
       console.error("Error resetting database:", error);
       throw error;

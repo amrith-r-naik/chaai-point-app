@@ -143,21 +143,21 @@ export default function AdminSettingsScreen() {
 
   const handleClearAllTables = () => {
     Alert.alert(
-      "Clear All Data",
-      "This will permanently delete ALL data from ALL tables. This action cannot be undone. Are you sure?",
+      "Clear All Business Data",
+      "This will permanently delete ALL business data (orders, customers, menu items, payments, etc.) but will preserve user accounts. This action cannot be undone. Are you sure?",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Clear All",
+          text: "Clear Data",
           style: "destructive",
           onPress: async () => {
             try {
               setLoading(true);
               await adminService.clearAllTables();
               await loadTableCounts();
-              Alert.alert("Success", "All tables cleared successfully");
+              Alert.alert("Success", "All business data cleared successfully. User accounts preserved.");
             } catch (error) {
-              Alert.alert("Error", `Failed to clear tables: ${error}`);
+              Alert.alert("Error", `Failed to clear data: ${error}`);
             } finally {
               setLoading(false);
             }
@@ -170,7 +170,7 @@ export default function AdminSettingsScreen() {
   const handleSetupDemoData = () => {
     Alert.alert(
       "Setup Demo Data",
-      "This will clear all existing data and add demo menu items. Continue?",
+      "This will clear all existing business data (but preserve user accounts) and add demo menu items and customers. Continue?",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -180,7 +180,7 @@ export default function AdminSettingsScreen() {
               setLoading(true);
               await adminService.setupDemoData();
               await loadTableCounts();
-              Alert.alert("Success", "Demo data setup completed");
+              Alert.alert("Success", "Demo data setup completed. User accounts preserved.");
             } catch (error) {
               Alert.alert("Error", `Failed to setup demo data: ${error}`);
             } finally {
@@ -500,14 +500,14 @@ export default function AdminSettingsScreen() {
 
           <AdminCard
             title="Setup Demo Data"
-            description="Clear all data and setup with demo menu items"
+            description="Clear all business data (preserves users) and setup with demo menu items and customers"
             icon={Database}
             onPress={handleSetupDemoData}
           />
 
           <AdminCard
-            title="Clear All Tables"
-            description="⚠️ Permanently delete ALL data from ALL tables. This cannot be undone!"
+            title="Clear All Business Data"
+            description="⚠️ Permanently delete ALL business data (orders, customers, menu, payments). User accounts are preserved."
             icon={Trash2}
             onPress={handleClearAllTables}
             destructive

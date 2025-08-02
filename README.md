@@ -199,4 +199,5 @@ The foundation is solid and ready for these enhancements! 🎉
 12. Select customer UI in create new order page
 13. Cloud sync
 14. Reset KOT ID everyday, Reset other IDs every year(receipt, bill)
-15. 
+15. Remove duplicate of credits in the split payment dialogue
+16. show split breakdown in the receipt details via completed customer

@@ -1,7 +1,6 @@
 import { db } from "@/lib/db";
-import { authState } from "@/state/authState";
-import uuid from "react-native-uuid";
 import { SplitPayment } from "@/types/payment";
+import uuid from "react-native-uuid";
 
 export interface Bill {
   id: string;
@@ -245,6 +244,154 @@ class PaymentService {
       ...payment,
       amount: payment.amount / 100 // Convert from cents
     }));
+  }
+
+  async getCompletedBillsGroupedByDate(): Promise<
+    Record<
+      string,
+      {
+        date: string;
+        displayDate: string;
+        bills: Array<{
+          id: string;
+          billNumber: string;
+          receiptNo: string;
+          customerId: string;
+          customerName: string;
+          customerContact: string | null;
+          amount: number;
+          mode: string;
+          remarks: string | null;
+          createdAt: string;
+        }>;
+      }
+    >
+  > {
+    if (!db) throw new Error("Database not initialized");
+
+    const bills = await db.getAllAsync(`
+      SELECT 
+        r.id,
+        r.receiptNo,
+        r.customerId,
+        r.amount,
+        r.mode,
+        r.remarks,
+        r.createdAt,
+        c.name as customerName,
+        c.contact as customerContact,
+        b.billNumber
+      FROM receipts r
+      LEFT JOIN customers c ON r.customerId = c.id
+      LEFT JOIN bills b ON r.customerId = b.customerId 
+        AND DATE(r.createdAt) = DATE(b.createdAt)
+      ORDER BY r.createdAt DESC
+    `) as any[];
+
+    const dateGroups: Record<string, any> = {};
+
+    bills.forEach((bill: any) => {
+      const billDate = bill.createdAt.split('T')[0];
+      const today = new Date().toISOString().split('T')[0];
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0];
+
+      let displayDate: string;
+      if (billDate === today) {
+        displayDate = "Today";
+      } else if (billDate === yesterday) {
+        displayDate = "Yesterday";
+      } else {
+        const date = new Date(billDate);
+        const options: Intl.DateTimeFormatOptions = {
+          day: "2-digit",
+          month: "2-digit",
+          year: "2-digit",
+          weekday: "long",
+        };
+        displayDate = date.toLocaleDateString("en-GB", options);
+      }
+
+      if (!dateGroups[billDate]) {
+        dateGroups[billDate] = {
+          date: billDate,
+          displayDate,
+          bills: [],
+        };
+      }
+
+      dateGroups[billDate].bills.push({
+        id: bill.id,
+        billNumber: bill.billNumber || 'N/A',
+        receiptNo: bill.receiptNo,
+        customerId: bill.customerId,
+        customerName: bill.customerName,
+        customerContact: bill.customerContact,
+        amount: bill.amount / 100, // Convert from cents
+        mode: bill.mode,
+        remarks: bill.remarks,
+        createdAt: bill.createdAt,
+      });
+    });
+
+    return dateGroups;
+  }
+
+  async getBillDetails(receiptId: string): Promise<{
+    receipt: Receipt;
+    customer: any;
+    kots: any[];
+  } | null> {
+    if (!db) throw new Error("Database not initialized");
+
+    // Get receipt details
+    const receipt = await this.getReceipt(receiptId);
+    if (!receipt) return null;
+
+    // Get customer details
+    const customer = await db.getFirstAsync(`
+      SELECT * FROM customers WHERE id = ?
+    `, [receipt.customerId]) as any;
+
+    // Get related bill
+    const bill = await db.getFirstAsync(`
+      SELECT * FROM bills 
+      WHERE customerId = ? 
+        AND DATE(createdAt) = DATE(?)
+      ORDER BY createdAt DESC
+      LIMIT 1
+    `, [receipt.customerId, receipt.createdAt]) as any;
+
+    let kots: any[] = [];
+    if (bill) {
+      // Get KOTs linked to this bill
+      kots = await db.getAllAsync(`
+        SELECT 
+          ko.id,
+          ko.kotNumber,
+          ko.createdAt,
+          GROUP_CONCAT(mi.name || ' x' || ki.quantity, ', ') as items,
+          SUM(ki.quantity * ki.priceAtTime) as total
+        FROM kot_orders ko
+        LEFT JOIN kot_items ki ON ko.id = ki.kotId
+        LEFT JOIN menu_items mi ON ki.itemId = mi.id
+        WHERE ko.billId = ?
+        GROUP BY ko.id, ko.kotNumber, ko.createdAt
+        ORDER BY ko.createdAt
+      `, [bill.id]) as any[];
+
+      kots = kots.map(kot => ({
+        ...kot,
+        total: kot.total || 0
+      }));
+    }
+
+    return {
+      receipt,
+      customer,
+      kots,
+    };
   }
 }
 

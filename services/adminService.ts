@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { createCustomer } from "./customerService";
 import { menuService } from "./menuService";
 
 class AdminService {
@@ -9,7 +10,11 @@ class AdminService {
     try {
       // Clear all tables in order (respecting foreign key constraints)
       await db.runAsync(`DELETE FROM kot_items`);
+      await db.runAsync(`DELETE FROM payments`);
+      await db.runAsync(`DELETE FROM receipts`);
+      await db.runAsync(`DELETE FROM bills`);
       await db.runAsync(`DELETE FROM kot_orders`);
+      await db.runAsync(`DELETE FROM expenses`);
       await db.runAsync(`DELETE FROM menu_items`);
       await db.runAsync(`DELETE FROM customers`);
       await db.runAsync(`DELETE FROM users`);
@@ -27,7 +32,11 @@ class AdminService {
 
     const allowedTables = [
       "kot_items",
+      "payments", 
+      "receipts",
+      "bills",
       "kot_orders",
+      "expenses",
       "menu_items",
       "customers",
       "users",
@@ -57,6 +66,7 @@ class AdminService {
         "menu_items",
         "kot_orders",
         "kot_items",
+        "expenses",
       ];
       const counts: Record<string, number> = {};
 
@@ -83,9 +93,35 @@ class AdminService {
       // Add demo menu items
       await menuService.addDemoMenuItems();
 
+      // Add demo customers
+      await this.addDemoCustomers();
+
       console.log("Demo data setup completed");
     } catch (error) {
       console.error("Error setting up demo data:", error);
+      throw error;
+    }
+  }
+
+  // Add demo customers
+  async addDemoCustomers(): Promise<void> {
+    try {
+      const demoCustomers = [
+        { name: "Walk-in Customer", contact: undefined },
+        { name: "John Doe", contact: "9876543210" },
+        { name: "Jane Smith", contact: "9876543211" },
+        { name: "Rajesh Kumar", contact: "9876543212" },
+        { name: "Priya Sharma", contact: "9876543213" },
+        { name: "Corporate Office", contact: "9876543214" },
+      ];
+
+      for (const customer of demoCustomers) {
+        await createCustomer(customer.name, customer.contact);
+      }
+
+      console.log("Demo customers added successfully");
+    } catch (error) {
+      console.error("Error adding demo customers:", error);
       throw error;
     }
   }

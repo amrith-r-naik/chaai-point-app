@@ -311,6 +311,13 @@ export default function CustomersScreen() {
     return (
       <TouchableOpacity
         key={customer.id}
+        onPress={() => {
+          customerState.selectedCustomer.set({
+            ...customer,
+            contact: customer.contact || undefined,
+          });
+          router.push("/(modals)/customer-kots");
+        }}
         className="flex-row items-center justify-between px-4 py-4 bg-white border-b border-gray-50 active:bg-gray-50"
         activeOpacity={0.7}
       >
@@ -341,18 +348,16 @@ export default function CustomersScreen() {
             {formatCurrency(customerData.totalAmount)}
           </Text>
           <View
-            className={`px-2 py-1 rounded-full ${
-              customerData.hasCompletedBilling
-                ? "bg-green-100"
-                : "bg-orange-100"
-            }`}
+            className={`px-2 py-1 rounded-full ${customerData.hasCompletedBilling
+              ? "bg-green-100"
+              : "bg-orange-100"
+              }`}
           >
             <Text
-              className={`text-xs font-medium ${
-                customerData.hasCompletedBilling
-                  ? "text-green-700"
-                  : "text-orange-700"
-              }`}
+              className={`text-xs font-medium ${customerData.hasCompletedBilling
+                ? "text-green-700"
+                : "text-orange-700"
+                }`}
             >
               {customerData.hasCompletedBilling ? "Paid" : "Pending"}
             </Text>
@@ -460,8 +465,8 @@ export default function CustomersScreen() {
   const sortedDates = isAllTab
     ? []
     : Object.keys(filteredDateGroups).sort(
-        (a, b) => new Date(b).getTime() - new Date(a).getTime()
-      );
+      (a, b) => new Date(b).getTime() - new Date(a).getTime()
+    );
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
@@ -503,14 +508,12 @@ export default function CustomersScreen() {
           <View className="flex-row mb-2">
             <TouchableOpacity
               onPress={() => setActiveTab("active")}
-              className={`px-4 py-2 mr-2 rounded-full ${
-                activeTab === "active" ? "bg-green-600" : "bg-gray-200"
-              }`}
+              className={`px-4 py-2 mr-2 rounded-full ${activeTab === "active" ? "bg-green-600" : "bg-gray-200"
+                }`}
             >
               <Text
-                className={`font-medium ${
-                  activeTab === "active" ? "text-white" : "text-gray-700"
-                }`}
+                className={`font-medium ${activeTab === "active" ? "text-white" : "text-gray-700"
+                  }`}
               >
                 Active
               </Text>
@@ -518,14 +521,12 @@ export default function CustomersScreen() {
 
             <TouchableOpacity
               onPress={() => setActiveTab("completed")}
-              className={`px-4 py-2 mr-2 rounded-full ${
-                activeTab === "completed" ? "bg-blue-600" : "bg-gray-200"
-              }`}
+              className={`px-4 py-2 mr-2 rounded-full ${activeTab === "completed" ? "bg-blue-600" : "bg-gray-200"
+                }`}
             >
               <Text
-                className={`font-medium ${
-                  activeTab === "completed" ? "text-white" : "text-gray-700"
-                }`}
+                className={`font-medium ${activeTab === "completed" ? "text-white" : "text-gray-700"
+                  }`}
               >
                 Completed
               </Text>
@@ -533,14 +534,12 @@ export default function CustomersScreen() {
 
             <TouchableOpacity
               onPress={() => setActiveTab("all")}
-              className={`px-4 py-2 mr-2 rounded-full ${
-                activeTab === "all" ? "bg-gray-600" : "bg-gray-200"
-              }`}
+              className={`px-4 py-2 mr-2 rounded-full ${activeTab === "all" ? "bg-gray-600" : "bg-gray-200"
+                }`}
             >
               <Text
-                className={`font-medium ${
-                  activeTab === "all" ? "text-white" : "text-gray-700"
-                }`}
+                className={`font-medium ${activeTab === "all" ? "text-white" : "text-gray-700"
+                  }`}
               >
                 All
               </Text>

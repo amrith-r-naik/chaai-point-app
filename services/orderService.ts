@@ -331,6 +331,89 @@ class OrderService {
 
     return dateGroups;
   }
+
+  async getCustomerKOTsForDate(
+    customerId: string,
+    date: string
+  ): Promise<any[]> {
+    if (!db) throw new Error("Database not initialized");
+
+    try {
+      const startDate = new Date(date);
+      startDate.setHours(0, 0, 0, 0);
+
+      const endDate = new Date(date);
+      endDate.setHours(23, 59, 59, 999);
+
+      const result = await db.getAllAsync(
+        `
+        SELECT 
+          ko.id,
+          ko.kotNumber,
+          ko.customerId,
+          ko.createdAt,
+          ko.createdAt as updatedAt,
+          c.name as customerName,
+          CASE 
+            WHEN ko.billId IS NOT NULL THEN 'completed'
+            ELSE 'pending'
+          END as status
+        FROM kot_orders ko
+        LEFT JOIN customers c ON ko.customerId = c.id
+        WHERE ko.customerId = ? 
+        AND datetime(ko.createdAt) >= datetime(?)
+        AND datetime(ko.createdAt) <= datetime(?)
+        ORDER BY ko.createdAt DESC
+      `,
+        [customerId, startDate.toISOString(), endDate.toISOString()]
+      );
+
+      // Get items for each KOT
+      const kotsWithItems = await Promise.all(
+        result.map(async (kot: any) => {
+          const items = await db!.getAllAsync(
+            `
+            SELECT 
+              ki.id,
+              ki.kotId,
+              ki.itemId as menuItemId,
+              ki.quantity,
+              ki.priceAtTime as price,
+              (ki.quantity * ki.priceAtTime) as totalPrice,
+              mi.name as menuItemName
+            FROM kot_items ki
+            LEFT JOIN menu_items mi ON ki.itemId = mi.id
+            WHERE ki.kotId = ?
+            ORDER BY mi.name
+          `,
+            [kot.id]
+          );
+
+          const totalAmount = items.reduce(
+            (sum: number, item: any) => sum + item.totalPrice,
+            0
+          );
+
+          return {
+            id: kot.id,
+            kotNumber: `KOT-${kot.kotNumber}`,
+            customerId: kot.customerId,
+            customerName: kot.customerName,
+            items,
+            totalAmount,
+            status: kot.status,
+            createdAt: kot.createdAt,
+            updatedAt: kot.updatedAt,
+          };
+        })
+      );
+
+      return kotsWithItems;
+    } catch (error) {
+      console.error("Error fetching customer KOTs:", error);
+      throw error;
+    }
+  }
 }
 
 export const orderService = new OrderService();

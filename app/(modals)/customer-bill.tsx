@@ -64,7 +64,8 @@ export default function CustomerBillScreen() {
       // Get customer's KOTs for the specific date and generate bill
       const customerKOTs = await orderService.getCustomerKOTsForDate(
         customerId,
-        date || new Date().toISOString().split("T")[0]
+        date || new Date().toISOString().split("T")[0],
+        true // Only get unbilled orders for billing
       );
 
       if (customerKOTs.length === 0) {

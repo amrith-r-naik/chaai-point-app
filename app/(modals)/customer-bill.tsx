@@ -350,9 +350,12 @@ export default function CustomerBillScreen() {
 
       {/* Payment Button */}
       <View style={{
-        backgroundColor: "black",
+        backgroundColor: theme.colors.primary,
+        marginBottom: 16,
+        marginHorizontal: 16,
+        borderRadius: 16,
         paddingHorizontal: 16,
-        paddingVertical: 20,
+        paddingVertical: 16,
       }}>
         <TouchableOpacity
           onPress={handlePayment}

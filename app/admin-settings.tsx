@@ -510,7 +510,7 @@ export default function AdminSettingsScreen() {
       <View
         style={{
           backgroundColor: theme.colors.primary,
-          paddingTop: 12,
+          paddingTop: 32,
           paddingBottom: 24,
           paddingHorizontal: 24,
         }}

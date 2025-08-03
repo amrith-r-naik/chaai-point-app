@@ -1,25 +1,51 @@
 import { theme } from "@/constants/theme";
 import { adminService } from "@/services/adminService";
-import { menuService } from "@/services/menuService";
+import { CreateMenuItemData, MenuItem, menuService } from "@/services/menuService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import { router } from "expo-router";
-import { Database, Lock, Plus, Settings, Trash2, Users } from "lucide-react-native";
+import { Database, Lock, Settings, Trash2, Users, X } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 
 export default function AdminSettingsScreen() {
   const auth = use$(authState);
   const [loading, setLoading] = useState(false);
   const [tableCounts, setTableCounts] = useState<Record<string, number>>({});
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [showMenuModal, setShowMenuModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [menuForm, setMenuForm] = useState({
+    name: "",
+    category: "",
+    price: "",
+  });
+
+  const categories = [
+    "Tea",
+    "Hot Cups",
+    "Mojito",
+    "Refreshers",
+    "Milkshakes",
+    "Maggie",
+    "Quick Bites",
+    "Sandwich",
+    "Burger",
+    "Omlette",
+    "Rolls",
+    "Momos",
+    "Cigarettes",
+  ];
 
   useEffect(() => {
     // Check if user is authenticated and has admin role
@@ -43,7 +69,17 @@ export default function AdminSettingsScreen() {
     }
 
     loadTableCounts();
+    loadMenuItems();
   }, [auth.user]);
+
+  const loadMenuItems = async () => {
+    try {
+      const items = await menuService.getAllMenuItems();
+      setMenuItems(items);
+    } catch (error) {
+      console.error("Error loading menu items:", error);
+    }
+  };
 
   // Show access denied screen for non-admin users
   if (!auth.user || auth.user.role !== "admin") {
@@ -256,6 +292,7 @@ export default function AdminSettingsScreen() {
               setLoading(true);
               await menuService.clearAllMenuItems();
               await loadTableCounts();
+              await loadMenuItems();
               Alert.alert("Success", "Menu items cleared successfully");
             } catch (error) {
               Alert.alert("Error", `Failed to clear menu items: ${error}`);
@@ -266,6 +303,96 @@ export default function AdminSettingsScreen() {
         },
       ]
     );
+  };
+
+  // Menu Management Functions
+  const handleAddMenuItem = () => {
+    setEditingItem(null);
+    setMenuForm({ name: "", category: "", price: "" });
+    setShowMenuModal(true);
+  };
+
+  const handleEditMenuItem = (item: MenuItem) => {
+    setEditingItem(item);
+    setMenuForm({
+      name: item.name,
+      category: item.category || "",
+      price: item.price.toString(),
+    });
+    setShowMenuModal(true);
+  };
+
+  const handleDeleteMenuItem = (item: MenuItem) => {
+    Alert.alert(
+      "Delete Menu Item",
+      `Are you sure you want to delete "${item.name}"? This action cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await menuService.deleteMenuItem(item.id);
+              await loadMenuItems();
+              await loadTableCounts();
+              Alert.alert("Success", "Menu item deleted successfully");
+            } catch (error: any) {
+              Alert.alert("Error", error.message || "Failed to delete menu item");
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const validateMenuForm = (): string | null => {
+    if (!menuForm.name.trim()) return "Item name is required";
+    if (!menuForm.category.trim()) return "Category is required";
+    if (!menuForm.price.trim()) return "Price is required";
+
+    const price = parseFloat(menuForm.price);
+    if (isNaN(price) || price <= 0) return "Price must be a valid positive number";
+
+    return null;
+  };
+
+  const handleSaveMenuItem = async () => {
+    const validationError = validateMenuForm();
+    if (validationError) {
+      Alert.alert("Validation Error", validationError);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const itemData: CreateMenuItemData = {
+        name: menuForm.name.trim(),
+        category: menuForm.category.trim(),
+        price: parseFloat(menuForm.price),
+      };
+
+      if (editingItem) {
+        await menuService.updateMenuItem(editingItem.id, itemData);
+        Alert.alert("Success", "Menu item updated successfully");
+      } else {
+        await menuService.createMenuItem(itemData);
+        Alert.alert("Success", "Menu item added successfully");
+      }
+
+      setShowMenuModal(false);
+      setMenuForm({ name: "", category: "", price: "" });
+      setEditingItem(null);
+      await loadMenuItems();
+      await loadTableCounts();
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to save menu item");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const AdminCard = ({
@@ -445,23 +572,28 @@ export default function AdminSettingsScreen() {
               marginBottom: 16,
             }}
           >
-            Menu Management
+            Menu Management ({menuItems.length} items)
           </Text>
 
-          <AdminCard
-            title="Add Demo Menu Items"
-            description="Add sample menu items with various categories (Tea, Coffee, Pasta, Snacks, Beverages)"
-            icon={Plus}
-            onPress={handleAddDemoMenuItems}
-          />
-
-          <AdminCard
-            title="Clear Menu Items"
-            description="Remove all menu items from the database"
-            icon={Trash2}
-            onPress={handleClearMenuItems}
-            destructive
-          />
+          {/* Manage Button */}
+          <TouchableOpacity
+            onPress={() => router.push("/menu-management")}
+            style={{
+              backgroundColor: theme.colors.primary,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              paddingVertical: 16,
+              paddingHorizontal: 20,
+              borderRadius: 12,
+              ...theme.shadows.sm,
+            }}
+          >
+            <Settings size={20} color="white" />
+            <Text style={{ color: "white", fontSize: 16, fontWeight: "600", marginLeft: 8 }}>
+              Manage Menu Items
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Customer Management */}
@@ -539,6 +671,160 @@ export default function AdminSettingsScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Menu Item Form Modal */}
+      <Modal
+        visible={showMenuModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowMenuModal(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: theme.colors.border,
+            }}
+          >
+            <TouchableOpacity onPress={() => setShowMenuModal(false)}>
+              <X size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+            <Text style={{ fontSize: 18, fontWeight: "600", color: theme.colors.text }}>
+              {editingItem ? "Edit Menu Item" : "Add Menu Item"}
+            </Text>
+            <TouchableOpacity
+              onPress={handleSaveMenuItem}
+              disabled={loading}
+              style={{
+                backgroundColor: theme.colors.primary,
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                borderRadius: 6,
+                opacity: loading ? 0.6 : 1,
+              }}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Text style={{ color: "white", fontSize: 16, fontWeight: "600" }}>
+                  {editingItem ? "Update" : "Add"}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={{ flex: 1, padding: 16 }}>
+            {/* Item Name */}
+            <View style={{ marginBottom: 20 }}>
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                  marginBottom: 8,
+                }}
+              >
+                Item Name *
+              </Text>
+              <TextInput
+                value={menuForm.name}
+                onChangeText={(text) => setMenuForm({ ...menuForm, name: text })}
+                placeholder="Enter item name"
+                style={{
+                  borderWidth: 1,
+                  borderColor: theme.colors.border,
+                  borderRadius: 8,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  fontSize: 16,
+                  backgroundColor: "white",
+                }}
+                autoCapitalize="words"
+              />
+            </View>
+
+            {/* Category */}
+            <View style={{ marginBottom: 20 }}>
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                  marginBottom: 8,
+                }}
+              >
+                Category *
+              </Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  gap: 8,
+                }}
+              >
+                {categories.map((category) => (
+                  <TouchableOpacity
+                    key={category}
+                    onPress={() => setMenuForm({ ...menuForm, category })}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 20,
+                      backgroundColor: menuForm.category === category ? theme.colors.primary : "#f3f4f6",
+                      borderWidth: 1,
+                      borderColor: menuForm.category === category ? theme.colors.primary : "#e5e7eb",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        color: menuForm.category === category ? "white" : theme.colors.text,
+                        fontWeight: menuForm.category === category ? "600" : "400",
+                      }}
+                    >
+                      {category}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Price */}
+            <View style={{ marginBottom: 20 }}>
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                  marginBottom: 8,
+                }}
+              >
+                Price (₹) *
+              </Text>
+              <TextInput
+                value={menuForm.price}
+                onChangeText={(text) => setMenuForm({ ...menuForm, price: text })}
+                placeholder="Enter price"
+                keyboardType="numeric"
+                style={{
+                  borderWidth: 1,
+                  borderColor: theme.colors.border,
+                  borderRadius: 8,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  fontSize: 16,
+                  backgroundColor: "white",
+                }}
+              />
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }

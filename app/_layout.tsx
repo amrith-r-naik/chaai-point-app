@@ -77,6 +77,8 @@ export default function RootLayout() {
           presentation: "modal",
         }}
       />
+      <Stack.Screen name="admin-settings" options={{ headerShown: false }} />
+      <Stack.Screen name="menu-management" options={{ headerShown: false }} />
     </Stack>
   );
 }

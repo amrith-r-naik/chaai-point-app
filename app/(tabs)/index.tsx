@@ -1,18 +1,20 @@
 import AddExpenseModal from "@/app/(modals)/add-expense";
-import { Button, Loading } from "@/components/ui";
+import { Loading } from "@/components/ui";
 import { theme } from "@/constants/theme";
 import { logoutUser } from "@/services/authService";
 import { dashboardService, DashboardStats, DateFilterOptions } from "@/services/dashboardService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from "expo-router";
 import {
   AlertCircle,
   BarChart3,
+  Calendar,
   DollarSign,
-  Filter,
   LogOut,
   Plus,
+  Settings,
   ShoppingCart,
   TrendingDown,
   TrendingUp
@@ -42,285 +44,392 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: 120
   },
-  headerContainer: {
-    backgroundColor: theme.colors.primary,
-    paddingBottom: 32,
-    paddingHorizontal: 20,
+  headerGradient: {
+    paddingBottom: 28,
+    paddingHorizontal: 24,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 12,
   },
   headerContent: {
+    marginBottom: 24,
+  },
+  headerTop: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     marginBottom: 24,
-    minHeight: 60,
   },
-  headerTextContainer: {
+  headerLeft: {
     flex: 1,
-    paddingRight: 16,
+    paddingRight: 20,
+  },
+  greeting: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 6,
+    letterSpacing: 0.2,
   },
   headerTitle: {
     color: "white",
-    fontSize: 32,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-    marginBottom: 4,
-    flexShrink: 1,
-    textAlign: 'left',
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    lineHeight: 30,
   },
-  headerSubtitle: {
-    color: "rgba(255,255,255,0.9)",
-    fontSize: 16,
-    fontWeight: '500',
-    lineHeight: 22
+  headerActions: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    flexShrink: 0,
   },
-  headerButtonsContainer: {
-    flexDirection: "column",
+  actionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)"
+  },
+  primaryActionButton: {
+    backgroundColor: "rgba(255,255,255,0.95)",
+    flexDirection: "row",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    width: "auto",
+    gap: 6,
+  },
+  filterSection: {
+    marginTop: 4,
+  },
+  filterLabel: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
-    alignItems: 'flex-end'
+    marginBottom: 12,
+  },
+  filterLabelText: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
   filterContainer: {
     flexDirection: "row",
-    alignItems: "center",
-    marginTop: 20,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
     backgroundColor: "rgba(255,255,255,0.15)",
-    borderRadius: 16,
+    borderRadius: 14,
+    padding: 4,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.2)"
   },
-  cardsContainer: {
-    paddingHorizontal: 16,
-    marginTop: -16
-  },
-  cardRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 16,
-    gap: 12
-  },
-  statCard: {
-    flex: 1,
-    padding: 20,
-    borderRadius: 20,
-    backgroundColor: 'white',
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: '#f1f5f9'
-  },
-  statCardContent: {
-    alignItems: "flex-start"
-  },
-  statCardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    width: "100%",
-    marginBottom: 12
-  },
-  statCardTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    flex: 1
-  },
-  statCardValue: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#1e293b',
-    marginBottom: 8,
-    lineHeight: 28
-  },
-  statCardIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center"
-  },
   filterButton: {
-    paddingHorizontal: 20,
+    flex: 1,
     paddingVertical: 10,
-    borderRadius: 20,
-    marginRight: 8
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   filterButtonActive: {
     backgroundColor: "rgba(255,255,255,1)",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  filterButtonInactive: {
-    backgroundColor: "rgba(255,255,255,0.2)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.3)"
-  },
-  filterButtonText: {
-    fontSize: 14,
+  filterText: {
+    fontSize: 13,
     fontWeight: '600',
-    letterSpacing: 0.3
+    textAlign: "center",
+    letterSpacing: 0.2,
   },
-  todayPerformanceCard: {
-    margin: 20,
+  filterTextActive: {
+    color: theme.colors.primary,
+  },
+  filterTextInactive: {
+    color: "rgba(255,255,255,0.9)",
+  },
+  contentContainer: {
+    paddingHorizontal: 20,
+    marginTop: -8,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 18,
     marginTop: 24,
-    padding: 24,
-    borderRadius: 20,
+    letterSpacing: -0.2,
+  },
+  metricsGrid: {
+    gap: 14,
+  },
+  metricsRow: {
+    flexDirection: "row",
+    gap: 14,
+  },
+  metricCard: {
+    flex: 1,
     backgroundColor: 'white',
+    borderRadius: 18,
+    padding: 18,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    minHeight: 110,
+  },
+  metricCardFeatured: {
+    borderWidth: 1.5,
+    borderColor: theme.colors.primaryLight,
+    shadowColor: theme.colors.primary,
+    shadowOpacity: 0.12,
+  },
+  metricHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 14,
+    height: 32,
+  },
+  metricTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    flex: 1,
+    lineHeight: 14,
+    marginTop: 2,
+  },
+  metricIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 8,
+  },
+  metricValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1e293b',
+    marginBottom: 6,
+    lineHeight: 26,
+    letterSpacing: -0.3,
+  },
+  metricSubtext: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '500',
+    lineHeight: 14,
+    letterSpacing: 0.1,
+  },
+  performanceCard: {
+    backgroundColor: 'white',
+    borderRadius: 18,
+    padding: 20,
+    marginTop: 28,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 16,
-    elevation: 8,
+    elevation: 6,
     borderWidth: 1,
     borderColor: '#f1f5f9'
   },
+  performanceHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 18,
+  },
+  performanceTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1e293b',
+    letterSpacing: -0.2,
+  },
+  performanceBadge: {
+    backgroundColor: theme.colors.primaryLight,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+  },
+  performanceBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: theme.colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  performanceGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 16
+  },
+  performanceMetric: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 14,
+    backgroundColor: '#f8fafc',
+    borderRadius: 14,
+  },
+  performanceMetricTitle: {
+    fontSize: 10,
+    color: '#64748b',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  performanceMetricValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 22,
+    letterSpacing: -0.2,
+  },
   adminCard: {
-    margin: 20,
-    marginTop: 24,
-    padding: 24,
-    borderRadius: 20,
-    backgroundColor: 'white',
+    backgroundColor: theme.colors.primary,
+    borderRadius: 18,
+    padding: 20,
+    marginTop: 28,
     shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
     shadowRadius: 16,
     elevation: 8,
-    borderWidth: 2,
-    borderColor: theme.colors.primaryLight
+  },
+  adminContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  adminText: {
+    flex: 1,
+    paddingRight: 16
+  },
+  adminTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: 'white',
+    marginBottom: 4,
+    lineHeight: 20,
+    letterSpacing: -0.1,
+  },
+  adminSubtitle: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.85)",
+    fontWeight: '500',
+    lineHeight: 18,
+    letterSpacing: 0.1,
+  },
+  adminButton: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)"
   }
 });
 
-// Format currency properly without truncation
 const formatCurrency = (amount: number): string => {
   const value = Math.abs(amount);
-  const formatted = new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-  
-  return amount < 0 ? `-${formatted}` : formatted;
+  if (value >= 10000000) {
+    return `${amount < 0 ? '-' : ''}₹${(value / 10000000).toFixed(1)}Cr`;
+  } else if (value >= 100000) {
+    return `${amount < 0 ? '-' : ''}₹${(value / 100000).toFixed(1)}L`;
+  } else if (value >= 1000) {
+    return `${amount < 0 ? '-' : ''}₹${(value / 1000).toFixed(1)}K`;
+  }
+  return `${amount < 0 ? '-' : ''}₹${value.toLocaleString('en-IN')}`;
 };
 
-// Get appropriate font size based on amount length
-const getCurrencyFontSize = (amount: number, baseFontSize: number = 24): number => {
+const getCurrencyFontSize = (amount: number, baseFontSize: number = 22): number => {
   const formatted = formatCurrency(amount);
   const length = formatted.length;
   
-  if (length <= 8) return baseFontSize;
-  if (length <= 12) return baseFontSize * 0.85;
-  if (length <= 16) return baseFontSize * 0.75;
-  return baseFontSize * 0.65;
+  if (length <= 6) return baseFontSize;
+  if (length <= 8) return baseFontSize * 0.9;
+  if (length <= 10) return baseFontSize * 0.8;
+  return baseFontSize * 0.7;
 };
 
-// Format large numbers with K, L notation for better readability
-const formatNumber = (num: number): string => {
-  if (num >= 10000000) { // 1 crore
-    return `${(num / 10000000).toFixed(1)}Cr`;
-  } else if (num >= 100000) { // 1 lakh
-    return `${(num / 100000).toFixed(1)}L`;
-  } else if (num >= 1000) { // 1 thousand
-    return `${(num / 1000).toFixed(1)}K`;
-  }
-  return num.toString();
-};
-
-interface StatCardProps {
+interface MetricCardProps {
   title: string;
   value: string | number;
-  subtitle?: string;
   icon: React.ReactNode;
-  color: string;
-  backgroundColor: string;
-  trend?: "up" | "down";
-  trendValue?: string;
+  iconBg: string;
+  valueColor?: string;
+  featured?: boolean;
+  subtitle?: string;
 }
 
-const StatCard: React.FC<StatCardProps> = ({
+const MetricCard: React.FC<MetricCardProps> = ({
   title,
   value,
-  subtitle,
   icon,
-  color,
-  backgroundColor,
-  trend,
-  trendValue,
+  iconBg,
+  valueColor = '#1e293b',
+  featured = false,
+  subtitle
 }) => {
   const formatValue = () => {
-    if (typeof value === "number" && (title.toLowerCase().includes("revenue") || title.toLowerCase().includes("expense") || title.toLowerCase().includes("profit") || title.toLowerCase().includes("due"))) {
+    if (typeof value === "number" && (
+      title.toLowerCase().includes("revenue") || 
+      title.toLowerCase().includes("expense") || 
+      title.toLowerCase().includes("profit") || 
+      title.toLowerCase().includes("due") ||
+      title.toLowerCase().includes("value")
+    )) {
       return formatCurrency(value);
     }
     return value.toString();
   };
 
   const getFontSize = () => {
-    if (typeof value === "number" && (title.toLowerCase().includes("revenue") || title.toLowerCase().includes("expense") || title.toLowerCase().includes("profit") || title.toLowerCase().includes("due"))) {
-      return getCurrencyFontSize(value, 24);
+    if (typeof value === "number" && (
+      title.toLowerCase().includes("revenue") || 
+      title.toLowerCase().includes("expense") || 
+      title.toLowerCase().includes("profit") || 
+      title.toLowerCase().includes("due") ||
+      title.toLowerCase().includes("value")
+    )) {
+      return getCurrencyFontSize(value, 22);
     }
-    return 24;
+    return 22;
   };
 
   return (
-    <View style={styles.statCard}>
-      <View style={styles.statCardContent}>
-        <View style={styles.statCardHeader}>
-          <Text style={styles.statCardTitle}>
-            {title.toUpperCase()}
-          </Text>
-          <View style={[styles.statCardIcon, { backgroundColor }]}>
-            {icon}
-          </View>
+    <View style={[styles.metricCard, featured && styles.metricCardFeatured]}>
+      <View style={styles.metricHeader}>
+        <Text style={styles.metricTitle} numberOfLines={1}>{title}</Text>
+        <View style={[styles.metricIcon, { backgroundColor: iconBg }]}>
+          {icon}
         </View>
-        
-        <Text style={[styles.statCardValue, { fontSize: getFontSize() }]}>
-          {formatValue()}
-        </Text>
-        
-        {subtitle && (
-          <Text style={{ 
-            fontSize: 13, 
-            color: '#64748b', 
-            marginTop: 4,
-            fontWeight: '500'
-          }}>
-            {subtitle}
-          </Text>
-        )}
-        
-        {trend && trendValue && (
-          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
-            {trend === "up" ? (
-              <TrendingUp size={14} color={theme.colors.success} />
-            ) : (
-              <TrendingDown size={14} color={theme.colors.error} />
-            )}
-            <Text style={{
-              marginLeft: 6,
-              fontSize: 13,
-              fontWeight: '600',
-              color: trend === "up" ? theme.colors.success : theme.colors.error
-            }}>
-              {trendValue}
-            </Text>
-          </View>
-        )}
       </View>
+      <Text style={[
+        styles.metricValue, 
+        { fontSize: getFontSize(), color: valueColor }
+      ]} numberOfLines={1} adjustsFontSizeToFit>
+        {formatValue()}
+      </Text>
+      {subtitle && (
+        <Text style={styles.metricSubtext} numberOfLines={1}>{subtitle}</Text>
+      )}
     </View>
   );
 };
@@ -334,14 +443,12 @@ const FilterButton: React.FC<{
     onPress={onPress}
     style={[
       styles.filterButton,
-      active ? styles.filterButtonActive : styles.filterButtonInactive
+      active && styles.filterButtonActive
     ]}
   >
     <Text style={[
-      styles.filterButtonText,
-      {
-        color: active ? theme.colors.primary : "rgba(255,255,255,0.95)",
-      }
+      styles.filterText,
+      active ? styles.filterTextActive : styles.filterTextInactive
     ]}>
       {children}
     </Text>
@@ -433,6 +540,13 @@ export default function HomeScreen() {
     loadDashboardData();
   };
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good Morning";
+    if (hour < 17) return "Good Afternoon";
+    return "Good Evening";
+  };
+
   if (!auth.user) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.surface }}>
@@ -459,66 +573,39 @@ export default function HomeScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
       >
-        <View
-          style={[
-            styles.headerContainer,
-            { paddingTop: insets.top + 32 }
-          ]}
+        <LinearGradient
+          colors={[theme.colors.primary, theme.colors.primaryDark || '#1e40af']}
+          style={[styles.headerGradient, { paddingTop: insets.top + 24 }]}
         >
           <View style={styles.headerContent}>
-            <View style={styles.headerTextContainer}>
-              <Text style={styles.headerTitle} numberOfLines={1}>
-                Dashboard
-              </Text>
-              <Text style={styles.headerSubtitle}>
-                Complete business overview and insights
-              </Text>
+            <View style={styles.headerTop}>
+              <View style={styles.headerLeft}>
+                <Text style={styles.greeting}>{getGreeting()}</Text>
+                <Text style={styles.headerTitle}>Dashboard</Text>
+              </View>
+              <View style={styles.headerActions}>
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.primaryActionButton]}
+                  onPress={() => setShowAddExpense(true)}
+                >
+                  <Plus size={18} color={theme.colors.primary} />
+                  <Text style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 13 }}>Add</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.actionButton}
+                  onPress={handleLogout}
+                >
+                  <LogOut size={18} color="white" />
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.headerButtonsContainer}>
-              <Button
-                title="Add Expense"
-                onPress={() => setShowAddExpense(true)}
-                variant="secondary"
-                size="sm"
-                style={{
-                  backgroundColor: "rgba(255,255,255,0.2)",
-                  borderColor: "rgba(255,255,255,0.3)",
-                  paddingHorizontal: 16,
-                  paddingVertical: 12,
-                  borderRadius: 12,
-                }}
-                textStyle={{ color: "white", fontWeight: "700", fontSize: 14 }}
-                icon={<Plus size={20} color="white" />}
-              />
-              <Button
-                title=""
-                onPress={handleLogout}
-                variant="secondary"
-                size="sm"
-                style={{
-                  backgroundColor: "rgba(255,255,255,0.2)",
-                  borderColor: "rgba(255,255,255,0.3)",
-                  paddingHorizontal: 14,
-                  paddingVertical: 12,
-                  borderRadius: 12,
-                }}
-                icon={<LogOut size={20} color="white" />}
-              />
-            </View>
-          </View>
 
-          <View style={styles.filterContainer}>
-            <Filter size={18} color="rgba(255,255,255,0.95)" style={{ marginRight: 12 }} />
-            <Text style={{ 
-              color: "rgba(255,255,255,0.95)", 
-              marginRight: 20,
-              fontSize: 16,
-              fontWeight: '700'
-            }}>
-              Filter Period:
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <View style={styles.filterSection}>
+              <View style={styles.filterLabel}>
+                <Calendar size={14} color="rgba(255,255,255,0.9)" />
+                <Text style={styles.filterLabelText}>Time Period</Text>
+              </View>
+              <View style={styles.filterContainer}>
                 <FilterButton
                   active={selectedFilter === "today"}
                   onPress={() => setSelectedFilter("today")}
@@ -529,185 +616,142 @@ export default function HomeScreen() {
                   active={selectedFilter === "week"}
                   onPress={() => setSelectedFilter("week")}
                 >
-                  This Week
+                  Week
                 </FilterButton>
                 <FilterButton
                   active={selectedFilter === "month"}
                   onPress={() => setSelectedFilter("month")}
                 >
-                  This Month
+                  Month
                 </FilterButton>
               </View>
-            </ScrollView>
-          </View>
-        </View>
-
-        <View style={styles.cardsContainer}>
-          <View style={styles.cardRow}>
-            <StatCard
-              title="Total Revenue"
-              value={stats?.totalRevenue || 0}
-              icon={<DollarSign size={22} color={theme.colors.success} />}
-              color={theme.colors.success}
-              backgroundColor={theme.colors.successLight}
-            />
-            <StatCard
-              title="Total Orders"
-              value={stats?.totalOrders || 0}
-              icon={<ShoppingCart size={22} color={theme.colors.primary} />}
-              color={theme.colors.primary}
-              backgroundColor={theme.colors.primaryLight}
-            />
-          </View>
-
-          <View style={styles.cardRow}>
-            <StatCard
-              title="Total Expenses"
-              value={stats?.totalExpenses || 0}
-              icon={<TrendingDown size={22} color={theme.colors.error} />}
-              color={theme.colors.error}
-              backgroundColor="#fef2f2"
-            />
-            <StatCard
-              title="Net Profit"
-              value={stats?.profit || 0}
-              icon={<TrendingUp size={22} color={stats && stats.profit >= 0 ? theme.colors.success : theme.colors.error} />}
-              color={stats && stats.profit >= 0 ? theme.colors.success : theme.colors.error}
-              backgroundColor={stats && stats.profit >= 0 ? theme.colors.successLight : "#fef2f2"}
-            />
-          </View>
-
-          <View style={styles.cardRow}>
-            <StatCard
-              title="Pending Dues"
-              value={stats?.pendingDues || 0}
-              icon={<AlertCircle size={22} color={theme.colors.warning} />}
-              color={theme.colors.warning}
-              backgroundColor={theme.colors.warningLight}
-            />
-            <StatCard
-              title="Avg Order Value"
-              value={stats?.totalOrders && stats?.totalOrders > 0 ? Math.round(stats.totalRevenue / stats.totalOrders) : 0}
-              icon={<BarChart3 size={22} color={theme.colors.info} />}
-              color={theme.colors.info}
-              backgroundColor="#eff6ff"
-            />
-          </View>
-        </View>
-
-        {selectedFilter !== "today" && (
-          <View style={styles.todayPerformanceCard}>
-            <Text style={{ 
-              fontSize: 20, 
-              fontWeight: '800', 
-              color: '#1e293b', 
-              marginBottom: 20 
-            }}>
-              Today's Performance
-            </Text>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", flexWrap: 'wrap', gap: 16 }}>
-              <View style={{ flex: 1, minWidth: 100 }}>
-                <Text style={{ 
-                  fontSize: 12, 
-                  color: '#64748b', 
-                  fontWeight: '600', 
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.5,
-                  marginBottom: 8
-                }}>
-                  Orders Today
-                </Text>
-                <Text style={{ 
-                  fontSize: 24, 
-                  fontWeight: '800', 
-                  color: '#1e293b' 
-                }}>
-                  {stats?.todayOrders || 0}
-                </Text>
-              </View>
-              <View style={{ flex: 1, alignItems: "center", minWidth: 120 }}>
-                <Text style={{ 
-                  fontSize: 12, 
-                  color: '#64748b', 
-                  fontWeight: '600', 
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.5,
-                  marginBottom: 8
-                }}>
-                  Revenue Today
-                </Text>
-                <Text style={{ 
-                  fontSize: getCurrencyFontSize(stats?.todayRevenue || 0, 24), 
-                  fontWeight: '800', 
-                  color: theme.colors.success 
-                }}>
-                  {formatCurrency(stats?.todayRevenue || 0)}
-                </Text>
-              </View>
-              <View style={{ flex: 1, alignItems: "flex-end", minWidth: 100 }}>
-                <Text style={{ 
-                  fontSize: 12, 
-                  color: '#64748b', 
-                  fontWeight: '600', 
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.5,
-                  marginBottom: 8
-                }}>
-                  Profit Today
-                </Text>
-                <Text style={{ 
-                  fontSize: getCurrencyFontSize(stats?.todayProfit || 0, 24), 
-                  fontWeight: '800', 
-                  color: stats && stats.todayProfit >= 0 ? theme.colors.success : theme.colors.error
-                }}>
-                  {formatCurrency(stats?.todayProfit || 0)}
-                </Text>
-              </View>
             </View>
           </View>
-        )}
+        </LinearGradient>
 
-        {auth.user?.role === "admin" && (
-          <View style={styles.adminCard}>
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: 'wrap', gap: 16 }}>
-              <View style={{ flex: 1, paddingRight: 12, minWidth: 200 }}>
-                <Text style={{ 
-                  fontSize: 20, 
-                  fontWeight: '800', 
-                  color: '#1e293b',
-                  marginBottom: 8
-                }}>
-                  Admin Settings
-                </Text>
-                <Text style={{ 
-                  fontSize: 14, 
-                  color: '#64748b', 
-                  fontWeight: '500',
-                  lineHeight: 20
-                }}>
-                  Manage menu items, database, and system configuration
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => router.push("/admin-settings")}
-                style={{
-                  backgroundColor: theme.colors.primary,
-                  padding: 18,
-                  borderRadius: 16,
-                  shadowColor: theme.colors.primary,
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.2,
-                  shadowRadius: 8,
-                  elevation: 6,
-                }}
-              >
-                <BarChart3 size={26} color="white" />
-              </TouchableOpacity>
+        <View style={styles.contentContainer}>
+          <Text style={styles.sectionTitle}>Key Metrics</Text>
+          
+          <View style={styles.metricsGrid}>
+            <View style={styles.metricsRow}>
+              <MetricCard
+                title="Revenue"
+                value={stats?.totalRevenue || 0}
+                icon={<DollarSign size={20} color={theme.colors.success} />}
+                iconBg={theme.colors.successLight}
+                valueColor={theme.colors.success}
+                featured={true}
+                subtitle="Net earnings"
+              />
+              <MetricCard
+                title="Profit"
+                value={stats?.profit || 0}
+                icon={<TrendingUp size={20} color={stats && stats.profit >= 0 ? theme.colors.success : theme.colors.error} />}
+                iconBg={stats && stats.profit >= 0 ? theme.colors.successLight : "#fef2f2"}
+                valueColor={stats && stats.profit >= 0 ? theme.colors.success : theme.colors.error}
+                featured={true}
+                subtitle="Net earnings"
+              />
+            </View>
+            
+            <View style={styles.metricsRow}>
+              <MetricCard
+                title="Orders"
+                value={stats?.totalOrders || 0}
+                icon={<ShoppingCart size={20} color={theme.colors.primary} />}
+                iconBg={theme.colors.primaryLight}
+                subtitle="Total orders"
+              />
+              <MetricCard
+                title="Expenses"
+                value={stats?.totalExpenses || 0}
+                icon={<TrendingDown size={20} color={theme.colors.error} />}
+                iconBg="#fef2f2"
+                valueColor={theme.colors.error}
+                subtitle="Total costs"
+              />
+            </View>
+
+            <View style={styles.metricsRow}>
+              <MetricCard
+                title="Dues"
+                value={stats?.pendingDues || 0}
+                icon={<AlertCircle size={20} color={theme.colors.warning} />}
+                iconBg={theme.colors.warningLight}
+                valueColor={theme.colors.warning}
+                subtitle="Pending"
+              />
+              <MetricCard
+                title="Avg Order"
+                value={stats?.totalOrders && stats?.totalOrders > 0 ? Math.round(stats.totalRevenue / stats.totalOrders) : 0}
+                icon={<BarChart3 size={20} color={theme.colors.info} />}
+                iconBg="#eff6ff"
+                valueColor={theme.colors.info}
+                subtitle="Per order"
+              />
             </View>
           </View>
-        )}
 
-        <View style={{ height: 100, backgroundColor: 'transparent' }} />
+          {selectedFilter !== "today" && (
+            <View style={styles.performanceCard}>
+              <View style={styles.performanceHeader}>
+                <Text style={styles.performanceTitle}>Today's Performance</Text>
+                <View style={styles.performanceBadge}>
+                  <Text style={styles.performanceBadgeText}>Live</Text>
+                </View>
+              </View>
+              <View style={styles.performanceGrid}>
+                <View style={styles.performanceMetric}>
+                  <Text style={styles.performanceMetricTitle}>Orders</Text>
+                  <Text style={[styles.performanceMetricValue, { color: '#1e293b' }]}>
+                    {stats?.todayOrders || 0}
+                  </Text>
+                </View>
+                <View style={styles.performanceMetric}>
+                  <Text style={styles.performanceMetricTitle}>Revenue</Text>
+                  <Text style={[
+                    styles.performanceMetricValue, 
+                    { 
+                      color: theme.colors.success,
+                      fontSize: getCurrencyFontSize(stats?.todayRevenue || 0, 18)
+                    }
+                  ]} numberOfLines={1} adjustsFontSizeToFit>
+                    {formatCurrency(stats?.todayRevenue || 0)}
+                  </Text>
+                </View>
+                <View style={styles.performanceMetric}>
+                  <Text style={styles.performanceMetricTitle}>Profit</Text>
+                  <Text style={[
+                    styles.performanceMetricValue, 
+                    { 
+                      color: stats && stats.todayProfit >= 0 ? theme.colors.success : theme.colors.error,
+                      fontSize: getCurrencyFontSize(stats?.todayProfit || 0, 18)
+                    }
+                  ]} numberOfLines={1} adjustsFontSizeToFit>
+                    {formatCurrency(stats?.todayProfit || 0)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {auth.user?.role === "admin" && (
+            <View style={styles.adminCard}>
+              <View style={styles.adminContent}>
+                <View style={styles.adminText}>
+                  <Text style={styles.adminTitle}>Admin Center</Text>
+                  <Text style={styles.adminSubtitle}>Manage settings</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => router.push("/admin-settings")}
+                  style={styles.adminButton}
+                >
+                  <Settings size={22} color="white" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       <AddExpenseModal

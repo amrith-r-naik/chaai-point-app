@@ -201,3 +201,5 @@ The foundation is solid and ready for these enhancements! 🎉
 14. Reset KOT ID everyday, Reset other IDs every year(receipt, bill)
 15. Remove duplicate of credits in the split payment dialogue
 16. show split breakdown in the receipt details via completed customer
+17. The All customers opens up to customer details where the order & payment history of customers are available. The amount value should be fixed.
+18. If the payment is dont as credit then it should be removed from Active tab and stored in completed tab, but the tag should be still pending and not paid, so that while retreiving customer history we have credits and paid segregated properly.

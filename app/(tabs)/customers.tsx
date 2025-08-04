@@ -772,6 +772,14 @@ export default function CustomersScreen() {
                     key={`simple-${customer.id}-${index}`}
                     className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-gray-50 active:bg-gray-50"
                     activeOpacity={0.7}
+                    onPress={() => router.push({
+                      pathname: "/customer-details",
+                      params: {
+                        customerId: customer.id,
+                        customerName: customer.name,
+                        customerContact: customer.contact || "",
+                      }
+                    })}
                   >
                     {/* Customer Avatar and Info */}
                     <View className="flex-row items-center flex-1">

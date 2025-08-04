@@ -488,6 +488,145 @@ class OrderService {
       throw error;
     }
   }
+
+  async getOrdersByCustomerId(customerId: string): Promise<any[]> {
+    if (!db) throw new Error("Database not initialized");
+
+    try {
+      // Get all KOTs for the customer with bill information
+      const orders = await db.getAllAsync(`
+        SELECT 
+          ko.id,
+          ko.kotNumber,
+          ko.customerId,
+          ko.billId,
+          ko.createdAt,
+          c.name as customerName,
+          CASE 
+            WHEN ko.billId IS NOT NULL THEN 'paid'
+            ELSE 'credit'
+          END as paymentStatus,
+          COALESCE(b.total, 0) as totalAmount,
+          0 as amountPaid
+        FROM kot_orders ko
+        LEFT JOIN customers c ON ko.customerId = c.id
+        LEFT JOIN bills b ON ko.billId = b.id
+        WHERE ko.customerId = ?
+        ORDER BY ko.createdAt DESC
+      `, [customerId]);
+
+      // Get items for each order
+      const ordersWithItems = await Promise.all(
+        orders.map(async (order: any) => {
+          const items = await db.getAllAsync(`
+            SELECT 
+              ki.id,
+              ki.quantity,
+              ki.priceAtTime as price,
+              (ki.quantity * ki.priceAtTime) as total,
+              mi.name as menuItemName
+            FROM kot_items ki
+            LEFT JOIN menu_items mi ON ki.itemId = mi.id
+            WHERE ki.kotId = ?
+          `, [order.id]);
+
+          const calculatedTotal = items.reduce((sum: number, item: any) => sum + item.total, 0);
+
+          return {
+            id: order.id,
+            orderNumber: `KOT-${order.kotNumber}`,
+            customerId: order.customerId,
+            customerName: order.customerName,
+            totalAmount: order.totalAmount || calculatedTotal,
+            amountPaid: order.paymentStatus === 'paid' ? (order.totalAmount || calculatedTotal) : 0,
+            paymentStatus: order.paymentStatus,
+            createdAt: order.createdAt,
+            items: items.map((item: any) => ({
+              id: item.id,
+              menuItemName: item.menuItemName,
+              quantity: item.quantity,
+              price: item.price,
+              total: item.total
+            }))
+          };
+        })
+      );
+
+      return ordersWithItems;
+    } catch (error) {
+      console.error("Error fetching orders by customer ID:", error);
+      throw error;
+    }
+  }
+
+  async getOrderDetailsById(orderId: string): Promise<any> {
+    if (!db) throw new Error("Database not initialized");
+
+    try {
+      // Get order details
+      const order = await db.getFirstAsync(`
+        SELECT 
+          ko.id,
+          ko.kotNumber,
+          ko.customerId,
+          ko.billId,
+          ko.createdAt,
+          c.name as customerName,
+          CASE 
+            WHEN ko.billId IS NOT NULL THEN 'paid'
+            WHEN ko.billId IS NULL THEN 'credit'
+          END as paymentStatus,
+          COALESCE(b.total, 0) as totalAmount,
+          0 as amountPaid
+        FROM kot_orders ko
+        LEFT JOIN customers c ON ko.customerId = c.id
+        LEFT JOIN bills b ON ko.billId = b.id
+        WHERE ko.id = ?
+      `, [orderId]);
+
+      if (!order) {
+        throw new Error("Order not found");
+      }
+
+      // Get order items
+      const items = await db.getAllAsync(`
+        SELECT 
+          ki.id,
+          ki.quantity,
+          ki.priceAtTime as price,
+          (ki.quantity * ki.priceAtTime) as total,
+          mi.name as menuItemName
+        FROM kot_items ki
+        LEFT JOIN menu_items mi ON ki.itemId = mi.id
+        WHERE ki.kotId = ?
+        ORDER BY mi.name
+      `, [orderId]);
+
+      const calculatedTotal = items.reduce((sum: number, item: any) => sum + item.total, 0);
+
+      return {
+        id: (order as any).id,
+        orderNumber: `KOT-${(order as any).kotNumber}`,
+        customerName: (order as any).customerName,
+        totalAmount: (order as any).totalAmount || calculatedTotal,
+        amountPaid: (order as any).paymentStatus === 'paid' ? ((order as any).totalAmount || calculatedTotal) : 0,
+        paymentStatus: (order as any).paymentStatus,
+        paymentMethod: 'Cash', // Default value since bills table doesn't have this
+        notes: '', // Default value since bills table doesn't have this
+        createdAt: (order as any).createdAt,
+        items: items.map((item: any) => ({
+          id: item.id,
+          menuItemName: item.menuItemName,
+          quantity: item.quantity,
+          price: item.price,
+          total: item.total
+        }))
+      };
+    } catch (error) {
+      console.error("Error fetching order details by ID:", error);
+      throw error;
+    }
+  }
 }
 
 export const orderService = new OrderService();

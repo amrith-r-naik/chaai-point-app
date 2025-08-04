@@ -79,6 +79,8 @@ export default function RootLayout() {
       />
       <Stack.Screen name="admin-settings" options={{ headerShown: false }} />
       <Stack.Screen name="menu-management" options={{ headerShown: false }} />
+      <Stack.Screen name="customer-details" options={{ headerShown: false }} />
+      <Stack.Screen name="order-summary" options={{ headerShown: false }} />
     </Stack>
   );
 }

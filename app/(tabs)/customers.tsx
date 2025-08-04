@@ -598,9 +598,9 @@ export default function CustomersScreen() {
                 <Text className="text-gray-900 font-bold text-lg mb-1">
                   {formatCurrency(bill.amount)}
                 </Text>
-                <View className="px-2 py-1 rounded-full bg-green-100">
-                  <Text className="text-xs font-medium text-green-700">
-                    Paid
+                <View className={`px-2 py-1 rounded-full ${bill.mode === 'Credit' ? 'bg-orange-100' : 'bg-green-100'}`}>
+                  <Text className={`text-xs font-medium ${bill.mode === 'Credit' ? 'text-orange-700' : 'text-green-700'}`}>
+                    {bill.mode === 'Credit' ? 'Pending' : 'Paid'}
                   </Text>
                 </View>
               </View>

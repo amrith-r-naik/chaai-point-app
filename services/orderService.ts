@@ -300,15 +300,22 @@ class OrderService {
 
     const orders = (await db.getAllAsync(`
       SELECT 
-        ko.*,
+        ko.id,
+        ko.kotNumber,
+        ko.customerId,
+        ko.billId,
+        ko.createdAt,
         c.name as customerName,
         c.contact as customerContact,
         COALESCE(SUM(ki.quantity * ki.priceAtTime), 0) as totalAmount,
-        DATE(ko.createdAt) as orderDate
+        DATE(ko.createdAt) as orderDate,
+        r.mode as paymentMode
       FROM kot_orders ko
       LEFT JOIN customers c ON ko.customerId = c.id
       LEFT JOIN kot_items ki ON ko.id = ki.kotId
-      GROUP BY ko.id, c.name, c.contact, DATE(ko.createdAt)
+      LEFT JOIN bills b ON ko.billId = b.id
+      LEFT JOIN receipts r ON b.customerId = r.customerId AND DATE(b.createdAt) = DATE(r.createdAt)
+      GROUP BY ko.id, c.name, c.contact, DATE(ko.createdAt), r.mode
       ORDER BY ko.createdAt DESC
     `)) as any[];
 
@@ -374,6 +381,7 @@ class OrderService {
           orderCount: 0,
           hasCompletedBilling: false,
           hasActiveOrders: false,
+          isPaidCustomer: false, // New field to track if customer has paid (non-credit)
           // Track separate amounts and counts for active vs completed
           activeAmount: 0,
           completedAmount: 0,
@@ -391,6 +399,11 @@ class OrderService {
         customerData.hasCompletedBilling = true;
         customerData.completedAmount += order.totalAmount || 0;
         customerData.completedOrderCount += 1;
+        
+        // Check if this is a paid customer (non-credit payment)
+        if (order.paymentMode && order.paymentMode !== 'Credit') {
+          customerData.isPaidCustomer = true;
+        }
       } else {
         customerData.hasActiveOrders = true;
         customerData.activeAmount += order.totalAmount || 0;

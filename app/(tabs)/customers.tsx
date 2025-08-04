@@ -32,6 +32,7 @@ interface CustomerData {
   orderCount: number;
   hasCompletedBilling: boolean;
   hasActiveOrders: boolean;
+  isPaidCustomer: boolean; // New field to track if customer has paid (non-credit)
   activeAmount: number;
   completedAmount: number;
   activeOrderCount: number;
@@ -495,7 +496,7 @@ export default function CustomersScreen() {
                   className={`px-2 py-1 rounded-full ${activeTab === "active"
                     ? "bg-orange-100"  // Always orange for active tab
                     : customerData.hasCompletedBilling
-                      ? "bg-green-100"
+                      ? (customerData.isPaidCustomer ? "bg-green-100" : "bg-orange-100")
                       : "bg-orange-100"
                     }`}
                 >
@@ -503,11 +504,16 @@ export default function CustomersScreen() {
                     className={`text-xs font-medium ${activeTab === "active"
                       ? "text-orange-700"  // Always orange text for active tab
                       : customerData.hasCompletedBilling
-                        ? "text-green-700"
+                        ? (customerData.isPaidCustomer ? "text-green-700" : "text-orange-700")
                         : "text-orange-700"
                       }`}
                   >
-                    {activeTab === "active" ? "Pending" : customerData.hasCompletedBilling ? "Paid" : "Pending"}
+                    {activeTab === "active"
+                      ? "Pending"
+                      : customerData.hasCompletedBilling
+                        ? (customerData.isPaidCustomer ? "Paid" : "Pending")
+                        : "Pending"
+                    }
                   </Text>
                 </View>
               </View>

@@ -1,24 +1,33 @@
 import AddExpenseModal from "@/app/(modals)/add-expense";
-import { Button, Card, Loading, Typography } from "@/components/ui";
+import { Loading, Typography } from "@/components/ui";
 import { theme } from "@/constants/theme";
 import { dashboardService, DateFilterOptions, ExpenseData } from "@/services/dashboardService";
+import { dueService } from "@/services/dueService";
+import { useRouter } from "expo-router";
 import {
-    Calendar,
-    DollarSign,
-    Plus,
-    Receipt,
-    TrendingDown
+  Activity,
+  Calendar,
+  Clock,
+  DollarSign,
+  Plus,
+  Receipt,
+  TrendingDown,
+  TrendingUp
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-    Alert,
-    RefreshControl,
-    SafeAreaView,
-    ScrollView,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+const { width } = Dimensions.get('window');
 
 // Format currency properly without truncation
 const formatCurrency = (amount: number): string => {
@@ -33,6 +42,25 @@ const formatCurrency = (amount: number): string => {
   return amount < 0 ? `-${formatted}` : formatted;
 };
 
+const styles = StyleSheet.create({actionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)"
+  },
+  primaryActionButton: {
+    backgroundColor: "rgba(255,255,255,0.95)",
+    flexDirection: "row",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    width: "auto",
+    gap: 6,
+  }});
+  
 // Get appropriate font size based on amount length
 const getCurrencyFontSize = (amount: number, baseFontSize: number = 18): number => {
   const formatted = formatCurrency(amount);
@@ -53,76 +81,246 @@ const FilterButton: React.FC<{
     onPress={onPress}
     style={{
       paddingHorizontal: 20,
-      paddingVertical: 10,
-      borderRadius: theme.borderRadius.full,
-      backgroundColor: active ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.15)",
+      paddingVertical: 12,
+      borderRadius: 25,
+      backgroundColor: active ? "white" : "rgba(255,255,255,0.1)",
       borderWidth: 1,
-      borderColor: active ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.25)",
+      borderColor: active ? "white" : "rgba(255,255,255,0.2)",
       marginRight: 12,
       shadowColor: active ? "#000" : "transparent",
-      shadowOffset: active ? { width: 0, height: 2 } : { width: 0, height: 0 },
-      shadowOpacity: active ? 0.1 : 0,
-      shadowRadius: active ? 4 : 0,
-      elevation: active ? 2 : 0,
+      shadowOffset: active ? { width: 0, height: 4 } : { width: 0, height: 0 },
+      shadowOpacity: active ? 0.15 : 0,
+      shadowRadius: active ? 8 : 0,
+      elevation: active ? 4 : 0,
+      minWidth: 80,
+      alignItems: 'center',
     }}
   >
     <Typography
       variant="caption"
-      weight="semibold"
-      style={{ color: active ? theme.colors.primary : "white" }}
+      weight="bold"
+      style={{ 
+        color: active ? theme.colors.primary : "white",
+        fontSize: 13
+      }}
     >
       {children}
     </Typography>
   </TouchableOpacity>
 );
 
-const ExpenseItem: React.FC<{ expense: ExpenseData }> = ({ expense }) => (
-  <Card style={{ marginBottom: 16 }}>
-    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-      <View style={{ flex: 1 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 6 }}>
-          <View style={{
-            width: 32,
-            height: 32,
-            backgroundColor: theme.colors.errorLight,
-            borderRadius: 16,
-            justifyContent: "center",
-            alignItems: "center",
-            marginRight: 12,
-          }}>
-            <Receipt size={16} color={theme.colors.error} />
-          </View>
-          <Typography variant="caption" color="textSecondary">
-            Voucher #{expense.voucherNo}
+const StatCard: React.FC<{
+  icon: React.ReactNode;
+  title: string;
+  value: string;
+  trend?: 'up' | 'down' | 'neutral';
+  color: string;
+  backgroundColor: string;
+  onPress?: () => void;
+}> = ({ icon, title, value, trend, color, backgroundColor, onPress }) => (
+  <TouchableOpacity
+    onPress={onPress}
+    disabled={!onPress}
+    style={{
+      backgroundColor: 'white',
+      padding: 20,
+      borderRadius: 20,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+      elevation: 6,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: '#F8FAFC',
+    }}
+    activeOpacity={onPress ? 0.7 : 1}
+  >
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+        <View style={{
+          width: 56,
+          height: 56,
+          backgroundColor: backgroundColor,
+          borderRadius: 16,
+          justifyContent: 'center',
+          alignItems: 'center',
+          marginRight: 16,
+        }}>
+          {icon}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Typography 
+            variant="caption" 
+            color="textSecondary" 
+            weight="medium"
+            style={{ marginBottom: 4, fontSize: 12 }}
+          >
+            {title}
+          </Typography>
+          <Typography 
+            variant="h3" 
+            weight="bold" 
+            style={{ 
+              color: color,
+              fontSize: getCurrencyFontSize(parseFloat(value.replace(/[^\d.-]/g, '')), 22),
+              lineHeight: 28
+            }}
+          >
+            {value}
           </Typography>
         </View>
-        <Typography variant="body" weight="semibold" style={{ marginBottom: 6, marginLeft: 44 }}>
+      </View>
+      {trend && (
+        <View style={{
+          backgroundColor: trend === 'up' ? '#FEF3C7' : trend === 'down' ? '#FEE2E2' : '#F3F4F6',
+          padding: 8,
+          borderRadius: 12,
+        }}>
+          {trend === 'up' && <TrendingUp size={16} color="#D97706" />}
+          {trend === 'down' && <TrendingDown size={16} color="#DC2626" />}
+          {trend === 'neutral' && <Activity size={16} color="#6B7280" />}
+        </View>
+      )}
+      {onPress && (
+        <View style={{
+          backgroundColor: color,
+          paddingHorizontal: 12,
+          paddingVertical: 6,
+          borderRadius: 12,
+          marginLeft: 12,
+        }}>
+          <Typography style={{ color: 'white', fontWeight: '600', fontSize: 12 }}>
+            Manage
+          </Typography>
+        </View>
+      )}
+    </View>
+  </TouchableOpacity>
+);
+
+const ExpenseItem: React.FC<{ expense: ExpenseData; index: number }> = ({ expense, index }) => (
+  <View
+    style={{
+      backgroundColor: 'white',
+      padding: 20,
+      borderRadius: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      elevation: 3,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: '#F8FAFC',
+    }}
+  >
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <View style={{ flex: 1, marginRight: 16 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+          <View style={{
+            width: 40,
+            height: 40,
+            backgroundColor: '#FEF2F2',
+            borderRadius: 12,
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginRight: 12,
+          }}>
+            <Receipt size={18} color="#EF4444" />
+          </View>
+          <View style={{
+            backgroundColor: '#EEF2FF',
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 8,
+          }}>
+            <Typography variant="caption" style={{ color: '#4F46E5', fontWeight: '600', fontSize: 10 }}>
+              #{expense.voucherNo}
+            </Typography>
+          </View>
+        </View>
+        
+        <Typography 
+          variant="body" 
+          weight="bold" 
+          style={{ 
+            marginBottom: 6, 
+            fontSize: 16,
+            color: '#1E293B',
+            lineHeight: 22
+          }}
+        >
           {expense.towards}
         </Typography>
-        <Typography variant="caption" color="textSecondary" style={{ marginLeft: 44 }}>
-          {expense.mode} • {new Date(expense.createdAt).toLocaleDateString('en-IN')}
-        </Typography>
-        {expense.remarks && (
-          <Typography variant="caption" color="textSecondary" style={{ marginTop: 6, marginLeft: 44 }}>
-            {expense.remarks}
+        
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+          <View style={{
+            backgroundColor: '#F8FAFC',
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+            borderRadius: 6,
+            marginRight: 8,
+          }}>
+            <Typography variant="caption" style={{ color: '#64748B', fontSize: 11, fontWeight: '500' }}>
+              {expense.mode}
+            </Typography>
+          </View>
+          <Typography variant="caption" color="textSecondary" style={{ fontSize: 11 }}>
+            {new Date(expense.createdAt).toLocaleDateString('en-IN', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric'
+            })}
           </Typography>
+        </View>
+        
+        {expense.remarks && (
+          <View style={{
+            backgroundColor: '#FFFBEB',
+            padding: 8,
+            borderRadius: 8,
+            marginTop: 8,
+            borderLeftWidth: 3,
+            borderLeftColor: '#F59E0B',
+          }}>
+            <Typography variant="caption" style={{ color: '#92400E', fontSize: 11, lineHeight: 16 }}>
+              💬 {expense.remarks}
+            </Typography>
+          </View>
         )}
       </View>
-      <View style={{ alignItems: "flex-end" }}>
+      
+      <View style={{ alignItems: 'flex-end' }}>
         <Typography 
           variant="h4" 
           weight="bold" 
-          color="error"
-          style={{ fontSize: getCurrencyFontSize(expense.amount, 18) }}
+          style={{
+            color: '#EF4444',
+            fontSize: getCurrencyFontSize(expense.amount, 20),
+            lineHeight: 24
+          }}
         >
           -{formatCurrency(expense.amount)}
         </Typography>
+        <View style={{
+          backgroundColor: '#FEE2E2',
+          paddingHorizontal: 6,
+          paddingVertical: 2,
+          borderRadius: 6,
+          marginTop: 4,
+        }}>
+          <Typography style={{ color: '#DC2626', fontSize: 9, fontWeight: '600' }}>
+            EXPENSE
+          </Typography>
+        </View>
       </View>
     </View>
-  </Card>
+  </View>
 );
 
 export default function BillingScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [expenses, setExpenses] = useState<ExpenseData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,6 +328,7 @@ export default function BillingScreen() {
   const [selectedFilter, setSelectedFilter] = useState<"today" | "week" | "month" | "all">("today");
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [totalExpenses, setTotalExpenses] = useState(0);
+  const [pendingDues, setPendingDues] = useState(0);
 
   const getDateFilter = (): DateFilterOptions | undefined => {
     const today = new Date();
@@ -161,8 +360,12 @@ export default function BillingScreen() {
   const loadExpenses = async () => {
     try {
       const dateFilter = getDateFilter();
-      const expensesData = await dashboardService.getExpenses(dateFilter);
+      const [expensesData, duesAmount] = await Promise.all([
+        dashboardService.getExpenses(dateFilter),
+        dueService.getTotalPendingDues()
+      ]);
       setExpenses(expensesData);
+      setPendingDues(duesAmount);
       
       const total = expensesData.reduce((sum, expense) => sum + expense.amount, 0);
       setTotalExpenses(total);
@@ -190,63 +393,91 @@ export default function BillingScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.surface }}>
-        <Loading message="Loading expenses..." />
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Loading message="Loading expenses..." />
+        </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.surface }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
       <ScrollView 
         style={{ flex: 1 }}
+        showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={handleRefresh}
+            colors={[theme.colors.primary]}
+            tintColor={theme.colors.primary}
+          />
         }
       >
+        {/* Enhanced Header */}
         <View style={{ 
           backgroundColor: theme.colors.primary,
-          paddingTop: insets.top + 32,
-          paddingBottom: 32,
-          paddingHorizontal: 20,
-          borderBottomLeftRadius: theme.borderRadius.xl,
-          borderBottomRightRadius: theme.borderRadius.xl,
+          paddingTop: insets.top + 20,
+          paddingBottom: 40,
+          paddingHorizontal: 24,
+          borderBottomLeftRadius: 32,
+          borderBottomRightRadius: 32,
+          shadowColor: theme.colors.primary,
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.3,
+          shadowRadius: 16,
+          elevation: 8,
         }}>
+          {/* Header Title and Action */}
           <View style={{ 
-            flexDirection: "row", 
-            justifyContent: "space-between", 
-            alignItems: "flex-start",
-            marginBottom: 20 
+            flexDirection: 'row', 
+            justifyContent: 'space-between', 
+            alignItems: 'flex-start',
+            marginBottom: 28
           }}>
             <View style={{ flex: 1 }}>
-              <Typography variant="h2" style={{ color: "white", marginBottom: 4 }}>
+              <Typography 
+                variant="h1" 
+                weight="bold"
+                style={{ 
+                  color: 'white', 
+                  marginBottom: 6,
+                  fontSize: 32,
+                  lineHeight: 38
+                }}
+              >
                 Expenses
               </Typography>
-              <Typography style={{ color: "rgba(255,255,255,0.8)" }}>
+              <Typography 
+                style={{ 
+                  color: 'rgba(255,255,255,0.85)',
+                  fontSize: 16,
+                  lineHeight: 22
+                }}
+              >
                 Track and manage your business expenses
               </Typography>
             </View>
-            <Button
-              title="Add Expense"
-              onPress={() => setShowAddExpense(true)}
-              variant="secondary"
-              size="sm"
-              style={{
-                backgroundColor: "rgba(255,255,255,0.15)",
-                borderColor: "rgba(255,255,255,0.25)",
-                paddingHorizontal: 16,
-                paddingVertical: 10,
-              }}
-              textStyle={{ color: "white", fontWeight: "600" }}
-              icon={<Plus size={18} color="white" />}
-            />
+            
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.primaryActionButton]}
+                  onPress={() => setShowAddExpense(true)}
+                >
+                  <Plus size={18} color={theme.colors.primary} />
+                  <Typography style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 13 }}>Add</Typography>
+                </TouchableOpacity>
           </View>
 
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Calendar size={16} color="rgba(255,255,255,0.8)" style={{ marginRight: 8 }} />
-            <Typography style={{ color: "rgba(255,255,255,0.8)", marginRight: 16 }}>
-              Filter:
-            </Typography>
+          {/* Enhanced Filter Section */}
+          <View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+              <Calendar size={18} color="rgba(255,255,255,0.9)" style={{ marginRight: 10 }} />
+              <Typography style={{ color: 'rgba(255,255,255,0.9)', fontSize: 16, fontWeight: '600' }}>
+                Filter by period:
+              </Typography>
+            </View>
+            
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <FilterButton
                 active={selectedFilter === "today"}
@@ -276,92 +507,158 @@ export default function BillingScreen() {
           </View>
         </View>
 
-        <View style={{ paddingHorizontal: 16, marginTop: -16 }}>
-          <Card style={{ marginBottom: 20 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={{
-                  width: 48,
-                  height: 48,
-                  backgroundColor: "#fef2f2",
-                  borderRadius: 24,
-                  justifyContent: "center",
-                  alignItems: "center",
-                  marginRight: 16,
-                }}>
-                  <TrendingDown size={24} color={theme.colors.error} />
-                </View>
-                <View>
-                  <Typography variant="caption" color="textSecondary">
-                    Total Expenses {selectedFilter !== "all" ? `(${selectedFilter})` : ""}
-                  </Typography>
-                  <Typography 
-                    variant="h3" 
-                    weight="bold" 
-                    color="error"
-                    style={{ fontSize: getCurrencyFontSize(totalExpenses, 20) }}
-                  >
-                    {formatCurrency(totalExpenses)}
-                  </Typography>
-                </View>
-              </View>
-            </View>
-          </Card>
+        {/* Stats Cards Section */}
+        <View style={{ paddingHorizontal: 24, marginTop: -20 }}>
+          {/* Total Expenses Card */}
+          <StatCard
+            icon={<TrendingDown size={28} color="#EF4444" />}
+            title={`Total Expenses ${selectedFilter !== "all" ? `(${selectedFilter})` : ""}`}
+            value={formatCurrency(totalExpenses)}
+            trend="down"
+            color="#EF4444"
+            backgroundColor="#FEF2F2"
+          />
 
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <Typography variant="h4">Recent Expenses</Typography>
+          {/* Pending Dues Card */}
+          <StatCard
+            icon={<Clock size={28} color="#D97706" />}
+            title="Pending Dues"
+            value={formatCurrency(pendingDues)}
+            trend={pendingDues > 0 ? "neutral" : "up"}
+            color={pendingDues > 0 ? "#D97706" : "#10B981"}
+            backgroundColor={pendingDues > 0 ? "#FEF3C7" : "#D1FAE5"}
+            onPress={() => router.push("/(modals)/due-management")}
+          />
+
+          {/* Section Header */}
+          <View style={{ 
+            flexDirection: 'row', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            marginBottom: 20,
+            marginTop: 12
+          }}>
+            <Typography 
+              variant="h3" 
+              weight="bold"
+              style={{ color: '#1E293B', fontSize: 22 }}
+            >
+              Recent Expenses
+            </Typography>
             <View style={{
-              backgroundColor: theme.colors.surface,
+              backgroundColor: 'white',
               paddingHorizontal: 12,
               paddingVertical: 6,
-              borderRadius: theme.borderRadius.full,
+              borderRadius: 20,
               borderWidth: 1,
-              borderColor: theme.colors.border,
+              borderColor: '#E2E8F0',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.05,
+              shadowRadius: 4,
+              elevation: 2,
             }}>
-              <Typography variant="caption" color="textSecondary" weight="semibold">
+              <Typography 
+                variant="caption" 
+                style={{ 
+                  color: theme.colors.primary, 
+                  fontWeight: '700',
+                  fontSize: 11
+                }}
+              >
                 {expenses.length} expense{expenses.length !== 1 ? 's' : ''}
               </Typography>
             </View>
           </View>
 
+          {/* Expenses List or Empty State */}
           {expenses.length === 0 ? (
-            <Card style={{ alignItems: "center", padding: 40 }}>
+            <View style={{
+              backgroundColor: 'white',
+              alignItems: 'center',
+              padding: 40,
+              borderRadius: 24,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.08,
+              shadowRadius: 12,
+              elevation: 6,
+              borderWidth: 1,
+              borderColor: '#F8FAFC',
+            }}>
               <View style={{
-                width: 80,
-                height: 80,
-                backgroundColor: theme.colors.surface,
-                borderRadius: 40,
-                justifyContent: "center",
-                alignItems: "center",
+                width: 100,
+                height: 100,
+                backgroundColor: '#F8FAFC',
+                borderRadius: 50,
+                justifyContent: 'center',
+                alignItems: 'center',
                 marginBottom: 24,
-                borderWidth: 2,
-                borderColor: theme.colors.border,
+                borderWidth: 3,
+                borderColor: '#E2E8F0',
               }}>
-                <DollarSign size={36} color={theme.colors.textSecondary} />
+                <DollarSign size={48} color="#94A3B8" />
               </View>
-              <Typography variant="h4" style={{ marginBottom: 12 }}>
+              
+              <Typography 
+                variant="h3" 
+                weight="bold"
+                style={{ 
+                  marginBottom: 12, 
+                  color: '#1E293B',
+                  fontSize: 22
+                }}
+              >
                 No Expenses Found
               </Typography>
-              <Typography variant="body" color="textSecondary" style={{ textAlign: "center", marginBottom: 24, lineHeight: 20 }}>
+              
+              <Typography 
+                variant="body" 
+                color="textSecondary" 
+                style={{ 
+                  textAlign: 'center', 
+                  marginBottom: 32, 
+                  lineHeight: 24,
+                  paddingHorizontal: 20
+                }}
+              >
                 {selectedFilter === "all" 
                   ? "You haven't added any expenses yet. Start tracking your business expenses to get better insights."
                   : `No expenses found for ${selectedFilter}. Try selecting a different time period or add a new expense.`}
               </Typography>
-              <Button
-                title="Add First Expense"
+              
+              <TouchableOpacity
                 onPress={() => setShowAddExpense(true)}
-                size="sm"
-              />
-            </Card>
+                style={{
+                  backgroundColor: theme.colors.primary,
+                  paddingHorizontal: 32,
+                  paddingVertical: 16,
+                  borderRadius: 16,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  shadowColor: theme.colors.primary,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                  elevation: 6,
+                }}
+              >
+                <Plus size={20} color="white" style={{ marginRight: 8 }} />
+                <Typography style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>
+                  Add First Expense
+                </Typography>
+              </TouchableOpacity>
+            </View>
           ) : (
-            <View>
-              {expenses.map((expense) => (
-                <ExpenseItem key={expense.id} expense={expense} />
+            <View style={{ marginBottom: 20 }}>
+              {expenses.map((expense, index) => (
+                <ExpenseItem key={expense.id} expense={expense} index={index} />
               ))}
             </View>
           )}
         </View>
 
+        {/* Bottom spacing */}
         <View style={{ height: 120 }} />
       </ScrollView>
 

@@ -291,6 +291,7 @@ class OrderService {
             completedAmount: number;
             activeOrderCount: number;
             completedOrderCount: number;
+            paymentMode?: string;
           }
         >;
       }
@@ -300,7 +301,7 @@ class OrderService {
 
     const orders = (await db.getAllAsync(`
       SELECT 
-        ko.id,
+        ko.id as kotId,
         ko.kotNumber,
         ko.customerId,
         ko.billId,
@@ -309,13 +310,14 @@ class OrderService {
         c.contact as customerContact,
         COALESCE(SUM(ki.quantity * ki.priceAtTime), 0) as totalAmount,
         DATE(ko.createdAt) as orderDate,
-        p.mode as paymentMode
+        COALESCE(r.mode, p.mode) as paymentMode
       FROM kot_orders ko
       LEFT JOIN customers c ON ko.customerId = c.id
       LEFT JOIN kot_items ki ON ko.id = ki.kotId
       LEFT JOIN bills b ON ko.billId = b.id
+      LEFT JOIN receipts r ON b.customerId = r.customerId AND DATE(b.createdAt) = DATE(r.createdAt)
       LEFT JOIN payments p ON b.id = p.billId
-      GROUP BY ko.id, c.name, c.contact, DATE(ko.createdAt), p.mode
+      GROUP BY ko.id, ko.kotNumber, ko.customerId, ko.billId, ko.createdAt, c.name, c.contact, DATE(ko.createdAt), r.mode, p.mode
       ORDER BY ko.createdAt DESC
     `)) as any[];
 
@@ -333,6 +335,7 @@ class OrderService {
             orderCount: number;
             hasCompletedBilling: boolean;
             hasActiveOrders: boolean;
+            paymentMode?: string;
           }
         >;
       }
@@ -387,12 +390,18 @@ class OrderService {
           completedAmount: 0,
           activeOrderCount: 0,
           completedOrderCount: 0,
+          paymentMode: order.paymentMode,
         } as any;
       }
 
       const customerData = dateGroups[orderDate].customers[customerId] as any;
       customerData.totalAmount += order.totalAmount || 0;
       customerData.orderCount += 1;
+
+      // Update payment mode if we have one
+      if (order.paymentMode) {
+        customerData.paymentMode = order.paymentMode;
+      }
 
       // Check billing status and track amounts and counts separately
       if (order.billId) {
@@ -533,6 +542,8 @@ class OrderService {
       // Get items for each order
       const ordersWithItems = await Promise.all(
         orders.map(async (order: any) => {
+          if (!db) throw new Error("Database not initialized");
+          
           const items = await db.getAllAsync(`
             SELECT 
               ki.id,

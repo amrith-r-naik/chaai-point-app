@@ -49,7 +49,7 @@ export default function CreateOrderScreen() {
       orderState.orders.set(orders);
 
       // Show success message
-      Alert.alert("Order Created", "Your order has been placed successfully!", [
+      Alert.alert("Order Created", "KOT created successfully! Amount added to customer dues.", [
         {
           text: "OK",
           onPress: () => {

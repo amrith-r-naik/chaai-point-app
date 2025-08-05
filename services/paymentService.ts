@@ -87,6 +87,11 @@ class PaymentService {
   async processPayment(paymentData: PaymentProcessData): Promise<{ receipt: Receipt; bill: Bill }> {
     if (!db) throw new Error("Database not initialized");
 
+    // Handle Credit payment separately - just add to dues without creating bill
+    if (paymentData.paymentType === "Credit") {
+      return this.processCreditPayment(paymentData);
+    }
+
     try {
       // Start transaction
       await db.execAsync('BEGIN TRANSACTION');
@@ -203,6 +208,41 @@ class PaymentService {
         AND billId IS NULL 
         AND DATE(createdAt) = DATE(?)
     `, [billId, customerId, dateToUse]);
+  }
+
+  private async processCreditPayment(paymentData: PaymentProcessData): Promise<{ receipt: Receipt; bill: Bill }> {
+    if (!db) throw new Error("Database not initialized");
+
+    // For credit payments, we create a receipt but no bill (KOTs remain unbilled = dues)
+    const receiptNo = await this.getNextReceiptNumber();
+    
+    const receipt: Receipt = {
+      id: uuid.v4() as string,
+      receiptNo,
+      customerId: paymentData.customerId,
+      amount: paymentData.totalAmount, // Store in rupees (direct KOT total)
+      mode: "Credit",
+      remarks: (paymentData.remarks || "") + " (Credit - Amount added to dues)",
+      createdAt: new Date().toISOString(),
+    };
+
+    await db.runAsync(`
+      INSERT INTO receipts (id, receiptNo, customerId, amount, mode, remarks, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [receipt.id, receipt.receiptNo, receipt.customerId, receipt.amount, receipt.mode, receipt.remarks, receipt.createdAt]);
+
+    // Create a dummy bill for receipt display purposes
+    const dummyBill: Bill = {
+      id: "credit-bill-" + receipt.id,
+      billNumber: "CREDIT",
+      customerId: paymentData.customerId,
+      total: paymentData.totalAmount, // Store in rupees (direct KOT total)
+      createdAt: new Date().toISOString(),
+    };
+
+    // KOTs remain unbilled (billId stays NULL) so they count as dues
+    
+    return { receipt, bill: dummyBill };
   }
 
   private async updateCustomerCredit(customerId: string, amount: number): Promise<void> {

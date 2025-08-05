@@ -188,7 +188,9 @@ const styles = StyleSheet.create({
     elevation: 4,
     borderWidth: 1,
     borderColor: '#f1f5f9',
-    minHeight: 110,
+    minHeight: 120,
+    maxHeight: 120,
+    justifyContent: 'space-between',
   },
   metricCardFeatured: {
     borderWidth: 1.5,
@@ -204,13 +206,13 @@ const styles = StyleSheet.create({
     height: 32,
   },
   metricTitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: '#64748b',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
     flex: 1,
-    lineHeight: 14,
+    lineHeight: 16,
     marginTop: 2,
   },
   metricIcon: {
@@ -376,6 +378,7 @@ interface MetricCardProps {
   valueColor?: string;
   featured?: boolean;
   subtitle?: string;
+  onPress?: () => void;
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -385,7 +388,8 @@ const MetricCard: React.FC<MetricCardProps> = ({
   iconBg,
   valueColor = '#1e293b',
   featured = false,
-  subtitle
+  subtitle,
+  onPress
 }) => {
   const formatValue = () => {
     if (typeof value === "number" && (
@@ -413,10 +417,14 @@ const MetricCard: React.FC<MetricCardProps> = ({
     return 22;
   };
 
-  return (
-    <View style={[styles.metricCard, featured && styles.metricCardFeatured]}>
+  const CardContent = () => (
+    <View style={[
+      styles.metricCard, 
+      featured && styles.metricCardFeatured,
+      onPress && { flex: 1 }
+    ]}>
       <View style={styles.metricHeader}>
-        <Text style={styles.metricTitle} numberOfLines={1}>{title}</Text>
+        <Text style={styles.metricTitle} numberOfLines={2}>{title}</Text>
         <View style={[styles.metricIcon, { backgroundColor: iconBg }]}>
           {icon}
         </View>
@@ -432,6 +440,16 @@ const MetricCard: React.FC<MetricCardProps> = ({
       )}
     </View>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={{ flex: 1 }}>
+        <CardContent />
+      </TouchableOpacity>
+    );
+  }
+
+  return <CardContent />;
 };
 
 const FilterButton: React.FC<{
@@ -507,6 +525,15 @@ export default function HomeScreen() {
 
   useEffect(() => {
     loadDashboardData();
+  }, [selectedFilter]);
+
+  // Auto-refresh dashboard every 3 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadDashboardData();
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, [selectedFilter]);
 
   const handleRefresh = () => {
@@ -680,6 +707,7 @@ export default function HomeScreen() {
                 iconBg={theme.colors.warningLight}
                 valueColor={theme.colors.warning}
                 subtitle="Pending"
+                onPress={() => router.push("/(modals)/due-management")}
               />
               <MetricCard
                 title="Avg Order"
@@ -695,7 +723,7 @@ export default function HomeScreen() {
           {selectedFilter !== "today" && (
             <View style={styles.performanceCard}>
               <View style={styles.performanceHeader}>
-                <Text style={styles.performanceTitle}>Today's Performance</Text>
+                <Text style={styles.performanceTitle}>Today&apos;s Performance</Text>
                 <View style={styles.performanceBadge}>
                   <Text style={styles.performanceBadgeText}>Live</Text>
                 </View>

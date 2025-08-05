@@ -183,22 +183,22 @@ The app should be running with test data including sample orders. Try navigating
 The foundation is solid and ready for these enhancements! 🎉
 
 ### Pending work :
-1. EOD Button implementation
-2. List only unbilled items in the billing screen
-3. Reduce one screen in the payment flow
+1. List only unbilled items in the billing screen - Im doing
+3. Reduce one screen in the payment flow - I'll do
 4. Dashboard stats
-5. Completed customers page
-6. Customer slug page
+5. Completed customers page - Im doing this
+6. Customer slug page - I'm doing this
    i. Customer credit clearance flow
    ii. 
 7. Menu Items, category emojis customization
 8. Change categories to FAB based category selection
 9. Recently ordered items 
-10. Admin item management feature 
-11. Date wise orders management
+10. Admin item management feature - Done
+11. Date wise orders management - Done
 12. Select customer UI in create new order page
 13. Cloud sync
 14. Reset KOT ID everyday, Reset other IDs every year(receipt, bill)
 15. Remove duplicate of credits in the split payment dialogue
 16. show split breakdown in the receipt details via completed customer
-17. The All customers opens up to customer details where the order & payment history of customers are available. The amount value should be fixed.
+17. The All customers opens up to customer details where the order & payment history of customers are available. The amount value should be fixed. I'll do
+18. Fix the completed customer info which happens after EOD, where the amount is fixed incorrect. Instead of 170 it returns 1.7

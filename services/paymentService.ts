@@ -72,7 +72,7 @@ class PaymentService {
       id: uuid.v4() as string,
       billNumber,
       customerId,
-      total: Math.round(totalAmount * 100), // Store in cents
+      total: totalAmount, // Store in rupees (direct KOT total)
       createdAt: new Date().toISOString(),
     };
 
@@ -102,7 +102,7 @@ class PaymentService {
         id: uuid.v4() as string,
         receiptNo,
         customerId: paymentData.customerId,
-        amount: Math.round(paymentData.totalAmount * 100),
+        amount: paymentData.totalAmount, // Store in rupees (direct KOT total)
         mode: paymentData.paymentType,
         remarks: paymentData.remarks || null,
         createdAt: new Date().toISOString(),
@@ -122,7 +122,7 @@ class PaymentService {
               id: uuid.v4() as string,
               billId: bill.id,
               customerId: paymentData.customerId,
-              amount: Math.round(split.amount * 100),
+              amount: split.amount, // Store in rupees (direct amount)
               mode: split.type,
               remarks: paymentData.remarks || null,
               createdAt: new Date().toISOString(),
@@ -148,7 +148,7 @@ class PaymentService {
             id: uuid.v4() as string,
             billId: bill.id,
             customerId: paymentData.customerId,
-            amount: Math.round(paymentData.totalAmount * 100),
+            amount: paymentData.totalAmount, // Store in rupees (direct amount)
             mode: paymentData.paymentType,
             remarks: paymentData.remarks || null,
             createdAt: new Date().toISOString(),
@@ -163,7 +163,7 @@ class PaymentService {
             id: uuid.v4() as string,
             billId: bill.id,
             customerId: paymentData.customerId,
-            amount: Math.round(paymentData.totalAmount * 100),
+            amount: paymentData.totalAmount, // Store in rupees (direct amount)
             mode: paymentData.paymentType,
             remarks: paymentData.remarks || null,
             createdAt: new Date().toISOString(),
@@ -222,7 +222,7 @@ class PaymentService {
       UPDATE customers 
       SET creditBalance = COALESCE(creditBalance, 0) + ?
       WHERE id = ?
-    `, [Math.round(amount * 100), customerId]);
+    `, [amount, customerId]); // Store direct amount (already in rupees)
   }
 
   async getCustomerCreditBalance(customerId: string): Promise<number> {
@@ -232,7 +232,7 @@ class PaymentService {
       SELECT COALESCE(creditBalance, 0) as creditBalance FROM customers WHERE id = ?
     `, [customerId]) as { creditBalance: number };
 
-    return (result?.creditBalance || 0) / 100; // Convert from cents
+    return (result?.creditBalance || 0); // Use direct credit balance (already in rupees)
   }
 
   async getReceipt(receiptId: string): Promise<Receipt | null> {
@@ -243,7 +243,7 @@ class PaymentService {
     `, [receiptId]) as Receipt | null;
 
     if (receipt) {
-      receipt.amount = receipt.amount / 100; // Convert from cents
+      receipt.amount = receipt.amount; // Use direct amount (already in rupees)
     }
 
     return receipt;
@@ -260,7 +260,7 @@ class PaymentService {
 
     return payments.map(payment => ({
       ...payment,
-      amount: payment.amount / 100 // Convert from cents
+      amount: payment.amount // Use direct amount (already in rupees)
     }));
   }
 
@@ -346,7 +346,7 @@ class PaymentService {
         customerId: bill.customerId,
         customerName: bill.customerName,
         customerContact: bill.customerContact,
-        amount: bill.amount / 100, // Convert from cents
+        amount: bill.amount, // Use direct amount from receipts (already in rupees)
         mode: bill.mode,
         remarks: bill.remarks,
         createdAt: bill.createdAt,

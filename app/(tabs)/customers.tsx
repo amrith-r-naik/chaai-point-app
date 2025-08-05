@@ -4,11 +4,13 @@ import { paymentService } from "@/services/paymentService";
 import { authState } from "@/state/authState";
 import { customerState } from "@/state/customerState";
 import { use$ } from "@legendapp/state/react";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   RefreshControl,
   ScrollView,
   Text,
@@ -24,6 +26,13 @@ interface Customer {
   contact: string | null;
   createdAt: string;
   updatedAt: string;
+  // Enhanced fields for payment tracking
+  totalOrders?: number;
+  totalAmount?: number;
+  paidAmount?: number;
+  creditAmount?: number;
+  paidOrders?: number;
+  creditOrders?: number;
 }
 
 interface CustomerData {
@@ -71,6 +80,7 @@ export default function CustomersScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [dateGroups, setDateGroups] = useState<Record<string, DateGroup>>({});
   const [completedBills, setCompletedBills] = useState<Record<string, CompletedBillGroup>>({});
+  const [isProcessingEOD, setIsProcessingEOD] = useState(false);
   const customerStateData = use$(customerState);
   const auth = use$(authState);
   const router = useRouter();
@@ -97,6 +107,70 @@ export default function CustomersScreen() {
     }
   }, [auth.isDbReady]);
 
+  const loadCustomersWithStats = useCallback(async () => {
+    try {
+      if (!auth.isDbReady) return;
+
+      const customers = searchQuery.trim()
+        ? await searchCustomers(searchQuery.trim())
+        : await getAllCustomers();
+
+      // Enhance each customer with payment statistics
+      const customersWithStats = await Promise.all(
+        customers.map(async (customer) => {
+          try {
+            const orders = await orderService.getOrdersByCustomerId(customer.id);
+
+            let totalOrders = orders.length;
+            let totalAmount = 0;
+            let paidAmount = 0;
+            let creditAmount = 0;
+            let paidOrders = 0;
+            let creditOrders = 0;
+
+            orders.forEach(order => {
+              totalAmount += order.totalAmount;
+
+              if (order.paymentStatus === 'paid') {
+                paidAmount += order.totalAmount;
+                paidOrders++;
+              } else if (order.paymentStatus === 'credit') {
+                creditAmount += order.totalAmount;
+                creditOrders++;
+              }
+            });
+
+            return {
+              ...customer,
+              totalOrders,
+              totalAmount,
+              paidAmount,
+              creditAmount,
+              paidOrders,
+              creditOrders,
+            };
+          } catch (error) {
+            console.error(`Error loading stats for customer ${customer.id}:`, error);
+            return {
+              ...customer,
+              totalOrders: 0,
+              totalAmount: 0,
+              paidAmount: 0,
+              creditAmount: 0,
+              paidOrders: 0,
+              creditOrders: 0,
+            };
+          }
+        })
+      );
+
+      return customersWithStats;
+    } catch (error) {
+      console.error("Error loading customers with stats:", error);
+      return [];
+    }
+  }, [searchQuery, auth.isDbReady]);
+
   const loadCustomers = useCallback(async () => {
     try {
       if (!auth.isDbReady) return;
@@ -109,34 +183,141 @@ export default function CustomersScreen() {
         setIsSearching(true);
       }
 
-      // Load customers and orders data in parallel
-      const [customers] = await Promise.all([
-        searchQuery.trim()
-          ? searchCustomers(searchQuery.trim())
-          : getAllCustomers(),
-        loadOrdersData(),
-        loadCompletedBillsData(),
-      ]);
+      // For "All" tab, load customers with payment statistics
+      if (activeTab === "all") {
+        const customersWithStats = await loadCustomersWithStats();
+        customerState.customers.set(customersWithStats);
+      } else {
+        // Load customers and orders data in parallel for other tabs
+        const [customers] = await Promise.all([
+          searchQuery.trim()
+            ? searchCustomers(searchQuery.trim())
+            : getAllCustomers(),
+          loadOrdersData(),
+          loadCompletedBillsData(),
+        ]);
 
-      customerState.customers.set(customers);
+        customerState.customers.set(customers);
+      }
     } catch (error: any) {
       customerState.error.set(error.message || "Failed to load customers");
     } finally {
       customerState.loading.set(false);
       setIsSearching(false);
     }
-  }, [searchQuery, auth.isDbReady, loadOrdersData, loadCompletedBillsData]);
+  }, [searchQuery, auth.isDbReady, activeTab, loadOrdersData, loadCompletedBillsData, loadCustomersWithStats]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.all([loadCustomers(), loadOrdersData(), loadCompletedBillsData()]);
+      if (activeTab === "all") {
+        await loadCustomers();
+      } else {
+        await Promise.all([loadCustomers(), loadOrdersData(), loadCompletedBillsData()]);
+      }
     } catch (error) {
       console.error("Error refreshing data:", error);
     } finally {
       setRefreshing(false);
     }
-  }, [loadCustomers, loadOrdersData, loadCompletedBillsData]);
+  }, [loadCustomers, loadOrdersData, loadCompletedBillsData, activeTab]);
+
+  const handleEOD = useCallback(async (dateString: string) => {
+    try {
+      setIsProcessingEOD(true);
+
+      // Show confirmation dialog
+      Alert.alert(
+        "End of Day Process",
+        `Are you sure you want to process EOD for ${dateString}? This will convert all active KOTs to credit payments.`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+            onPress: () => setIsProcessingEOD(false)
+          },
+          {
+            text: "Confirm",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                // Process EOD
+                const result = await orderService.processEndOfDay(dateString);
+
+                if (result.processedKOTs > 0) {
+                  Alert.alert(
+                    "EOD Completed",
+                    `Successfully processed ${result.processedKOTs} KOTs as credit payments.\nTotal Amount: ₹${result.totalAmount.toFixed(2)}`,
+                    [{ text: "OK" }]
+                  );
+
+                  // Refresh data to reflect changes
+                  await handleRefresh();
+                } else {
+                  Alert.alert("No Active KOTs", "No active KOTs found for EOD processing.", [{ text: "OK" }]);
+                }
+              } catch (error) {
+                console.error('Error processing EOD:', error);
+                Alert.alert("Error", "Failed to process EOD. Please try again.", [{ text: "OK" }]);
+              } finally {
+                setIsProcessingEOD(false);
+              }
+            }
+          }
+        ]
+      );
+
+    } catch (error) {
+      console.error('Error in handleEOD:', error);
+      setIsProcessingEOD(false);
+    }
+  }, [handleRefresh]);
+
+  // Check if it's time for automatic EOD (11:30 PM IST)
+  const checkAutoEOD = useCallback(async () => {
+    try {
+      const now = new Date();
+      const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000)); // Convert to IST
+      const hours = istTime.getHours();
+      const minutes = istTime.getMinutes();
+
+      // Check if it's 11:30 PM IST
+      if (hours === 23 && minutes === 30) {
+        const today = istTime.toISOString().split('T')[0];
+
+        // Check if EOD was already processed today
+        const eodKey = `eod_processed_${today}`;
+        const alreadyProcessed = await AsyncStorage.getItem(eodKey);
+
+        if (!alreadyProcessed) {
+          // Auto-process EOD without confirmation at 11:30 PM
+          const result = await orderService.processEndOfDay(today);
+
+          if (result.processedKOTs > 0) {
+            await AsyncStorage.setItem(eodKey, 'true');
+
+            // Show notification that auto-EOD was processed
+            Alert.alert(
+              "Auto EOD Completed",
+              `Automatic EOD processed ${result.processedKOTs} KOTs as credit payments.\nTotal: ₹${result.totalAmount.toFixed(2)}`,
+              [{ text: "OK" }]
+            );
+
+            // Refresh data
+            await handleRefresh();
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error in auto EOD check:', error);
+    }
+  }, [handleRefresh]);
+
+  // Set up automatic EOD check
+  useEffect(() => {
+    const interval = setInterval(checkAutoEOD, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [checkAutoEOD]);
 
   const handleSearch = useCallback((query: string) => {
     setSearchQuery(query);
@@ -159,10 +340,10 @@ export default function CustomersScreen() {
     }
   }, [searchQuery, loadCustomers]);
 
-  // Initial load
+  // Initial load and tab change
   useEffect(() => {
     loadCustomers();
-  }, [loadCustomers]);
+  }, [loadCustomers, activeTab]);
 
   // Auto-refresh when screen comes into focus
   useFocusEffect(
@@ -281,16 +462,15 @@ export default function CustomersScreen() {
   // Check if EOD button should be shown for a specific date
   const shouldShowEOD = (dateString: string) => {
     const today = new Date().toISOString().split("T")[0];
-    const now = new Date();
 
     // For older dates, always show EOD button
     if (dateString < today) {
       return true;
     }
 
-    // For today, show only after 8 PM
+    // For today, always show EOD button (manual processing available anytime)
     if (dateString === today) {
-      return now.getHours() >= 20; // 8 PM = 20:00
+      return true;
     }
 
     // For future dates (shouldn't happen but just in case), don't show
@@ -410,10 +590,25 @@ export default function CustomersScreen() {
             <Text className="text-lg font-bold text-gray-900">
               {group.displayDate}
             </Text>
-            {shouldShowEOD(date) && (
-              <TouchableOpacity className="bg-red-500 px-4 py-2 rounded-full shadow-sm">
-                <Text className="text-white font-semibold text-sm">EOD</Text>
+            {shouldShowEOD(group.date) && (
+              <TouchableOpacity
+                className={`px-4 py-2 rounded-full shadow-sm ${isProcessingEOD ? 'bg-gray-400' : 'bg-red-500'}`}
+                onPress={() => handleEOD(group.date)}
+                disabled={isProcessingEOD}
+              >
+                <Text className="text-white font-semibold text-sm">
+                  {isProcessingEOD ? 'Processing...' : 'EOD'}
+                </Text>
               </TouchableOpacity>
+            )}
+
+            {/* Show auto-EOD indicator for today */}
+            {group.date === new Date().toISOString().split('T')[0] && (
+              <View className="px-3 py-1 rounded-full bg-blue-100 border border-blue-300">
+                <Text className="text-blue-700 text-xs font-medium">
+                  Auto-EOD: 11:30 PM
+                </Text>
+              </View>
             )}
           </View>
 
@@ -771,38 +966,95 @@ export default function CustomersScreen() {
             }
           >
             {isAllTab ? (
-              // Render simple customer list for "All" tab
-              <View className="bg-white">
+              // Render enhanced customer list for "All" tab with payment statistics
+              <View className="px-4 pt-4">
                 {allCustomers.map((customer, index) =>
                   <TouchableOpacity
-                    key={`simple-${customer.id}-${index}`}
-                    className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-gray-50 active:bg-gray-50"
+                    key={`enhanced-${customer.id}-${index}`}
+                    className="mb-4 bg-white rounded-lg overflow-hidden shadow-sm"
                     activeOpacity={0.7}
-                    onPress={() => router.push({
-                      pathname: "/customer-details",
-                      params: {
-                        customerId: customer.id,
-                        customerName: customer.name,
-                        customerContact: customer.contact || "",
-                      }
-                    })}
+                    onPress={() => {
+                      router.push({
+                        pathname: "/customer-details",
+                        params: {
+                          customerId: customer.id,
+                          customerName: customer.name,
+                        }
+                      });
+                    }}
                   >
-                    {/* Customer Avatar and Info */}
-                    <View className="flex-row items-center flex-1">
+                    {/* Customer Header */}
+                    <View className="flex-row items-center px-4 py-4 border-b border-gray-100">
                       <View
-                        className={`w-10 h-10 rounded-full ${getAvatarColor(customer.name)} items-center justify-center mr-3 shadow-sm`}
+                        className={`w-12 h-12 rounded-full ${getAvatarColor(customer.name)} items-center justify-center mr-4 shadow-sm`}
                       >
-                        <Text className="text-white font-semibold text-sm">{getCustomerInitials(customer.name)}</Text>
+                        <Text className="text-white font-bold text-base">{getCustomerInitials(customer.name)}</Text>
                       </View>
                       <View className="flex-1">
-                        <Text className="text-gray-900 font-medium text-base mb-0.5">
+                        <Text className="text-gray-900 font-semibold text-lg mb-1">
                           {customer.name}
                         </Text>
                         {customer.contact && (
-                          <Text className="text-gray-500 text-xs">{customer.contact}</Text>
+                          <Text className="text-gray-500 text-sm">{customer.contact}</Text>
                         )}
                       </View>
+                      <Text className="text-gray-400 text-xs">
+                        Tap for details →
+                      </Text>
                     </View>
+
+                    {/* Payment Statistics */}
+                    {customer.totalOrders && customer.totalOrders > 0 ? (
+                      <View className="px-4 py-3">
+                        {/* Total Orders and Amount */}
+                        <View className="flex-row items-center justify-between mb-3">
+                          <Text className="text-gray-600 font-medium">Total Orders</Text>
+                          <View className="flex-row items-center">
+                            <Text className="text-gray-900 font-semibold mr-2">
+                              {customer.totalOrders}
+                            </Text>
+                            <Text className="text-gray-900 font-bold">
+                              {formatCurrency(customer.totalAmount || 0)}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Paid vs Credit Breakdown */}
+                        <View className="flex-row justify-between">
+                          {/* Paid Orders */}
+                          <View className="flex-1 mr-2">
+                            <View className="bg-green-50 p-3 rounded-lg border border-green-200">
+                              <Text className="text-green-700 text-xs font-medium mb-1">Paid Orders</Text>
+                              <Text className="text-green-900 font-semibold text-sm">
+                                {customer.paidOrders} orders
+                              </Text>
+                              <Text className="text-green-900 font-bold">
+                                {formatCurrency(customer.paidAmount || 0)}
+                              </Text>
+                            </View>
+                          </View>
+
+                          {/* Credit Orders */}
+                          <View className="flex-1 ml-2">
+                            <View className="bg-orange-50 p-3 rounded-lg border border-orange-200">
+                              <Text className="text-orange-700 text-xs font-medium mb-1">Credit Orders</Text>
+                              <Text className="text-orange-900 font-semibold text-sm">
+                                {customer.creditOrders} orders
+                              </Text>
+                              <Text className="text-orange-900 font-bold">
+                                {formatCurrency(customer.creditAmount || 0)}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+                    ) : (
+                      <View className="px-4 py-3">
+                        <Text className="text-gray-500 text-center text-sm">
+                          No orders yet
+                        </Text>
+                      </View>
+                    )}
                   </TouchableOpacity>
                 )}
               </View>

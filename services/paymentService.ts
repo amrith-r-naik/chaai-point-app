@@ -38,6 +38,7 @@ export interface PaymentProcessData {
   paymentType: string;
   splitPayments?: SplitPayment[];
   remarks?: string;
+  targetDate?: string; // For EOD processing
 }
 
 class PaymentService {
@@ -139,7 +140,24 @@ class PaymentService {
       } else {
         // Single payment
         if (paymentData.paymentType === "Credit") {
+          // For credit payments, create a payment record AND update customer credit balance
           await this.updateCustomerCredit(paymentData.customerId, paymentData.totalAmount);
+          
+          // Also create a payment record for credit
+          const payment: Payment = {
+            id: uuid.v4() as string,
+            billId: bill.id,
+            customerId: paymentData.customerId,
+            amount: Math.round(paymentData.totalAmount * 100),
+            mode: paymentData.paymentType,
+            remarks: paymentData.remarks || null,
+            createdAt: new Date().toISOString(),
+          };
+
+          await db.runAsync(`
+            INSERT INTO payments (id, billId, customerId, amount, mode, remarks, createdAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `, [payment.id, payment.billId, payment.customerId, payment.amount, payment.mode, payment.remarks, payment.createdAt]);
         } else {
           const payment: Payment = {
             id: uuid.v4() as string,
@@ -159,7 +177,7 @@ class PaymentService {
       }
 
       // Update KOT orders to link with this bill
-      await this.linkKOTsToBill(paymentData.customerId, bill.id);
+      await this.linkKOTsToBill(paymentData.customerId, bill.id, paymentData.targetDate);
 
       // Commit transaction
       await db.execAsync('COMMIT');
@@ -172,11 +190,11 @@ class PaymentService {
     }
   }
 
-  private async linkKOTsToBill(customerId: string, billId: string): Promise<void> {
+  private async linkKOTsToBill(customerId: string, billId: string, targetDate?: string): Promise<void> {
     if (!db) throw new Error("Database not initialized");
 
-    // Get today's date for filtering KOTs
-    const today = new Date().toISOString().split('T')[0];
+    // Use provided date or today's date for filtering KOTs
+    const dateToUse = targetDate || new Date().toISOString().split('T')[0];
     
     await db.runAsync(`
       UPDATE kot_orders 
@@ -184,7 +202,7 @@ class PaymentService {
       WHERE customerId = ? 
         AND billId IS NULL 
         AND DATE(createdAt) = DATE(?)
-    `, [billId, customerId, today]);
+    `, [billId, customerId, dateToUse]);
   }
 
   private async updateCustomerCredit(customerId: string, amount: number): Promise<void> {

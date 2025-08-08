@@ -1,6 +1,7 @@
 import AddExpenseModal from "@/app/(modals)/add-expense";
 import { Loading } from "@/components/ui";
 import { theme } from "@/constants/theme";
+import { formatCurrency } from "@/lib/money";
 import { logoutUser } from "@/services/authService";
 import { dashboardService, DashboardStats, DateFilterOptions } from "@/services/dashboardService";
 import { authState } from "@/state/authState";
@@ -346,22 +347,10 @@ const styles = StyleSheet.create({
   }
 });
 
-const formatCurrency = (amount: number): string => {
-  const value = Math.abs(amount);
-  if (value >= 10000000) {
-    return `${amount < 0 ? '-' : ''}₹${(value / 10000000).toFixed(1)}Cr`;
-  } else if (value >= 100000) {
-    return `${amount < 0 ? '-' : ''}₹${(value / 100000).toFixed(1)}L`;
-  } else if (value >= 1000) {
-    return `${amount < 0 ? '-' : ''}₹${(value / 1000).toFixed(1)}K`;
-  }
-  return `${amount < 0 ? '-' : ''}₹${value.toLocaleString('en-IN')}`;
-};
-
 const getCurrencyFontSize = (amount: number, baseFontSize: number = 22): number => {
   const formatted = formatCurrency(amount);
   const length = formatted.length;
-  
+
   if (length <= 6) return baseFontSize;
   if (length <= 8) return baseFontSize * 0.9;
   if (length <= 10) return baseFontSize * 0.8;
@@ -389,9 +378,9 @@ const MetricCard: React.FC<MetricCardProps> = ({
 }) => {
   const formatValue = () => {
     if (typeof value === "number" && (
-      title.toLowerCase().includes("revenue") || 
-      title.toLowerCase().includes("expense") || 
-      title.toLowerCase().includes("profit") || 
+      title.toLowerCase().includes("revenue") ||
+      title.toLowerCase().includes("expense") ||
+      title.toLowerCase().includes("profit") ||
       title.toLowerCase().includes("due") ||
       title.toLowerCase().includes("value")
     )) {
@@ -402,9 +391,9 @@ const MetricCard: React.FC<MetricCardProps> = ({
 
   const getFontSize = () => {
     if (typeof value === "number" && (
-      title.toLowerCase().includes("revenue") || 
-      title.toLowerCase().includes("expense") || 
-      title.toLowerCase().includes("profit") || 
+      title.toLowerCase().includes("revenue") ||
+      title.toLowerCase().includes("expense") ||
+      title.toLowerCase().includes("profit") ||
       title.toLowerCase().includes("due") ||
       title.toLowerCase().includes("value")
     )) {
@@ -422,7 +411,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
         </View>
       </View>
       <Text style={[
-        styles.metricValue, 
+        styles.metricValue,
         { fontSize: getFontSize(), color: valueColor }
       ]} numberOfLines={1} adjustsFontSizeToFit>
         {formatValue()}
@@ -458,7 +447,7 @@ const FilterButton: React.FC<{
 export default function HomeScreen() {
   const auth = use$(authState);
   const insets = useSafeAreaInsets();
-  
+
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -468,23 +457,23 @@ export default function HomeScreen() {
   const getDateFilter = (): DateFilterOptions => {
     const today = new Date();
     const endDate = today.toISOString().split('T')[0];
-    
+
     switch (selectedFilter) {
       case "today":
         return { startDate: endDate, endDate };
       case "week":
         const weekStart = new Date(today);
         weekStart.setDate(today.getDate() - 6);
-        return { 
-          startDate: weekStart.toISOString().split('T')[0], 
-          endDate 
+        return {
+          startDate: weekStart.toISOString().split('T')[0],
+          endDate
         };
       case "month":
         const monthStart = new Date(today);
         monthStart.setDate(1);
-        return { 
-          startDate: monthStart.toISOString().split('T')[0], 
-          endDate 
+        return {
+          startDate: monthStart.toISOString().split('T')[0],
+          endDate
         };
       default:
         return { startDate: endDate, endDate };
@@ -565,7 +554,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView 
+      <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
@@ -584,14 +573,14 @@ export default function HomeScreen() {
                 <Text style={styles.headerTitle}>Dashboard</Text>
               </View>
               <View style={styles.headerActions}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.actionButton, styles.primaryActionButton]}
                   onPress={() => setShowAddExpense(true)}
                 >
                   <Plus size={18} color={theme.colors.primary} />
                   <Text style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 13 }}>Add</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.actionButton}
                   onPress={handleLogout}
                 >
@@ -631,7 +620,7 @@ export default function HomeScreen() {
 
         <View style={styles.contentContainer}>
           <Text style={styles.sectionTitle}>Key Metrics</Text>
-          
+
           <View style={styles.metricsGrid}>
             <View style={styles.metricsRow}>
               <MetricCard
@@ -653,7 +642,7 @@ export default function HomeScreen() {
                 subtitle="Net earnings"
               />
             </View>
-            
+
             <View style={styles.metricsRow}>
               <MetricCard
                 title="Orders"
@@ -695,7 +684,7 @@ export default function HomeScreen() {
           {selectedFilter !== "today" && (
             <View style={styles.performanceCard}>
               <View style={styles.performanceHeader}>
-                <Text style={styles.performanceTitle}>Today's Performance</Text>
+                <Text style={styles.performanceTitle}>Today&apos;s Performance</Text>
                 <View style={styles.performanceBadge}>
                   <Text style={styles.performanceBadgeText}>Live</Text>
                 </View>
@@ -710,8 +699,8 @@ export default function HomeScreen() {
                 <View style={styles.performanceMetric}>
                   <Text style={styles.performanceMetricTitle}>Revenue</Text>
                   <Text style={[
-                    styles.performanceMetricValue, 
-                    { 
+                    styles.performanceMetricValue,
+                    {
                       color: theme.colors.success,
                       fontSize: getCurrencyFontSize(stats?.todayRevenue || 0, 18)
                     }
@@ -722,8 +711,8 @@ export default function HomeScreen() {
                 <View style={styles.performanceMetric}>
                   <Text style={styles.performanceMetricTitle}>Profit</Text>
                   <Text style={[
-                    styles.performanceMetricValue, 
-                    { 
+                    styles.performanceMetricValue,
+                    {
                       color: stats && stats.todayProfit >= 0 ? theme.colors.success : theme.colors.error,
                       fontSize: getCurrencyFontSize(stats?.todayProfit || 0, 18)
                     }

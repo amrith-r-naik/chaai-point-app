@@ -1,4 +1,5 @@
 import { theme } from "@/constants/theme";
+import { formatCurrency } from "@/lib/money";
 import { orderService } from "@/services/orderService";
 import { router, useLocalSearchParams } from "expo-router";
 import { ArrowLeft, Calendar, CreditCard, DollarSign, Receipt } from "lucide-react-native";
@@ -193,7 +194,7 @@ export default function CustomerDetailsScreen() {
                 color: theme.colors.primary,
               }}
             >
-              ₹{item.totalAmount.toFixed(2)}
+              {formatCurrency(item.totalAmount)}
             </Text>
 
             <View
@@ -226,7 +227,7 @@ export default function CustomerDetailsScreen() {
                 marginTop: 4,
               }}
             >
-              Pending: ₹{(item.totalAmount - item.amountPaid).toFixed(2)}
+              Pending: {formatCurrency(item.totalAmount - item.amountPaid)}
             </Text>
           )}
         </View>
@@ -332,7 +333,7 @@ export default function CustomerDetailsScreen() {
               marginTop: 8,
             }}
           >
-            ₹{totalBilled.toFixed(2)}
+            {formatCurrency(totalBilled)}
           </Text>
           <Text
             style={{
@@ -366,7 +367,7 @@ export default function CustomerDetailsScreen() {
               marginTop: 8,
             }}
           >
-            ₹{totalCredit.toFixed(2)}
+            {formatCurrency(totalCredit)}
           </Text>
           <Text
             style={{
@@ -403,7 +404,7 @@ export default function CustomerDetailsScreen() {
             {selectedFilter === 'all' ? "No orders found" : `No ${selectedFilter} orders found`}
           </Text>
           <Text style={{ fontSize: 14, color: theme.colors.textSecondary, textAlign: "center", marginTop: 8 }}>
-            This customer hasn't placed any orders yet
+            This customer hasn&apos;t placed any orders yet
           </Text>
         </View>
       ) : (

@@ -1,8 +1,18 @@
 import { Customer } from "@/services/customerService";
 import { observable } from "@legendapp/state";
 
+// Extended customer interface for state management
+export interface ExtendedCustomer extends Customer {
+  totalOrders?: number;
+  totalAmount?: number;
+  paidAmount?: number;
+  creditAmount?: number;
+  paidOrders?: number;
+  creditOrders?: number;
+}
+
 export const customerState = observable({
-  customers: [] as Customer[],
+  customers: [] as ExtendedCustomer[],
   loading: false,
   error: "" as string,
   searchQuery: "" as string,

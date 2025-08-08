@@ -21,6 +21,9 @@ class AdminService {
       await db.runAsync(`DELETE FROM expenses`);
       await db.runAsync(`DELETE FROM menu_items`);
       await db.runAsync(`DELETE FROM customers`);
+      // Clear sequence and eod run data
+      await db.runAsync(`DELETE FROM sequences`);
+      await db.runAsync(`DELETE FROM eod_runs`);
 
       // Re-enable foreign key constraints
       await db.runAsync(`PRAGMA foreign_keys = ON`);
@@ -51,6 +54,8 @@ class AdminService {
       "expenses",
       "menu_items",
       "customers",
+      "sequences",
+      "eod_runs",
       // "users", // Users table is protected and not allowed to be cleared individually
     ];
 
@@ -89,6 +94,11 @@ class AdminService {
         "kot_orders",
         "kot_items",
         "expenses",
+        "bills",
+        "receipts",
+        "payments",
+        "sequences",
+        "eod_runs",
       ];
       const counts: Record<string, number> = {};
 

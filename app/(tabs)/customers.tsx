@@ -1,8 +1,9 @@
+import { formatCurrency } from "@/lib/money";
 import { getAllCustomers, searchCustomers } from "@/services/customerService";
 import { orderService } from "@/services/orderService";
 import { paymentService } from "@/services/paymentService";
 import { authState } from "@/state/authState";
-import { customerState } from "@/state/customerState";
+import { customerState, ExtendedCustomer } from "@/state/customerState";
 import { use$ } from "@legendapp/state/react";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from "@react-navigation/native";
@@ -57,7 +58,7 @@ interface DateGroup {
 interface CompletedBillGroup {
   date: string;
   displayDate: string;
-  bills: Array<{
+  bills: {
     id: string;
     billNumber: string;
     receiptNo: string;
@@ -68,7 +69,7 @@ interface CompletedBillGroup {
     mode: string;
     remarks: string | null;
     createdAt: string;
-  }>;
+  }[];
 }
 
 type TabType = "active" | "completed" | "all";
@@ -107,9 +108,9 @@ export default function CustomersScreen() {
     }
   }, [auth.isDbReady]);
 
-  const loadCustomersWithStats = useCallback(async () => {
+  const loadCustomersWithStats = useCallback(async (): Promise<ExtendedCustomer[]> => {
     try {
-      if (!auth.isDbReady) return;
+      if (!auth.isDbReady) return [];
 
       const customers = searchQuery.trim()
         ? await searchCustomers(searchQuery.trim())
@@ -117,7 +118,7 @@ export default function CustomersScreen() {
 
       // Enhance each customer with payment statistics
       const customersWithStats = await Promise.all(
-        customers.map(async (customer) => {
+        customers.map(async (customer): Promise<ExtendedCustomer> => {
           try {
             const orders = await orderService.getOrdersByCustomerId(customer.id);
 
@@ -186,7 +187,7 @@ export default function CustomersScreen() {
       // For "All" tab, load customers with payment statistics
       if (activeTab === "all") {
         const customersWithStats = await loadCustomersWithStats();
-        customerState.customers.set(customersWithStats);
+        customerState.customers.set(customersWithStats || []);
       } else {
         // Load customers and orders data in parallel for other tabs
         const [customers] = await Promise.all([
@@ -386,10 +387,6 @@ export default function CustomersScreen() {
     ];
     const index = name.charCodeAt(0) % colors.length;
     return colors[index];
-  };
-
-  const formatCurrency = (amount: number): string => {
-    return `₹${amount.toLocaleString("en-IN")}`;
   };
 
   // Enhanced tab statistics function

@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { computeISTBusinessDate, db } from "@/lib/db";
 import { SplitPayment } from "@/types/payment";
 import uuid from "react-native-uuid";
 
@@ -42,44 +42,69 @@ export interface PaymentProcessData {
 }
 
 class PaymentService {
-  private async getNextReceiptNumber(): Promise<string> {
+  private async getOrInitSequence(key: string, initialQuery?: { sql: string; params?: any[] }): Promise<number> {
     if (!db) throw new Error("Database not initialized");
-    
-    const result = await db.getFirstAsync(`
-      SELECT MAX(receiptNo) as maxReceiptNo FROM receipts
-    `) as { maxReceiptNo: number | null };
-    
-    const nextNumber = (result?.maxReceiptNo || 0) + 1;
-    return nextNumber.toString().padStart(6, '0');
+    // Try insert ignore with 0 then if need seed from existing max
+    await db.runAsync(`INSERT OR IGNORE INTO sequences (key, value) VALUES (?, 0)`, [key]);
+    if (initialQuery) {
+      const row = (await db.getFirstAsync(`SELECT value FROM sequences WHERE key = ?`, [key])) as any;
+      if (row.value === 0) {
+        const init = (await db.getFirstAsync(initialQuery.sql, initialQuery.params || [])) as any;
+        const existingMax = init?.maxVal ? Number(init.maxVal) : 0;
+        if (existingMax > 0) {
+          await db.runAsync(`UPDATE sequences SET value = ? WHERE key = ?`, [existingMax, key]);
+        }
+      }
+    }
+    return (await db.getFirstAsync(`SELECT value FROM sequences WHERE key = ?`, [key]) as any).value;
+  }
+
+  private async nextSequence(key: string, initialQuery?: { sql: string; params?: any[] }): Promise<number> {
+    if (!db) throw new Error("Database not initialized");
+    await this.getOrInitSequence(key, initialQuery);
+    await db.runAsync(`UPDATE sequences SET value = value + 1 WHERE key = ?`, [key]);
+    const row = (await db.getFirstAsync(`SELECT value FROM sequences WHERE key = ?`, [key])) as any;
+    return row.value;
+  }
+
+  private async getNextReceiptNumber(businessDate: string): Promise<string> {
+    if (!db) throw new Error("Database not initialized");
+    const year = businessDate.split('-')[0];
+    const seqKey = `receipt:${year}`;
+    const nextNum = await this.nextSequence(seqKey, {
+      sql: `SELECT MAX(receiptNo) as maxVal FROM receipts WHERE businessDate LIKE ?`,
+      params: [`${year}-%`]
+    });
+    return nextNum.toString().padStart(6, '0');
   }
 
   private async getNextBillNumber(): Promise<string> {
     if (!db) throw new Error("Database not initialized");
-    
-    const result = await db.getFirstAsync(`
-      SELECT MAX(billNumber) as maxBillNumber FROM bills
-    `) as { maxBillNumber: number | null };
-    
-    const nextNumber = (result?.maxBillNumber || 0) + 1;
-    return nextNumber.toString().padStart(6, '0');
+    const seqKey = `bill`;
+    const nextNum = await this.nextSequence(seqKey, {
+      sql: `SELECT MAX(billNumber) as maxVal FROM bills`,
+    });
+    return nextNum.toString().padStart(6, '0');
   }
 
   async createBill(customerId: string, totalAmount: number): Promise<Bill> {
     if (!db) throw new Error("Database not initialized");
 
+    const nowIso = new Date().toISOString();
+    const businessDate = computeISTBusinessDate(nowIso);
     const billNumber = await this.getNextBillNumber();
     const bill: Bill = {
       id: uuid.v4() as string,
       billNumber,
       customerId,
-      total: totalAmount, // Store in rupees (direct KOT total)
-      createdAt: new Date().toISOString(),
+      total: totalAmount,
+      createdAt: nowIso,
     };
 
     await db.runAsync(`
-      INSERT INTO bills (id, billNumber, customerId, total, createdAt)
-      VALUES (?, ?, ?, ?, ?)
-    `, [bill.id, bill.billNumber, bill.customerId, bill.total, bill.createdAt]);
+      INSERT INTO bills (id, billNumber, customerId, total, createdAt, businessDate)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [bill.id, bill.billNumber, bill.customerId, bill.total, bill.createdAt, businessDate]);
 
     return bill;
   }
@@ -93,48 +118,61 @@ class PaymentService {
 
       // Create bill
       const bill = await this.createBill(paymentData.customerId, paymentData.totalAmount);
-
+      const businessDate = computeISTBusinessDate(bill.createdAt);
       // Generate receipt number
-      const receiptNo = await this.getNextReceiptNumber();
+      const receiptNo = await this.getNextReceiptNumber(businessDate);
 
       // Create receipt
       const receipt: Receipt = {
         id: uuid.v4() as string,
         receiptNo,
         customerId: paymentData.customerId,
-        amount: paymentData.totalAmount, // Store in rupees (direct KOT total)
+        amount: paymentData.totalAmount,
         mode: paymentData.paymentType,
         remarks: paymentData.remarks || null,
-        createdAt: new Date().toISOString(),
+        createdAt: bill.createdAt,
       };
 
       await db.runAsync(`
-        INSERT INTO receipts (id, receiptNo, customerId, amount, mode, remarks, createdAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [receipt.id, receipt.receiptNo, receipt.customerId, receipt.amount, receipt.mode, receipt.remarks, receipt.createdAt]);
+        INSERT INTO receipts (id, receiptNo, customerId, amount, mode, remarks, createdAt, businessDate)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [receipt.id, receipt.receiptNo, receipt.customerId, receipt.amount, receipt.mode, receipt.remarks, receipt.createdAt, businessDate]);
 
       // Process payments based on type
       if (paymentData.paymentType === "Split" && paymentData.splitPayments) {
         // Create individual payment records for each split
         for (const split of paymentData.splitPayments) {
+          if (split.amount <= 0) continue;
           if (split.type !== "Credit") {
             const payment: Payment = {
               id: uuid.v4() as string,
               billId: bill.id,
               customerId: paymentData.customerId,
-              amount: split.amount, // Store in rupees (direct amount)
+              amount: split.amount,
               mode: split.type,
               remarks: paymentData.remarks || null,
               createdAt: new Date().toISOString(),
             };
-
             await db.runAsync(`
               INSERT INTO payments (id, billId, customerId, amount, mode, remarks, createdAt)
               VALUES (?, ?, ?, ?, ?, ?, ?)
             `, [payment.id, payment.billId, payment.customerId, payment.amount, payment.mode, payment.remarks, payment.createdAt]);
           } else {
-            // Handle credit payment - this would update customer credit balance
+            // Credit component: update credit balance AND persist a payment row for audit consistency
             await this.updateCustomerCredit(paymentData.customerId, split.amount);
+            const creditPayment: Payment = {
+              id: uuid.v4() as string,
+              billId: bill.id,
+              customerId: paymentData.customerId,
+              amount: split.amount,
+              mode: 'Credit',
+              remarks: paymentData.remarks || null,
+              createdAt: new Date().toISOString(),
+            };
+            await db.runAsync(`
+              INSERT INTO payments (id, billId, customerId, amount, mode, remarks, createdAt)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            `, [creditPayment.id, creditPayment.billId, creditPayment.customerId, creditPayment.amount, creditPayment.mode, creditPayment.remarks, creditPayment.createdAt]);
           }
         }
       } else {
@@ -177,7 +215,7 @@ class PaymentService {
       }
 
       // Update KOT orders to link with this bill
-      await this.linkKOTsToBill(paymentData.customerId, bill.id, paymentData.targetDate);
+      await this.linkKOTsToBill(paymentData.customerId, bill.id, paymentData.targetDate || businessDate);
 
       // Commit transaction
       await db.execAsync('COMMIT');
@@ -192,17 +230,14 @@ class PaymentService {
 
   private async linkKOTsToBill(customerId: string, billId: string, targetDate?: string): Promise<void> {
     if (!db) throw new Error("Database not initialized");
-
-    // Use provided date or today's date for filtering KOTs
-    const dateToUse = targetDate || new Date().toISOString().split('T')[0];
-    
+    const dateToUse = targetDate || computeISTBusinessDate(new Date().toISOString());
     await db.runAsync(`
       UPDATE kot_orders 
       SET billId = ? 
       WHERE customerId = ? 
         AND billId IS NULL 
-        AND DATE(createdAt) = DATE(?)
-    `, [billId, customerId, dateToUse]);
+        AND (businessDate = ? OR (businessDate IS NULL AND DATE(createdAt) = DATE(?)))
+    `, [billId, customerId, dateToUse, dateToUse]);
   }
 
   private async updateCustomerCredit(customerId: string, amount: number): Promise<void> {
@@ -296,13 +331,14 @@ class PaymentService {
         r.mode,
         r.remarks,
         r.createdAt,
+        r.businessDate,
         c.name as customerName,
         c.contact as customerContact,
         b.billNumber
       FROM receipts r
       LEFT JOIN customers c ON r.customerId = c.id
       LEFT JOIN bills b ON r.customerId = b.customerId 
-        AND DATE(r.createdAt) = DATE(b.createdAt)
+        AND b.businessDate = r.businessDate
       ORDER BY r.createdAt DESC
     `) as any[];
 
@@ -372,14 +408,17 @@ class PaymentService {
       SELECT * FROM customers WHERE id = ?
     `, [receipt.customerId]) as any;
 
+    const rBusinessDateRow = await db.getFirstAsync(`SELECT businessDate, createdAt FROM receipts WHERE id = ?`, [receiptId]) as any;
+    const rBusinessDate = rBusinessDateRow?.businessDate || computeISTBusinessDate(rBusinessDateRow.createdAt);
+
     // Get related bill
     const bill = await db.getFirstAsync(`
       SELECT * FROM bills 
       WHERE customerId = ? 
-        AND DATE(createdAt) = DATE(?)
+        AND businessDate = ?
       ORDER BY createdAt DESC
       LIMIT 1
-    `, [receipt.customerId, receipt.createdAt]) as any;
+    `, [receipt.customerId, rBusinessDate]) as any;
 
     let kots: any[] = [];
     if (bill) {

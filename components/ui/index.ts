@@ -7,6 +7,5 @@ export { Input } from "./Input";
 export { Loading } from "./Loading";
 export { LoadingOverlay } from "./LoadingOverlay";
 export { Modal } from "./Modal";
-export { StatChip } from "./StatChip";
 export { Typography } from "./Typography";
 

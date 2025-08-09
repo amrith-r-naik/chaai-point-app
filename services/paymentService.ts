@@ -101,103 +101,73 @@ class PaymentService {
       // Start transaction
       await db.execAsync('BEGIN TRANSACTION');
 
-      // Create bill
+      // Create bill (always at payment finalization time)
       const bill = await this.createBill(paymentData.customerId, paymentData.totalAmount);
       const businessDate = computeISTBusinessDate(bill.createdAt);
-      // Generate receipt number
-      const receiptNo = await this.getNextReceiptNumber(businessDate);
 
-      // Create receipt
+      // Normalize splits (even for single mode) for unified logic
+      const splits: Array<{ type: string; amount: number }> =
+        paymentData.paymentType === 'Split' && paymentData.splitPayments
+          ? paymentData.splitPayments.map(s => ({ type: s.type, amount: s.amount }))
+          : [{ type: paymentData.paymentType, amount: paymentData.totalAmount }];
+
+      // Partition credit vs paid portions
+      let creditPortion = 0;
+      const realPayments: Array<{ type: string; amount: number }> = [];
+      for (const s of splits) {
+        if (s.amount <= 0) continue;
+        if (s.type === 'Credit') creditPortion += s.amount; else realPayments.push(s);
+      }
+      const paidAmount = realPayments.reduce((sum, p) => sum + p.amount, 0);
+
+      // Insert payment rows
+      for (const p of realPayments) {
+        const payment: Payment = {
+          id: uuid.v4() as string,
+          billId: bill.id,
+          customerId: paymentData.customerId,
+          amount: p.amount,
+          mode: p.type,
+          remarks: paymentData.remarks || null,
+          createdAt: new Date().toISOString(),
+        };
+        await db.runAsync(`INSERT INTO payments (id, billId, customerId, amount, mode, remarks, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [payment.id, payment.billId, payment.customerId, payment.amount, payment.mode, payment.remarks, payment.createdAt]);
+      }
+      if (creditPortion > 0) {
+        await this.updateCustomerCredit(paymentData.customerId, creditPortion);
+        const creditPayment: Payment = {
+          id: uuid.v4() as string,
+          billId: bill.id,
+          customerId: paymentData.customerId,
+          amount: creditPortion,
+          mode: 'Credit',
+          remarks: paymentData.remarks || null,
+          createdAt: new Date().toISOString(),
+        };
+        await db.runAsync(`INSERT INTO payments (id, billId, customerId, amount, mode, remarks, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [creditPayment.id, creditPayment.billId, creditPayment.customerId, creditPayment.amount, creditPayment.mode, creditPayment.remarks, creditPayment.createdAt]);
+      }
+
+      // Only the actually paid (non-credit) portion should be reflected on receipt
+      // If nothing paid (pure credit), we still generate a receipt with 0 to keep UI flow; could be optional.
+      const receiptMode = realPayments.length === 0
+        ? 'Credit'
+        : realPayments.length === 1
+          ? realPayments[0].type
+          : 'Split';
+      const receiptNo = await this.getNextReceiptNumber(businessDate);
       const receipt: Receipt = {
         id: uuid.v4() as string,
         receiptNo,
         customerId: paymentData.customerId,
-        amount: paymentData.totalAmount,
-        mode: paymentData.paymentType,
+        amount: paidAmount, // exclude credit portion
+        mode: receiptMode,
         remarks: paymentData.remarks || null,
         createdAt: bill.createdAt,
       };
-
-      await db.runAsync(`
-        INSERT INTO receipts (id, receiptNo, customerId, amount, mode, remarks, createdAt, businessDate)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, [receipt.id, receipt.receiptNo, receipt.customerId, receipt.amount, receipt.mode, receipt.remarks, receipt.createdAt, businessDate]);
-
-      // Process payments based on type
-      if (paymentData.paymentType === "Split" && paymentData.splitPayments) {
-        // Create individual payment records for each split
-        for (const split of paymentData.splitPayments) {
-          if (split.amount <= 0) continue;
-          if (split.type !== "Credit") {
-            const payment: Payment = {
-              id: uuid.v4() as string,
-              billId: bill.id,
-              customerId: paymentData.customerId,
-              amount: split.amount,
-              mode: split.type,
-              remarks: paymentData.remarks || null,
-              createdAt: new Date().toISOString(),
-            };
-            await db.runAsync(`
-              INSERT INTO payments (id, billId, customerId, amount, mode, remarks, createdAt)
-              VALUES (?, ?, ?, ?, ?, ?, ?)
-            `, [payment.id, payment.billId, payment.customerId, payment.amount, payment.mode, payment.remarks, payment.createdAt]);
-          } else {
-            // Credit component: update credit balance AND persist a payment row for audit consistency
-            await this.updateCustomerCredit(paymentData.customerId, split.amount);
-            const creditPayment: Payment = {
-              id: uuid.v4() as string,
-              billId: bill.id,
-              customerId: paymentData.customerId,
-              amount: split.amount,
-              mode: 'Credit',
-              remarks: paymentData.remarks || null,
-              createdAt: new Date().toISOString(),
-            };
-            await db.runAsync(`
-              INSERT INTO payments (id, billId, customerId, amount, mode, remarks, createdAt)
-              VALUES (?, ?, ?, ?, ?, ?, ?)
-            `, [creditPayment.id, creditPayment.billId, creditPayment.customerId, creditPayment.amount, creditPayment.mode, creditPayment.remarks, creditPayment.createdAt]);
-          }
-        }
-      } else {
-        // Single payment
-        if (paymentData.paymentType === "Credit") {
-          // For credit payments, create a payment record AND update customer credit balance
-          await this.updateCustomerCredit(paymentData.customerId, paymentData.totalAmount);
-          
-          // Also create a payment record for credit
-          const payment: Payment = {
-            id: uuid.v4() as string,
-            billId: bill.id,
-            customerId: paymentData.customerId,
-            amount: paymentData.totalAmount, // Store in rupees (direct amount)
-            mode: paymentData.paymentType,
-            remarks: paymentData.remarks || null,
-            createdAt: new Date().toISOString(),
-          };
-
-          await db.runAsync(`
-            INSERT INTO payments (id, billId, customerId, amount, mode, remarks, createdAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `, [payment.id, payment.billId, payment.customerId, payment.amount, payment.mode, payment.remarks, payment.createdAt]);
-        } else {
-          const payment: Payment = {
-            id: uuid.v4() as string,
-            billId: bill.id,
-            customerId: paymentData.customerId,
-            amount: paymentData.totalAmount, // Store in rupees (direct amount)
-            mode: paymentData.paymentType,
-            remarks: paymentData.remarks || null,
-            createdAt: new Date().toISOString(),
-          };
-
-          await db.runAsync(`
-            INSERT INTO payments (id, billId, customerId, amount, mode, remarks, createdAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `, [payment.id, payment.billId, payment.customerId, payment.amount, payment.mode, payment.remarks, payment.createdAt]);
-        }
-      }
+      await db.runAsync(`INSERT INTO receipts (id, receiptNo, customerId, amount, mode, remarks, createdAt, businessDate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [receipt.id, receipt.receiptNo, receipt.customerId, receipt.amount, receipt.mode, receipt.remarks, receipt.createdAt, businessDate]);
 
       // Update KOT orders to link with this bill
       await this.linkKOTsToBill(paymentData.customerId, bill.id, paymentData.targetDate || businessDate);

@@ -1,6 +1,6 @@
 import { SplitModalScreen, SplitPayment } from "@/types/payment";
 import React from "react";
-import { Modal, View } from "react-native";
+import { Modal, Text, TouchableOpacity, View } from "react-native";
 import { AddSplitForm } from "./AddSplitForm";
 import { SplitPaymentList } from "./SplitPaymentList";
 
@@ -18,6 +18,7 @@ interface SplitPaymentModalProps {
   onConfirmSplit: () => void;
   onRemoveSplit: (id: string) => void;
   onProceed: () => void;
+  onClose?: () => void;
 }
 
 export const SplitPaymentModal: React.FC<SplitPaymentModalProps> = ({
@@ -34,6 +35,7 @@ export const SplitPaymentModal: React.FC<SplitPaymentModalProps> = ({
   onConfirmSplit,
   onRemoveSplit,
   onProceed,
+  onClose,
 }) => {
   return (
     <Modal
@@ -56,6 +58,11 @@ export const SplitPaymentModal: React.FC<SplitPaymentModalProps> = ({
           maxWidth: 400,
           maxHeight: "80%",
         }}>
+          {onClose && (
+            <TouchableOpacity onPress={onClose} style={{ position: 'absolute', top: 8, right: 8, padding: 8 }}>
+              <Text style={{ fontSize: 18, color: '#6b7280' }}>×</Text>
+            </TouchableOpacity>
+          )}
           {screen === "list" ? (
             <SplitPaymentList
               splitPayments={splitPayments}

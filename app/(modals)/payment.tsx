@@ -5,7 +5,7 @@ import { usePaymentState } from "@/hooks/usePaymentState";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
 import React from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function PaymentScreen() {
@@ -31,6 +31,7 @@ export default function PaymentScreen() {
     setSplitModalScreen,
     setNewSplitType,
     setNewSplitAmount,
+    setSelectedPaymentType,
     handlePaymentTypeSelect,
     handleAddNewSplit,
     handleConfirmAddSplit,
@@ -38,13 +39,7 @@ export default function PaymentScreen() {
     validatePayment,
   } = usePaymentState({ totalAmount: total });
 
-  const handleProceed = () => {
-    if (!validatePayment()) {
-      // TODO: Show error message
-      return;
-    }
-
-    // Navigate directly to receipt page
+  const goToReceipt = (paymentType: string, splitOverride?: any[]) => {
     router.push({
       pathname: "/(modals)/receipt",
       params: {
@@ -52,15 +47,31 @@ export default function PaymentScreen() {
         customerId,
         customerName,
         totalAmount: totalAmount,
-        paymentType: selectedPaymentType as string,
-        splitPayments: selectedPaymentType === "Split" ? JSON.stringify(splitPayments) : "",
-      },
+        paymentType,
+        splitPayments: paymentType === "Split" ? JSON.stringify(splitOverride || splitPayments) : "",
+      }
     });
   };
 
-  const handleSplitProceed = () => {
+  const handleProceed = () => {
+    if (!validatePayment()) return;
+    goToReceipt(selectedPaymentType as string);
+  };
+
+  // Wrap selection to auto-navigate for simple methods
+  const handleSelectAndMaybeProceed = (type: any) => {
+    if (type === 'Split') {
+      handlePaymentTypeSelect(type);
+      return; // opens split modal
+    }
+    // For single methods bypass local state and go straight
+    goToReceipt(type);
+  };
+
+  const handleExitSplit = () => {
     setShowSplitPayment(false);
-    handleProceed();
+    setSelectedPaymentType(null);
+    setSplitModalScreen('list');
   };
 
   return (
@@ -86,117 +97,11 @@ export default function PaymentScreen() {
         }}
       />
 
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 16 }}>
-        <Text style={{
-          fontSize: 24,
-          fontWeight: "600",
-          color: theme.colors.text,
-          marginBottom: 8,
-        }}>
-          Bill Total: ₹{total.toFixed(2)}
-        </Text>
-        <Text style={{
-          fontSize: 16,
-          color: theme.colors.textSecondary,
-          marginBottom: 32,
-        }}>
-          Select payment method
-        </Text>
-
-        {selectedPaymentType && selectedPaymentType !== "Split" && (
-          <View style={{
-            backgroundColor: "white",
-            padding: 24,
-            borderRadius: 16,
-            width: "100%",
-            alignItems: "center",
-          }}>
-            <Text style={{
-              fontSize: 18,
-              fontWeight: "600",
-              color: theme.colors.text,
-              marginBottom: 16,
-            }}>
-              Payment Method: {selectedPaymentType}
-            </Text>
-            <TouchableOpacity
-              onPress={handleProceed}
-              style={{
-                backgroundColor: "black",
-                paddingVertical: 16,
-                paddingHorizontal: 32,
-                borderRadius: 12,
-              }}
-            >
-              <Text style={{
-                color: "white",
-                fontSize: 16,
-                fontWeight: "600",
-              }}>
-                PROCEED
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {selectedPaymentType === "Split" && !showSplitPayment && (
-          <View style={{
-            backgroundColor: "white",
-            padding: 24,
-            borderRadius: 16,
-            width: "100%",
-            alignItems: "center",
-          }}>
-            <Text style={{
-              fontSize: 18,
-              fontWeight: "600",
-              color: theme.colors.text,
-              marginBottom: 16,
-            }}>
-              Split Payment Configured
-            </Text>
-            <TouchableOpacity
-              onPress={() => setShowSplitPayment(true)}
-              style={{
-                backgroundColor: "#2563eb",
-                paddingVertical: 12,
-                paddingHorizontal: 24,
-                borderRadius: 8,
-                marginBottom: 12,
-              }}
-            >
-              <Text style={{
-                color: "white",
-                fontSize: 14,
-                fontWeight: "500",
-              }}>
-                Edit Split
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleProceed}
-              style={{
-                backgroundColor: "black",
-                paddingVertical: 16,
-                paddingHorizontal: 32,
-                borderRadius: 12,
-              }}
-            >
-              <Text style={{
-                color: "white",
-                fontSize: 16,
-                fontWeight: "600",
-              }}>
-                PROCEED
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
+      <View style={{ flex: 1 }} />
 
       <PaymentTypeModal
         visible={selectedPaymentType === null}
-        onSelectPayment={handlePaymentTypeSelect}
+        onSelectPayment={handleSelectAndMaybeProceed}
         onCancel={() => router.back()}
       />
 
@@ -213,7 +118,8 @@ export default function PaymentScreen() {
         onAddSplit={handleAddNewSplit}
         onConfirmSplit={handleConfirmAddSplit}
         onRemoveSplit={handleRemoveSplit}
-        onProceed={handleSplitProceed}
+        onProceed={handleProceed}
+        onClose={handleExitSplit}
       />
     </SafeAreaView>
   );

@@ -136,54 +136,56 @@ export default function CustomersScreen() {
         ? await searchCustomers(searchQuery.trim())
         : await getAllCustomers();
 
-      // Enhance each customer with payment statistics
-      const customersWithStats = await Promise.all(
-        customers.map(async (customer): Promise<ExtendedCustomer> => {
-          try {
-            const orders = await orderService.getOrdersByCustomerId(customer.id);
+      // Single batched DB work for payments & bills to avoid per-customer queries
+      const db = (await import('../../lib/db')).db;
+      let paymentRows: any[] = [];
+      let billRows: any[] = [];
+      if (db) {
+        paymentRows = await db.getAllAsync(`SELECT customerId, billId, mode, amount FROM payments`);
+        billRows = await db.getAllAsync(`SELECT id, customerId, total FROM bills`);
+      }
 
-            let totalOrders = orders.length;
-            let totalAmount = 0;
-            let paidAmount = 0;
-            let creditAmount = 0;
-            let paidOrders = 0;
-            let creditOrders = 0;
+      const paymentsByCustomer: Record<string, { paid: number; credit: number; bills: Record<string, { paid: number; credit: number }> }> = {};
+      paymentRows.forEach((p: any) => {
+        if (!paymentsByCustomer[p.customerId]) paymentsByCustomer[p.customerId] = { paid: 0, credit: 0, bills: {} };
+        const bucket = paymentsByCustomer[p.customerId];
+        if (!bucket.bills[p.billId]) bucket.bills[p.billId] = { paid: 0, credit: 0 };
+        if (p.mode === 'Credit') {
+          bucket.credit += p.amount;
+          bucket.bills[p.billId].credit += p.amount;
+        } else {
+          bucket.paid += p.amount;
+          bucket.bills[p.billId].paid += p.amount;
+        }
+      });
 
-            orders.forEach(order => {
-              totalAmount += order.totalAmount;
+      const billsByCustomer: Record<string, number> = {};
+      billRows.forEach((b: any) => {
+        billsByCustomer[b.customerId] = (billsByCustomer[b.customerId] || 0) + (b.total || 0);
+      });
 
-              if (order.paymentStatus === 'paid') {
-                paidAmount += order.totalAmount;
-                paidOrders++;
-              } else if (order.paymentStatus === 'credit') {
-                creditAmount += order.totalAmount;
-                creditOrders++;
-              }
-            });
-
-            return {
-              ...customer,
-              totalOrders,
-              totalAmount,
-              paidAmount,
-              creditAmount,
-              paidOrders,
-              creditOrders,
-            };
-          } catch (error) {
-            console.error(`Error loading stats for customer ${customer.id}:`, error);
-            return {
-              ...customer,
-              totalOrders: 0,
-              totalAmount: 0,
-              paidAmount: 0,
-              creditAmount: 0,
-              paidOrders: 0,
-              creditOrders: 0,
-            };
-          }
-        })
-      );
+      const customersWithStats: ExtendedCustomer[] = customers.map(c => {
+        const p = paymentsByCustomer[c.id] || { paid: 0, credit: 0, bills: {} };
+        const totalBilled = billsByCustomer[c.id] || 0;
+        // creditBalance column is authoritative for outstanding credit; if mismatch with computed credit, prefer column.
+        // We'll fetch it from c if present (extended createCustomer doesn't select creditBalance; add fallback later if needed).
+        const creditAmount = p.credit; // computed from payments (credit portions accumulated)
+        const paidAmount = p.paid; // actual cash/upi collected
+        let paidBills = 0; let creditBills = 0;
+        Object.values(p.bills).forEach(b => {
+          if (b.paid > 0) paidBills++;
+          if (b.credit > 0) creditBills++;
+        });
+        return {
+          ...c,
+          totalOrders: undefined, // deprecated in simplified view
+          totalAmount: totalBilled, // sum of bill totals
+          paidAmount,
+          creditAmount,
+          paidOrders: paidBills,
+          creditOrders: creditBills,
+        };
+      });
 
       return customersWithStats;
     } catch (error) {
@@ -618,15 +620,6 @@ export default function CustomersScreen() {
                 </Text>
               </TouchableOpacity>
             )}
-
-            {/* Show auto-EOD indicator for today */}
-            {group.date === new Date().toISOString().split('T')[0] && (
-              <View className="px-3 py-1 rounded-full bg-blue-100 border border-blue-300">
-                <Text className="text-blue-700 text-xs font-medium">
-                  Auto-EOD: 11:30 PM
-                </Text>
-              </View>
-            )}
           </View>
 
           {/* Date Statistics (simple pills) */}
@@ -670,7 +663,7 @@ export default function CustomersScreen() {
                     ...customerData.customer,
                     contact: customerData.customer.contact || undefined,
                   });
-                  router.push("/(modals)/customer-kots");
+                  router.push({ pathname: "/(modals)/customer-details", params: { customerId: customerData.customer.id } });
                 }}
                 className="flex-row items-center justify-between px-4 py-4 bg-white border-b border-gray-50 active:bg-gray-50"
                 activeOpacity={0.7}
@@ -1008,8 +1001,8 @@ export default function CustomersScreen() {
                     activeOpacity={0.6}
                     onPress={() => {
                       router.push({
-                        pathname: "/customer-details",
-                        params: { customerId: customer.id, customerName: customer.name }
+                        pathname: "/(modals)/customer-details",
+                        params: { customerId: customer.id }
                       });
                     }}
                   >

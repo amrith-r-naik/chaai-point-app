@@ -1,5 +1,6 @@
 import AddExpenseModal from "@/app/(modals)/add-expense";
 import { Loading } from "@/components/ui";
+import UnbilledOrdersCard from "@/components/ui/UnbilledOrdersCard";
 import { theme } from "@/constants/theme";
 import { logoutUser } from "@/services/authService";
 import { dashboardService, DashboardStats, DateFilterOptions } from "@/services/dashboardService";
@@ -8,28 +9,28 @@ import { use$ } from "@legendapp/state/react";
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from "expo-router";
 import {
-  AlertCircle,
-  BarChart3,
-  Calendar,
-  DollarSign,
-  LogOut,
-  Plus,
-  Settings,
-  ShoppingCart,
-  TrendingDown,
-  TrendingUp
+    AlertCircle,
+    BarChart3,
+    Calendar,
+    DollarSign,
+    LogOut,
+    Plus,
+    Settings,
+    ShoppingCart,
+    TrendingDown,
+    TrendingUp
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
-  Dimensions,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Dimensions,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -719,6 +720,9 @@ export default function HomeScreen() {
               />
             </View>
           </View>
+
+          {/* Unbilled Orders Card */}
+          <UnbilledOrdersCard />
 
           {selectedFilter !== "today" && (
             <View style={styles.performanceCard}>

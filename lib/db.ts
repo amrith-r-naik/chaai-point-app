@@ -105,5 +105,14 @@ async function initializeSchema() {
       remarks TEXT,
       createdAt TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS split_payments (
+      id TEXT PRIMARY KEY,
+      receiptId TEXT NOT NULL,
+      paymentType TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      createdAt TEXT NOT NULL,
+      FOREIGN KEY (receiptId) REFERENCES receipts(id)
+    );
   `);
 }

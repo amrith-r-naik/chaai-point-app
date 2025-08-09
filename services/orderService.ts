@@ -238,9 +238,13 @@ class OrderService {
   private async getNextKotNumber(): Promise<number> {
     if (!db) throw new Error("Database not initialized");
 
+    // Get today's date in YYYY-MM-DD format
+    const today = new Date().toISOString().split('T')[0];
+
     const result = (await db.getFirstAsync(`
       SELECT MAX(kotNumber) as maxKot FROM kot_orders
-    `)) as any;
+      WHERE DATE(createdAt) = DATE(?)
+    `, [today])) as any;
 
     return (result?.maxKot || 0) + 1;
   }
@@ -271,6 +275,45 @@ class OrderService {
   async getHardcodedMenuItems(): Promise<MenuItem[]> {
     // Use the menuService for better menu management
     return await menuService.getHardcodedMenuItems();
+  }
+
+  async getRecentlyOrderedItems(limit: number = 10): Promise<MenuItem[]> {
+    if (!db) throw new Error("Database not initialized");
+
+    try {
+      const result = await db.getAllAsync(`
+        SELECT 
+          mi.id,
+          mi.name,
+          mi.category,
+          mi.price,
+          mi.isActive,
+          mi.createdAt,
+          mi.updatedAt,
+          COUNT(ki.id) as orderCount,
+          MAX(ko.createdAt) as lastOrdered
+        FROM menu_items mi
+        INNER JOIN kot_items ki ON mi.id = ki.itemId
+        INNER JOIN kot_orders ko ON ki.kotId = ko.id
+        WHERE mi.isActive = 1
+        GROUP BY mi.id, mi.name, mi.category, mi.price, mi.isActive, mi.createdAt, mi.updatedAt
+        ORDER BY MAX(ko.createdAt) DESC, COUNT(ki.id) DESC
+        LIMIT ?
+      `, [limit]);
+
+      return result.map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        category: row.category,
+        price: row.price,
+        isActive: row.isActive,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      }));
+    } catch (error) {
+      console.error("Error fetching recently ordered items:", error);
+      return [];
+    }
   }
 
   async getOrdersGroupedByDate(): Promise<
@@ -663,6 +706,76 @@ class OrderService {
 
     } catch (error) {
       console.error("Error processing EOD:", error);
+      throw error;
+    }
+  }
+
+  async getUnbilledOrders(): Promise<any[]> {
+    if (!db) throw new Error("Database not initialized");
+
+    try {
+      // Get all unbilled KOTs with customer information
+      const unbilledOrders = await db.getAllAsync(`
+        SELECT 
+          ko.id,
+          ko.kotNumber,
+          ko.customerId,
+          ko.createdAt,
+          c.name as customerName,
+          c.contact as customerContact,
+          COALESCE(SUM(ki.quantity * ki.priceAtTime), 0) as totalAmount,
+          COUNT(ki.id) as itemsCount
+        FROM kot_orders ko
+        LEFT JOIN customers c ON ko.customerId = c.id
+        LEFT JOIN kot_items ki ON ko.id = ki.kotId
+        WHERE ko.billId IS NULL
+        GROUP BY ko.id, ko.kotNumber, ko.customerId, ko.createdAt, c.name, c.contact
+        ORDER BY ko.createdAt ASC
+      `);
+
+      // Get items for each unbilled order
+      const ordersWithItems = await Promise.all(
+        unbilledOrders.map(async (order: any) => {
+          const items = await db!.getAllAsync(`
+            SELECT 
+              ki.id,
+              ki.kotId,
+              ki.itemId as menuItemId,
+              ki.quantity,
+              ki.priceAtTime as price,
+              (ki.quantity * ki.priceAtTime) as totalPrice,
+              mi.name as menuItemName
+            FROM kot_items ki
+            LEFT JOIN menu_items mi ON ki.itemId = mi.id
+            WHERE ki.kotId = ?
+            ORDER BY mi.name
+          `, [order.id]);
+
+          return {
+            id: order.id,
+            kotNumber: order.kotNumber,
+            customerId: order.customerId,
+            customerName: order.customerName,
+            customerContact: order.customerContact,
+            totalAmount: order.totalAmount || 0,
+            itemsCount: order.itemsCount || 0,
+            createdAt: order.createdAt,
+            items: items.map((item: any) => ({
+              id: item.id,
+              kotId: item.kotId,
+              menuItemId: item.menuItemId,
+              quantity: item.quantity,
+              price: item.price,
+              totalPrice: item.totalPrice,
+              menuItemName: item.menuItemName,
+            })),
+          };
+        })
+      );
+
+      return ordersWithItems;
+    } catch (error) {
+      console.error("Error fetching unbilled orders:", error);
       throw error;
     }
   }

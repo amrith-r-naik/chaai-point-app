@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { FABCategorySelector } from "../../components/FABCategorySelector";
 import { theme } from "../../constants/theme";
 import { MenuItem, orderService } from "../../services/orderService";
 import { orderState } from "../../state/orderState";
@@ -358,12 +359,14 @@ export default function SelectItemsScreen() {
   const router = useRouter();
   const orderStateData = use$(orderState);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [recentItems, setRecentItems] = useState<MenuItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const flatListRef = React.useRef<FlatList>(null);
 
   useEffect(() => {
     loadMenuItems();
+    loadRecentItems();
   }, []);
 
   const loadMenuItems = async () => {
@@ -372,6 +375,15 @@ export default function SelectItemsScreen() {
       setMenuItems(items);
     } catch (error) {
       console.error("Error loading menu items:", error);
+    }
+  };
+
+  const loadRecentItems = async () => {
+    try {
+      const items = await orderService.getRecentlyOrderedItems(8);
+      setRecentItems(items);
+    } catch (error) {
+      console.error("Error loading recent items:", error);
     }
   };
 
@@ -418,7 +430,15 @@ export default function SelectItemsScreen() {
     }
   };
 
-  const categories = ["All", "Tea", "Coffee", "Pasta", "Snacks", "Dessert"];
+  const categories = [
+    { name: "All", emoji: "🍽️" },
+    { name: "Tea", emoji: "🍵" },
+    { name: "Coffee", emoji: "☕" },
+    { name: "Pasta", emoji: "🍝" },
+    { name: "Snacks", emoji: "🍟" },
+    { name: "Dessert", emoji: "🍰" },
+    { name: "Beverage", emoji: "🥤" },
+  ];
 
   const filteredItems = menuItems.filter((item) => {
     const matchesSearch = item.name
@@ -548,22 +568,22 @@ export default function SelectItemsScreen() {
               data={categories}
               horizontal
               showsHorizontalScrollIndicator={false}
-              keyExtractor={(item) => item}
+              keyExtractor={(item) => item.name}
               renderItem={({ item: category }) => (
                 <TouchableOpacity
-                  onPress={() => setSelectedCategory(category)}
+                  onPress={() => setSelectedCategory(category.name)}
                   style={{
                     paddingHorizontal: 20,
                     paddingVertical: 10,
                     borderRadius: 20,
                     marginRight: 8,
                     backgroundColor:
-                      selectedCategory === category
+                      selectedCategory === category.name
                         ? theme.colors.primary
                         : "transparent",
                     borderWidth: 1,
                     borderColor:
-                      selectedCategory === category
+                      selectedCategory === category.name
                         ? theme.colors.primary
                         : "#e5e7eb",
                   }}
@@ -573,12 +593,12 @@ export default function SelectItemsScreen() {
                     style={{
                       fontWeight: "600",
                       color:
-                        selectedCategory === category
+                        selectedCategory === category.name
                           ? "white"
                           : theme.colors.textSecondary,
                     }}
                   >
-                    {category}
+                    {category.emoji} {category.name}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -629,6 +649,140 @@ export default function SelectItemsScreen() {
                   onPress={() => scrollToItem(selectedItem.item.id)}
                 />
               )}
+              contentContainerStyle={{ paddingHorizontal: 16 }}
+            />
+          </View>
+        )}
+
+        {/* Recently Ordered Items */}
+        {recentItems.length > 0 && !searchQuery && selectedCategory === "All" && (
+          <View
+            style={{
+              backgroundColor: "white",
+              paddingBottom: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: "#f3f4f6",
+            }}
+          >
+            <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "700",
+                  color: theme.colors.text,
+                }}
+              >
+                Recently Ordered ⚡
+              </Text>
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: theme.colors.textSecondary,
+                }}
+              >
+                Tap to quickly add to your order
+              </Text>
+            </View>
+
+            <FlatList
+              data={recentItems}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(item) => `recent-${item.id}`}
+              renderItem={({ item }) => {
+                const selectedQuantity = getSelectedQuantity(item.id);
+                const getCategoryEmoji = (category: string | null) => {
+                  if (!category) return "🍽️";
+                  switch (category.toLowerCase()) {
+                    case "tea":
+                      return "🍵";
+                    case "coffee":
+                      return "☕";
+                    case "pasta":
+                      return "🍝";
+                    case "snacks":
+                      return "🍟";
+                    case "dessert":
+                      return "🍰";
+                    case "beverage":
+                      return "🥤";
+                    default:
+                      return "🍽️";
+                  }
+                };
+
+                return (
+                  <TouchableOpacity
+                    onPress={() => handleSelectItem(item, selectedQuantity > 0 ? selectedQuantity + 1 : 1)}
+                    style={{
+                      backgroundColor: selectedQuantity > 0 ? theme.colors.primaryLight : "white",
+                      borderRadius: 12,
+                      padding: 12,
+                      marginRight: 12,
+                      minWidth: 100,
+                      borderWidth: selectedQuantity > 0 ? 2 : 1,
+                      borderColor: selectedQuantity > 0 ? theme.colors.primary : "#e5e7eb",
+                      alignItems: "center",
+                      shadowColor: "#000",
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.1,
+                      shadowRadius: 4,
+                      elevation: 2,
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={{ fontSize: 24, marginBottom: 4 }}>
+                      {getCategoryEmoji(item.category)}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: "600",
+                        color: selectedQuantity > 0 ? theme.colors.primary : theme.colors.text,
+                        textAlign: "center",
+                        marginBottom: 4,
+                      }}
+                      numberOfLines={2}
+                    >
+                      {item.name}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: "700",
+                        color: selectedQuantity > 0 ? theme.colors.primary : theme.colors.text,
+                      }}
+                    >
+                      ₹{item.price}
+                    </Text>
+                    {selectedQuantity > 0 && (
+                      <View
+                        style={{
+                          position: "absolute",
+                          top: -8,
+                          right: -8,
+                          backgroundColor: theme.colors.primary,
+                          borderRadius: 12,
+                          width: 24,
+                          height: 24,
+                          justifyContent: "center",
+                          alignItems: "center",
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: "white",
+                            fontWeight: "600",
+                            fontSize: 12,
+                          }}
+                        >
+                          {selectedQuantity}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
               contentContainerStyle={{ paddingHorizontal: 16 }}
             />
           </View>
@@ -703,6 +857,13 @@ export default function SelectItemsScreen() {
           )}
         </View>
       </View>
+
+      {/* FAB Category Selector */}
+      <FABCategorySelector
+        categories={categories}
+        selectedCategory={selectedCategory}
+        onCategorySelect={setSelectedCategory}
+      />
     </View>
   );
 }

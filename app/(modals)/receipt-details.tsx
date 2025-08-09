@@ -6,11 +6,11 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, FileText } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 export default function ReceiptDetailsScreen() {
@@ -286,7 +286,102 @@ export default function ReceiptDetailsScreen() {
           )}
         </View>
 
-        {/* KOT Details */}
+          {/* Split Payment Breakdown */}
+          {billDetails.splitPayments && billDetails.splitPayments.length > 0 && (
+            <View style={{ paddingHorizontal: 16, paddingVertical: 16 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
+                <Text style={{ fontSize: 20, marginRight: 8 }}>💳</Text>
+                <Text style={{
+                  fontSize: 18,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                }}>
+                  Payment Breakdown
+                </Text>
+              </View>
+
+              <View style={{
+                backgroundColor: "white",
+                borderRadius: 12,
+                padding: 16,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+                elevation: 2,
+              }}>
+                {billDetails.splitPayments.map((split: any, index: number) => (
+                  <View
+                    key={split.id}
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      paddingVertical: 12,
+                      borderBottomWidth: index < billDetails.splitPayments.length - 1 ? 1 : 0,
+                      borderBottomColor: "#f3f4f6",
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <View style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 4,
+                        backgroundColor: split.paymentType === "Credit" 
+                          ? "#f59e0b" 
+                          : split.paymentType === "Cash" 
+                            ? "#10b981" 
+                            : "#3b82f6",
+                        marginRight: 12,
+                      }} />
+                      <Text style={{
+                        fontSize: 16,
+                        fontWeight: "500",
+                        color: theme.colors.text,
+                      }}>
+                        {split.paymentType}
+                      </Text>
+                    </View>
+                    <Text style={{
+                      fontSize: 16,
+                      fontWeight: "600",
+                      color: theme.colors.text,
+                    }}>
+                      ₹{split.amount.toFixed(2)}
+                    </Text>
+                  </View>
+                ))}
+                
+                {/* Total */}
+                <View style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  paddingTop: 16,
+                  marginTop: 8,
+                  borderTopWidth: 2,
+                  borderTopColor: "#e5e7eb",
+                }}>
+                  <Text style={{
+                    fontSize: 16,
+                    fontWeight: "600",
+                    color: theme.colors.text,
+                  }}>
+                    Total Paid
+                  </Text>
+                  <Text style={{
+                    fontSize: 18,
+                    fontWeight: "700",
+                    color: theme.colors.text,
+                  }}>
+                    ₹{billDetails.receipt.amount.toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* KOT Details */}
         {billDetails.kots && billDetails.kots.length > 0 && (
           <View style={{ paddingHorizontal: 16, paddingVertical: 16 }}>
             <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>

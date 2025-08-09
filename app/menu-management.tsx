@@ -1,28 +1,27 @@
 import { theme } from "@/constants/theme";
 import { CreateMenuItemData, MenuItem, menuService } from "@/services/menuService";
 import { router } from "expo-router";
-import { ArrowLeft, Edit3, Filter, Plus, Trash2, X } from "lucide-react-native";
+import { ArrowLeft, Edit3, Plus, Trash2, X } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  FlatList,
-  Modal,
-  SafeAreaView,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
+import { FABCategorySelector } from "../components/FABCategorySelector";
 
 export default function MenuManagementScreen() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showMenuModal, setShowMenuModal] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [menuForm, setMenuForm] = useState({
@@ -32,23 +31,21 @@ export default function MenuManagementScreen() {
   });
 
   const categories = [
-    "All",
-    "Tea",
-    "Hot Cups",
-    "Mojito",
-    "Refreshers",
-    "Milkshakes",
-    "Maggie",
-    "Quick Bites",
-    "Sandwich",
-    "Burger",
-    "Omlette",
-    "Rolls",
-    "Momos",
-    "Cigarettes",
+    { name: "All", emoji: "🍽️" },
+    { name: "Tea", emoji: "🍵" },
+    { name: "Hot Cups", emoji: "☕" },
+    { name: "Mojito", emoji: "🥤" },
+    { name: "Refreshers", emoji: "🧊" },
+    { name: "Milkshakes", emoji: "🥛" },
+    { name: "Maggie", emoji: "🍜" },
+    { name: "Quick Bites", emoji: "🍪" },
+    { name: "Sandwich", emoji: "🥪" },
+    { name: "Burger", emoji: "🍔" },
+    { name: "Omlette", emoji: "🍳" },
+    { name: "Rolls", emoji: "🌯" },
+    { name: "Momos", emoji: "🥟" },
+    { name: "Cigarettes", emoji: "🚬" },
   ];
-
-  const fadeAnim = new Animated.Value(1);
 
   useEffect(() => {
     loadMenuItems();
@@ -79,15 +76,8 @@ export default function MenuManagementScreen() {
     }
   };
 
-  const handleCategorySelect = (category: string) => {
-    setSelectedCategory(category);
-    setShowCategoryModal(false);
-
-    // Animate the filter button
-    Animated.sequence([
-      Animated.timing(fadeAnim, { duration: 100, toValue: 0.5, useNativeDriver: true }),
-      Animated.timing(fadeAnim, { duration: 100, toValue: 1, useNativeDriver: true }),
-    ]).start();
+  const handleCategorySelect = (categoryName: string) => {
+    setSelectedCategory(categoryName);
   };
 
   const handleAddMenuItem = () => {
@@ -357,92 +347,14 @@ export default function MenuManagementScreen() {
         />
       )}
 
-      {/* Quick Floating Action Button for Categories */}
-      <Animated.View
-        style={{
-          position: "absolute",
-          bottom: 20,
-          right: 20,
-          opacity: fadeAnim,
-        }}
-      >
-        <TouchableOpacity
-          onPress={() => setShowCategoryModal(true)}
-          style={{
-            backgroundColor: theme.colors.primary,
-            width: 56,
-            height: 56,
-            borderRadius: 28,
-            justifyContent: "center",
-            alignItems: "center",
-            ...theme.shadows.lg,
-          }}
-        >
-          <Filter size={24} color="white" />
-        </TouchableOpacity>
-      </Animated.View>
+      {/* FAB Category Selector */}
+      <FABCategorySelector
+        categories={categories}
+        selectedCategory={selectedCategory}
+        onCategorySelect={handleCategorySelect}
+      />
 
-      {/* Category Filter Modal */}
-      <Modal
-        visible={showCategoryModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowCategoryModal(false)}
-      >
-        <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              borderBottomWidth: 1,
-              borderBottomColor: theme.colors.border,
-            }}
-          >
-            <Text style={{ fontSize: 18, fontWeight: "600", color: theme.colors.text }}>
-              Filter by Category
-            </Text>
-            <TouchableOpacity onPress={() => setShowCategoryModal(false)}>
-              <X size={24} color={theme.colors.text} />
-            </TouchableOpacity>
-          </View>
 
-          <ScrollView style={{ flex: 1, padding: 16 }} contentContainerStyle={{ paddingBottom: 32 }}>
-            {categories.map((category) => (
-              <TouchableOpacity
-                key={category}
-                onPress={() => handleCategorySelect(category)}
-                style={{
-                  paddingVertical: 16,
-                  paddingHorizontal: 20,
-                  borderRadius: 12,
-                  marginVertical: 4,
-                  backgroundColor: selectedCategory === category ? theme.colors.primaryLight : theme.colors.background,
-                  borderWidth: 1,
-                  borderColor: selectedCategory === category ? theme.colors.primary : theme.colors.border,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 16,
-                    fontWeight: selectedCategory === category ? "600" : "400",
-                    color: selectedCategory === category ? theme.colors.primary : theme.colors.text,
-                  }}
-                >
-                  {category}
-                  {category !== "All" && (
-                    <Text style={{ color: theme.colors.textSecondary, fontSize: 14 }}>
-                      {" "}({menuItems.filter(item => item.category === category).length})
-                    </Text>
-                  )}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
 
       {/* Menu Item Form Modal */}
       <Modal
@@ -539,27 +451,31 @@ export default function MenuManagementScreen() {
                   gap: 8,
                 }}
               >
-                {categories.filter(cat => cat !== "All").map((category) => (
+                {categories.filter(cat => cat.name !== "All").map((category) => (
                   <TouchableOpacity
-                    key={category}
-                    onPress={() => setMenuForm({ ...menuForm, category })}
+                    key={category.name}
+                    onPress={() => setMenuForm({ ...menuForm, category: category.name })}
                     style={{
                       paddingHorizontal: 12,
                       paddingVertical: 8,
                       borderRadius: 20,
-                      backgroundColor: menuForm.category === category ? theme.colors.primary : "#f3f4f6",
+                      backgroundColor: menuForm.category === category.name ? theme.colors.primary : "#f3f4f6",
                       borderWidth: 1,
-                      borderColor: menuForm.category === category ? theme.colors.primary : "#e5e7eb",
+                      borderColor: menuForm.category === category.name ? theme.colors.primary : "#e5e7eb",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
                     }}
                   >
+                    <Text style={{ fontSize: 16 }}>{category.emoji}</Text>
                     <Text
                       style={{
                         fontSize: 14,
-                        color: menuForm.category === category ? "white" : theme.colors.text,
-                        fontWeight: menuForm.category === category ? "600" : "400",
+                        color: menuForm.category === category.name ? "white" : theme.colors.text,
+                        fontWeight: menuForm.category === category.name ? "600" : "400",
                       }}
                     >
-                      {category}
+                      {category.name}
                     </Text>
                   </TouchableOpacity>
                 ))}

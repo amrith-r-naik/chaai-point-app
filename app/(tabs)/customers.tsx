@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui';
 import { formatCurrency } from "@/lib/money";
 import { getAllCustomers, searchCustomers } from "@/services/customerService";
 import { orderService } from "@/services/orderService";
@@ -20,6 +21,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+// Simplified: remove bulky EOD status card – minimal inline button
+import { eodService } from '@/services/eodService';
 
 interface Customer {
   id: string;
@@ -63,9 +66,45 @@ export default function CustomersScreen() {
   const [dateGroups, setDateGroups] = useState<OrdersGroupedByDate>({});
   const [completedBills, setCompletedBills] = useState<CompletedBillsGroupedByDate>({});
   const [isProcessingEOD, setIsProcessingEOD] = useState(false);
+  const [unbilledCount, setUnbilledCount] = useState(0);
+  const [unbilledAmount, setUnbilledAmount] = useState(0);
   const customerStateData = use$(customerState);
   const auth = use$(authState);
   const router = useRouter();
+
+  // Helper to render credit badge (only if >0)
+  const renderCreditBadge = (creditAmount?: number) => {
+    if (!creditAmount || creditAmount <= 0) return null;
+    return <Badge variant="warning" size="sm">CR ₹{creditAmount}</Badge>;
+  };
+
+  // Minimal EOD stats load (admins only)
+  const loadMiniEod = useCallback(async () => {
+    try {
+      if (!auth.isDbReady) return;
+      if (!auth.user || (auth.user.role || '').toLowerCase() !== 'admin') return;
+      const [cnt, amt] = await Promise.all([
+        eodService.getUnbilledKotCount(),
+        eodService.getUnbilledKotAmount()
+      ]);
+      setUnbilledCount(cnt);
+      setUnbilledAmount(amt);
+    } catch { }
+  }, [auth.isDbReady, auth.user]);
+
+  useEffect(() => { loadMiniEod(); }, [loadMiniEod, dateGroups]);
+
+  const quickRunEod = async () => {
+    try {
+      setIsProcessingEOD(true);
+      await eodService.processEndOfDay();
+      await Promise.all([loadOrdersData(), loadMiniEod()]);
+    } catch (e) {
+      console.error('EOD failed', e);
+    } finally {
+      setIsProcessingEOD(false);
+    }
+  };
 
   const loadOrdersData = useCallback(async () => {
     try {
@@ -590,16 +629,16 @@ export default function CustomersScreen() {
             )}
           </View>
 
-          {/* Date Statistics */}
-          <View className="flex-row items-center">
+          {/* Date Statistics (simple pills) */}
+          <View className="flex-row items-center mt-1">
             <View className="bg-white px-3 py-1.5 rounded-full mr-2 shadow-sm">
               <Text className="text-gray-700 text-xs font-medium">
-                {customers.length} customer{customers.length !== 1 ? "s" : ""}
+                {customers.length} {customers.length === 1 ? 'customer' : 'customers'}
               </Text>
             </View>
             <View className="bg-white px-3 py-1.5 rounded-full mr-2 shadow-sm">
               <Text className="text-gray-700 text-xs font-medium">
-                {totalOrders} order{totalOrders !== 1 ? "s" : ""}
+                {totalOrders} {totalOrders === 1 ? 'order' : 'orders'}
               </Text>
             </View>
             <View className="bg-white px-3 py-1.5 rounded-full shadow-sm">
@@ -644,9 +683,12 @@ export default function CustomersScreen() {
                     <Text className="text-white font-bold text-base">{getCustomerInitials(customerData.customer.name)}</Text>
                   </View>
                   <View className="flex-1">
-                    <Text className="text-gray-900 font-semibold text-base mb-1">
-                      {customerData.customer.name}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <Text className="text-gray-900 font-semibold text-base mb-1 mr-2">
+                        {customerData.customer.name}
+                      </Text>
+                      {renderCreditBadge((customerData as any).creditAmount || 0)}
+                    </View>
                     {customerData.customer.contact && (
                       <Text className="text-gray-500 text-sm">{customerData.customer.contact}</Text>
                     )}
@@ -818,18 +860,19 @@ export default function CustomersScreen() {
       {/* Enhanced Header */}
       <View className="bg-white shadow-sm">
         <View className="px-4 py-4">
-          <View className="flex-row items-center justify-between mb-4">
-            <View>
-              <Text className="text-2xl font-bold text-gray-900">
-                Customers
-              </Text>
-              <Text className="text-gray-500 text-sm mt-1">
-                Manage your customer orders and billing
-              </Text>
-            </View>
-            <TouchableOpacity className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center">
-              <Text className="text-gray-600 text-lg">⚙️</Text>
-            </TouchableOpacity>
+          <View className="flex-row items-center justify-between mb-3">
+            <Text className="text-2xl font-bold text-gray-900">Customers</Text>
+            {auth.user && (auth.user.role || '').toLowerCase() === 'admin' && unbilledCount > 0 && (
+              <TouchableOpacity
+                onPress={quickRunEod}
+                disabled={isProcessingEOD}
+                className={`px-3 py-2 rounded-full ${isProcessingEOD ? 'bg-gray-400' : 'bg-red-500'}`}
+              >
+                <Text className="text-white text-xs font-semibold">
+                  {isProcessingEOD ? 'EOD…' : `EOD ${unbilledCount}/${formatCurrency(unbilledAmount)}`}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Enhanced Search Bar */}
@@ -956,97 +999,41 @@ export default function CustomersScreen() {
             }
           >
             {isAllTab ? (
-              // Render enhanced customer list for "All" tab with payment statistics
-              <View className="px-4 pt-4">
-                {allCustomers.map((customer, index) =>
+              // Simplified single-row customer list for "All" tab
+              <View className="px-4 pt-2">
+                {allCustomers.map((customer, index) => (
                   <TouchableOpacity
-                    key={`enhanced-${customer.id}-${index}`}
-                    className="mb-4 bg-white rounded-lg overflow-hidden shadow-sm"
-                    activeOpacity={0.7}
+                    key={`all-${customer.id}-${index}`}
+                    className="flex-row items-center py-3 border-b border-gray-100"
+                    activeOpacity={0.6}
                     onPress={() => {
                       router.push({
                         pathname: "/customer-details",
-                        params: {
-                          customerId: customer.id,
-                          customerName: customer.name,
-                        }
+                        params: { customerId: customer.id, customerName: customer.name }
                       });
                     }}
                   >
-                    {/* Customer Header */}
-                    <View className="flex-row items-center px-4 py-4 border-b border-gray-100">
-                      <View
-                        className={`w-12 h-12 rounded-full ${getAvatarColor(customer.name)} items-center justify-center mr-4 shadow-sm`}
-                      >
-                        <Text className="text-white font-bold text-base">{getCustomerInitials(customer.name)}</Text>
-                      </View>
-                      <View className="flex-1">
-                        <Text className="text-gray-900 font-semibold text-lg mb-1">
-                          {customer.name}
-                        </Text>
-                        {customer.contact && (
-                          <Text className="text-gray-500 text-sm">{customer.contact}</Text>
-                        )}
-                      </View>
-                      <Text className="text-gray-400 text-xs">
-                        Tap for details →
-                      </Text>
+                    <View
+                      className={`w-10 h-10 rounded-full ${getAvatarColor(customer.name)} items-center justify-center mr-3`}
+                    >
+                      <Text className="text-white font-bold text-sm">{getCustomerInitials(customer.name)}</Text>
                     </View>
-
-                    {/* Payment Statistics */}
-                    {customer.totalOrders && customer.totalOrders > 0 ? (
-                      <View className="px-4 py-3">
-                        {/* Total Orders and Amount */}
-                        <View className="flex-row items-center justify-between mb-3">
-                          <Text className="text-gray-600 font-medium">Total Orders</Text>
-                          <View className="flex-row items-center">
-                            <Text className="text-gray-900 font-semibold mr-2">
-                              {customer.totalOrders}
-                            </Text>
-                            <Text className="text-gray-900 font-bold">
-                              {formatCurrency(customer.totalAmount || 0)}
-                            </Text>
-                          </View>
+                    <View className="flex-1 flex-row items-center">
+                      <Text className="text-gray-900 font-medium" numberOfLines={1}>{customer.name}</Text>
+                      {customer.creditAmount > 0 && (
+                        <View className="ml-2 bg-orange-100 px-2 py-0.5 rounded-full">
+                          <Text className="text-[10px] font-semibold text-orange-700">CR {formatCurrency(customer.creditAmount || 0)}</Text>
                         </View>
-
-                        {/* Paid vs Credit Breakdown */}
-                        <View className="flex-row justify-between">
-                          {/* Paid Orders */}
-                          <View className="flex-1 mr-2">
-                            <View className="bg-green-50 p-3 rounded-lg border border-green-200">
-                              <Text className="text-green-700 text-xs font-medium mb-1">Paid Orders</Text>
-                              <Text className="text-green-900 font-semibold text-sm">
-                                {customer.paidOrders} orders
-                              </Text>
-                              <Text className="text-green-900 font-bold">
-                                {formatCurrency(customer.paidAmount || 0)}
-                              </Text>
-                            </View>
-                          </View>
-
-                          {/* Credit Orders */}
-                          <View className="flex-1 ml-2">
-                            <View className="bg-orange-50 p-3 rounded-lg border border-orange-200">
-                              <Text className="text-orange-700 text-xs font-medium mb-1">Credit Orders</Text>
-                              <Text className="text-orange-900 font-semibold text-sm">
-                                {customer.creditOrders} orders
-                              </Text>
-                              <Text className="text-orange-900 font-bold">
-                                {formatCurrency(customer.creditAmount || 0)}
-                              </Text>
-                            </View>
-                          </View>
-                        </View>
-                      </View>
-                    ) : (
-                      <View className="px-4 py-3">
-                        <Text className="text-gray-500 text-center text-sm">
-                          No orders yet
-                        </Text>
-                      </View>
+                      )}
+                    </View>
+                    {(customer.totalAmount || 0) > 0 && (
+                      <Text className="ml-2 text-sm font-semibold text-gray-700">
+                        {formatCurrency(customer.totalAmount || 0)}
+                      </Text>
                     )}
+                    <Text className="ml-2 text-gray-300">›</Text>
                   </TouchableOpacity>
-                )}
+                ))}
               </View>
             ) : isCompletedTab ? (
               // Render completed bills grouped by date

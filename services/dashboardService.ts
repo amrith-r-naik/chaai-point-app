@@ -1,4 +1,5 @@
 import { db } from "../lib/db";
+import { dueService } from "./dueService";
 
 export interface DashboardStats {
   totalOrders: number;
@@ -98,11 +99,13 @@ class DashboardService {
   private async getTotalRevenue(startDate: string, endDate: string): Promise<number> {
     if (!db) throw new Error("Database not initialized");
     
+    // Use the new due service logic - only count revenue from paid orders (with billId)
     const result = await db.getFirstAsync(
       `SELECT COALESCE(SUM(ki.quantity * ki.priceAtTime), 0) as revenue 
        FROM kot_items ki
        JOIN kot_orders ko ON ki.kotId = ko.id
-       WHERE date(ko.createdAt) BETWEEN ? AND ?`,
+       WHERE ko.billId IS NOT NULL 
+         AND date(ko.createdAt) BETWEEN ? AND ?`,
       [startDate, endDate]
     ) as any;
     
@@ -112,20 +115,8 @@ class DashboardService {
   private async getPendingDues(): Promise<number> {
     if (!db) throw new Error("Database not initialized");
     
-    // For now, return 0 for pending dues since we're focusing on orders and expenses
-    // In the future, this can be enhanced when payment tracking is fully implemented
-    const totalRevenue = await db.getFirstAsync(
-      `SELECT COALESCE(SUM(ki.quantity * ki.priceAtTime), 0) as revenue 
-       FROM kot_items ki
-       JOIN kot_orders ko ON ki.kotId = ko.id`
-    ) as any;
-    
-    const totalPaid = await db.getFirstAsync(
-      `SELECT COALESCE(SUM(amount), 0) as paid FROM payments`
-    ) as any;
-    
-    const pendingDues = (totalRevenue?.revenue || 0) - (totalPaid?.paid || 0);
-    return Math.max(0, pendingDues);
+    // Use the new due service to get actual pending dues
+    return await dueService.getTotalPendingDues();
   }
 
   private async getTotalExpenses(startDate: string, endDate: string): Promise<number> {
@@ -151,7 +142,8 @@ class DashboardService {
          COUNT(DISTINCT ko.id) as orders
        FROM kot_orders ko
        LEFT JOIN kot_items ki ON ko.id = ki.kotId
-       WHERE date(ko.createdAt) >= date('now', '-${days} days')
+       WHERE ko.billId IS NOT NULL 
+         AND date(ko.createdAt) >= date('now', '-${days} days')
        GROUP BY date(ko.createdAt)
        ORDER BY date(ko.createdAt) DESC`
     ) as any[];

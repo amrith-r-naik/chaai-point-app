@@ -23,7 +23,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 interface Customer {
   id: string;
   name: string;
-  contact: string | null;
+  contact?: string;
   createdAt: string;
   updatedAt: string;
   // Enhanced fields for payment tracking
@@ -63,10 +63,10 @@ interface CompletedBillGroup {
     receiptNo: string;
     customerId: string;
     customerName: string;
-    customerContact: string | null;
+    customerContact?: string;
     amount: number;
     mode: string;
-    remarks: string | null;
+    remarks?: string;
     createdAt: string;
   }>;
 }
@@ -78,8 +78,8 @@ export default function CustomersScreen() {
   const [activeTab, setActiveTab] = useState<TabType>("active");
   const [refreshing, setRefreshing] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const [dateGroups, setDateGroups] = useState<Record<string, DateGroup>>({});
-  const [completedBills, setCompletedBills] = useState<Record<string, CompletedBillGroup>>({});
+  const [dateGroups, setDateGroups] = useState<any>({});
+  const [completedBills, setCompletedBills] = useState<any>({});
   const [isProcessingEOD, setIsProcessingEOD] = useState(false);
   const customerStateData = use$(customerState);
   const auth = use$(authState);
@@ -109,7 +109,7 @@ export default function CustomersScreen() {
 
   const loadCustomersWithStats = useCallback(async () => {
     try {
-      if (!auth.isDbReady) return;
+      if (!auth.isDbReady) return [];
 
       const customers = searchQuery.trim()
         ? await searchCustomers(searchQuery.trim())
@@ -313,9 +313,22 @@ export default function CustomersScreen() {
     }
   }, [handleRefresh]);
 
-  // Set up automatic EOD check
+  // Set up automatic EOD check - optimized to check less frequently
   useEffect(() => {
-    const interval = setInterval(checkAutoEOD, 60000); // Check every minute
+    const checkAutoEODOptimized = async () => {
+      const now = new Date();
+      const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000)); // Convert to IST
+      const hours = istTime.getHours();
+      const minutes = istTime.getMinutes();
+      
+      // Only run the actual check if we're close to 11:30 PM
+      if (hours === 23 && minutes >= 25 && minutes <= 35) {
+        await checkAutoEOD();
+      }
+    };
+
+    // Check every 5 minutes for better performance
+    const interval = setInterval(checkAutoEODOptimized, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [checkAutoEOD]);
 
@@ -393,7 +406,7 @@ export default function CustomersScreen() {
   };
 
   // Enhanced tab statistics function
-  const getTabStats = (data: typeof dateGroups) => {
+  const getTabStats = (data: any) => {
     const activeCustomers = new Set<string>();
     const completedCustomers = new Set<string>();
     const allCustomers = new Set<string>();
@@ -403,8 +416,8 @@ export default function CustomersScreen() {
     let activeAmount = 0;
     let completedAmount = 0;
 
-    Object.values(data).forEach((group) => {
-      Object.values(group.customers).forEach((customerData) => {
+    Object.values(data).forEach((group: any) => {
+      Object.values(group.customers || {}).forEach((customerData: any) => {
         allCustomers.add(customerData.customer.id);
 
         if (customerData.hasActiveOrders) {
@@ -422,17 +435,17 @@ export default function CustomersScreen() {
     });
 
     // Also count completed bills for more accurate completed stats
-    Object.values(completedBills).forEach((group) => {
-      group.bills.forEach((bill) => {
+    Object.values(completedBills).forEach((group: any) => {
+      (group.bills || []).forEach((bill: any) => {
         completedCustomers.add(bill.customerId);
       });
     });
 
     // Get actual completed amounts and counts from bills data
     const completedBillStats = Object.values(completedBills).reduce(
-      (acc, group) => {
-        acc.count += group.bills.length;
-        acc.amount += group.bills.reduce((sum, bill) => sum + bill.amount, 0);
+      (acc: { count: number; amount: number }, group: any) => {
+        acc.count += (group.bills || []).length;
+        acc.amount += (group.bills || []).reduce((sum: number, bill: any) => sum + bill.amount, 0);
         return acc;
       },
       { count: 0, amount: 0 }
@@ -481,10 +494,10 @@ export default function CustomersScreen() {
   const getFilteredData = () => {
     if (activeTab === "completed") {
       // For completed tab, return completed bills data
-      const filtered: typeof completedBills = {};
+      const filtered: any = {};
 
-      Object.entries(completedBills).forEach(([date, group]) => {
-        const filteredBills = group.bills.filter((bill) => {
+      Object.entries(completedBills).forEach(([date, group]: [string, any]) => {
+        const filteredBills = (group.bills || []).filter((bill: any) => {
           if (searchQuery.trim()) {
             return (
               bill.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -508,7 +521,7 @@ export default function CustomersScreen() {
 
     if (activeTab === "all") {
       // For "All" tab, show all customers regardless of orders
-      return customerStateData.customers.filter((customer) => {
+      return customerStateData.customers.filter((customer: any) => {
         if (searchQuery.trim()) {
           return (
             customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -519,13 +532,13 @@ export default function CustomersScreen() {
       });
     } else {
       // For "Active" tab, use date groups
-      const filtered: typeof dateGroups = {};
+      const filtered: any = {};
 
-      Object.entries(dateGroups).forEach(([date, group]) => {
-        const filteredCustomers: typeof group.customers = {};
+      Object.entries(dateGroups).forEach(([date, group]: [string, any]) => {
+        const filteredCustomers: any = {};
 
-        Object.entries(group.customers).forEach(
-          ([customerId, customerData]) => {
+        Object.entries(group.customers || {}).forEach(
+          ([customerId, customerData]: [string, any]) => {
             // Apply search filter
             if (searchQuery.trim()) {
               const matchesSearch =
@@ -556,10 +569,10 @@ export default function CustomersScreen() {
     }
   };
 
-  const renderDateSection = (date: string, group: DateGroup) => {
-    const customers = Object.values(group.customers);
+  const renderDateSection = (date: string, group: any) => {
+    const customers = Object.values(group.customers || {});
     const totalAmount = customers.reduce(
-      (sum, customerData) => sum + (
+      (sum: number, customerData: any) => sum + (
         activeTab === "active"
           ? customerData.activeAmount
           : activeTab === "completed"
@@ -569,7 +582,7 @@ export default function CustomersScreen() {
       0
     );
     const totalOrders = customers.reduce(
-      (sum, customerData) => sum + (
+      (sum: number, customerData: any) => sum + (
         activeTab === "active"
           ? customerData.activeOrderCount
           : activeTab === "completed"
@@ -590,26 +603,28 @@ export default function CustomersScreen() {
             <Text className="text-lg font-bold text-gray-900">
               {group.displayDate}
             </Text>
-            {shouldShowEOD(group.date) && (
-              <TouchableOpacity
-                className={`px-4 py-2 rounded-full shadow-sm ${isProcessingEOD ? 'bg-gray-400' : 'bg-red-500'}`}
-                onPress={() => handleEOD(group.date)}
-                disabled={isProcessingEOD}
-              >
-                <Text className="text-white font-semibold text-sm">
-                  {isProcessingEOD ? 'Processing...' : 'EOD'}
-                </Text>
-              </TouchableOpacity>
-            )}
+            <View className="flex-row items-center">
+              {shouldShowEOD(group.date) && (
+                <TouchableOpacity
+                  className={`px-4 py-2 rounded-full shadow-sm mr-2 ${isProcessingEOD ? 'bg-gray-400' : 'bg-red-500'}`}
+                  onPress={() => handleEOD(group.date)}
+                  disabled={isProcessingEOD}
+                >
+                  <Text className="text-white font-semibold text-sm">
+                    {isProcessingEOD ? 'Processing...' : 'EOD'}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
-            {/* Show auto-EOD indicator for today */}
-            {group.date === new Date().toISOString().split('T')[0] && (
-              <View className="px-3 py-1 rounded-full bg-blue-100 border border-blue-300">
-                <Text className="text-blue-700 text-xs font-medium">
-                  Auto-EOD: 11:30 PM
-                </Text>
-              </View>
-            )}
+              {/* Show auto-EOD indicator for today */}
+              {group.date === new Date().toISOString().split('T')[0] && (
+                <View className="px-3 py-1 rounded-full bg-blue-100 border border-blue-300">
+                  <Text className="text-blue-700 text-xs font-medium">
+                    Auto-EOD: 11:30 PM
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
 
           {/* Date Statistics */}
@@ -634,7 +649,7 @@ export default function CustomersScreen() {
 
         {/* Customers for this date */}
         <View>
-          {customers.map((customerData: CustomerData, index) =>
+          {customers.map((customerData: any, index) =>
             <TouchableOpacity
               key={`customer-${customerData.customer.id}-${index}`}
               onPress={() => {
@@ -719,9 +734,9 @@ export default function CustomersScreen() {
     );
   };
 
-  const renderCompletedBillDateSection = (date: string, group: CompletedBillGroup) => {
-    const bills = group.bills;
-    const totalAmount = bills.reduce((sum, bill) => sum + bill.amount, 0);
+  const renderCompletedBillDateSection = (date: string, group: any) => {
+    const bills = group.bills || [];
+    const totalAmount = bills.reduce((sum: number, bill: any) => sum + bill.amount, 0);
 
     return (
       <View
@@ -753,7 +768,7 @@ export default function CustomersScreen() {
 
         {/* Bills for this date */}
         <View className="pb-40 w-full">
-          {bills.map((bill, index) =>
+          {bills.map((bill: any, index: number) =>
             <TouchableOpacity
               key={`bill-${bill.id}-${index}`}
               onPress={() => {
@@ -805,14 +820,16 @@ export default function CustomersScreen() {
         </View>
       </View>
     );
-  }; const filteredData = getFilteredData();
+  };
+  
+  const filteredData = getFilteredData();
   const isAllTab = activeTab === "all";
   const isCompletedTab = activeTab === "completed";
   const filteredDateGroups = isAllTab || isCompletedTab
     ? {}
-    : (filteredData as typeof dateGroups);
+    : (filteredData as any);
   const allCustomers = isAllTab ? (filteredData as any[]) : [];
-  const completedBillGroups = isCompletedTab ? (filteredData as typeof completedBills) : {};
+  const completedBillGroups = isCompletedTab ? (filteredData as any) : {};
   const sortedDates = isAllTab
     ? []
     : isCompletedTab

@@ -45,9 +45,13 @@ class PaymentService {
   private async getNextReceiptNumber(): Promise<string> {
     if (!db) throw new Error("Database not initialized");
     
+    // Get current year
+    const currentYear = new Date().getFullYear();
+    
     const result = await db.getFirstAsync(`
       SELECT MAX(receiptNo) as maxReceiptNo FROM receipts
-    `) as { maxReceiptNo: number | null };
+      WHERE strftime('%Y', createdAt) = ?
+    `, [currentYear.toString()]) as { maxReceiptNo: number | null };
     
     const nextNumber = (result?.maxReceiptNo || 0) + 1;
     return nextNumber.toString().padStart(6, '0');
@@ -56,9 +60,13 @@ class PaymentService {
   private async getNextBillNumber(): Promise<string> {
     if (!db) throw new Error("Database not initialized");
     
+    // Get current year
+    const currentYear = new Date().getFullYear();
+    
     const result = await db.getFirstAsync(`
       SELECT MAX(billNumber) as maxBillNumber FROM bills
-    `) as { maxBillNumber: number | null };
+      WHERE strftime('%Y', createdAt) = ?
+    `, [currentYear.toString()]) as { maxBillNumber: number | null };
     
     const nextNumber = (result?.maxBillNumber || 0) + 1;
     return nextNumber.toString().padStart(6, '0');
@@ -86,6 +94,11 @@ class PaymentService {
 
   async processPayment(paymentData: PaymentProcessData): Promise<{ receipt: Receipt; bill: Bill }> {
     if (!db) throw new Error("Database not initialized");
+
+    // Handle Credit payment separately - just add to dues without creating bill
+    if (paymentData.paymentType === "Credit") {
+      return this.processCreditPayment(paymentData);
+    }
 
     try {
       // Start transaction
@@ -115,6 +128,15 @@ class PaymentService {
 
       // Process payments based on type
       if (paymentData.paymentType === "Split" && paymentData.splitPayments) {
+        // Store split payment details
+        for (const split of paymentData.splitPayments) {
+          const splitId = uuid.v4() as string;
+          await db.runAsync(`
+            INSERT INTO split_payments (id, receiptId, paymentType, amount, createdAt)
+            VALUES (?, ?, ?, ?, ?)
+          `, [splitId, receipt.id, split.type, split.amount, receipt.createdAt]);
+        }
+
         // Create individual payment records for each split
         for (const split of paymentData.splitPayments) {
           if (split.type !== "Credit") {
@@ -203,6 +225,41 @@ class PaymentService {
         AND billId IS NULL 
         AND DATE(createdAt) = DATE(?)
     `, [billId, customerId, dateToUse]);
+  }
+
+  private async processCreditPayment(paymentData: PaymentProcessData): Promise<{ receipt: Receipt; bill: Bill }> {
+    if (!db) throw new Error("Database not initialized");
+
+    // For credit payments, we create a receipt but no bill (KOTs remain unbilled = dues)
+    const receiptNo = await this.getNextReceiptNumber();
+    
+    const receipt: Receipt = {
+      id: uuid.v4() as string,
+      receiptNo,
+      customerId: paymentData.customerId,
+      amount: paymentData.totalAmount, // Store in rupees (direct KOT total)
+      mode: "Credit",
+      remarks: (paymentData.remarks || "") + " (Credit - Amount added to dues)",
+      createdAt: new Date().toISOString(),
+    };
+
+    await db.runAsync(`
+      INSERT INTO receipts (id, receiptNo, customerId, amount, mode, remarks, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [receipt.id, receipt.receiptNo, receipt.customerId, receipt.amount, receipt.mode, receipt.remarks, receipt.createdAt]);
+
+    // Create a dummy bill for receipt display purposes
+    const dummyBill: Bill = {
+      id: "credit-bill-" + receipt.id,
+      billNumber: "CREDIT",
+      customerId: paymentData.customerId,
+      total: paymentData.totalAmount, // Store in rupees (direct KOT total)
+      createdAt: new Date().toISOString(),
+    };
+
+    // KOTs remain unbilled (billId stays NULL) so they count as dues
+    
+    return { receipt, bill: dummyBill };
   }
 
   private async updateCustomerCredit(customerId: string, amount: number): Promise<void> {
@@ -360,6 +417,7 @@ class PaymentService {
     receipt: Receipt;
     customer: any;
     kots: any[];
+    splitPayments?: any[];
   } | null> {
     if (!db) throw new Error("Database not initialized");
 
@@ -371,6 +429,12 @@ class PaymentService {
     const customer = await db.getFirstAsync(`
       SELECT * FROM customers WHERE id = ?
     `, [receipt.customerId]) as any;
+
+    // Get split payment details
+    const splitPayments = await db.getAllAsync(`
+      SELECT * FROM split_payments WHERE receiptId = ?
+      ORDER BY createdAt
+    `, [receiptId]) as any[];
 
     // Get related bill
     const bill = await db.getFirstAsync(`
@@ -409,7 +473,25 @@ class PaymentService {
       receipt,
       customer,
       kots,
+      splitPayments: splitPayments.length > 0 ? splitPayments : undefined,
     };
+  }
+
+  async getCustomerReceipts(customerId: string): Promise<any[]> {
+    if (!db) throw new Error("Database not initialized");
+
+    try {
+      const receipts = await db.getAllAsync(`
+        SELECT * FROM receipts 
+        WHERE customerId = ?
+        ORDER BY createdAt DESC
+      `, [customerId]) as any[];
+
+      return receipts;
+    } catch (error) {
+      console.error("Error fetching customer receipts:", error);
+      return [];
+    }
   }
 }
 

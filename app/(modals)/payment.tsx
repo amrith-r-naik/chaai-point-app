@@ -1,11 +1,11 @@
-import { PaymentTypeModal } from "@/components/payment/PaymentTypeModal";
 import { SplitPaymentModal } from "@/components/payment/SplitPaymentModal";
 import { theme } from "@/constants/theme";
 import { usePaymentState } from "@/hooks/usePaymentState";
+import { PaymentType } from "@/types/payment";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft } from "lucide-react-native";
+import { ArrowLeft, CreditCard, DollarSign, QrCode, Split } from "lucide-react-native";
 import React from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function PaymentScreen() {
@@ -38,9 +38,36 @@ export default function PaymentScreen() {
     validatePayment,
   } = usePaymentState({ totalAmount: total });
 
+  const paymentOptions: { type: PaymentType; label: string; icon: React.ReactNode; color: string }[] = [
+    { 
+      type: "Cash", 
+      label: "Cash Payment", 
+      icon: <DollarSign size={24} color="#16a34a" />, 
+      color: "#16a34a" 
+    },
+    { 
+      type: "UPI", 
+      label: "UPI Payment", 
+      icon: <QrCode size={24} color="#2563eb" />, 
+      color: "#2563eb" 
+    },
+    { 
+      type: "Credit", 
+      label: "Credit Payment", 
+      icon: <CreditCard size={24} color="#dc2626" />, 
+      color: "#dc2626" 
+    },
+    { 
+      type: "Split", 
+      label: "Split Payment", 
+      icon: <Split size={24} color="#7c3aed" />, 
+      color: "#7c3aed" 
+    },
+  ];
+
   const handleProceed = () => {
     if (!validatePayment()) {
-      // TODO: Show error message
+      Alert.alert("Invalid Payment", "Please select a valid payment method.");
       return;
     }
 
@@ -86,66 +113,102 @@ export default function PaymentScreen() {
         }}
       />
 
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 16 }}>
-        <Text style={{
-          fontSize: 24,
-          fontWeight: "600",
-          color: theme.colors.text,
-          marginBottom: 8,
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+        {/* Bill Summary */}
+        <View style={{
+          backgroundColor: "white",
+          padding: 24,
+          borderRadius: 16,
+          marginBottom: 24,
+          alignItems: "center",
+          ...theme.shadows.sm,
         }}>
-          Bill Total: ₹{total.toFixed(2)}
-        </Text>
-        <Text style={{
-          fontSize: 16,
-          color: theme.colors.textSecondary,
-          marginBottom: 32,
-        }}>
-          Select payment method
-        </Text>
-
-        {selectedPaymentType && selectedPaymentType !== "Split" && (
-          <View style={{
-            backgroundColor: "white",
-            padding: 24,
-            borderRadius: 16,
-            width: "100%",
-            alignItems: "center",
+          <Text style={{
+            fontSize: 16,
+            color: theme.colors.textSecondary,
+            marginBottom: 8,
           }}>
-            <Text style={{
-              fontSize: 18,
-              fontWeight: "600",
-              color: theme.colors.text,
-              marginBottom: 16,
-            }}>
-              Payment Method: {selectedPaymentType}
-            </Text>
+            {customerName}
+          </Text>
+          <Text style={{
+            fontSize: 32,
+            fontWeight: "700",
+            color: theme.colors.text,
+            marginBottom: 4,
+          }}>
+            ₹{total.toFixed(2)}
+          </Text>
+          <Text style={{
+            fontSize: 14,
+            color: theme.colors.textSecondary,
+          }}>
+            Total Amount
+          </Text>
+        </View>
+
+        {/* Payment Options */}
+        <View style={{
+          backgroundColor: "white",
+          borderRadius: 16,
+          padding: 16,
+          marginBottom: 24,
+          ...theme.shadows.sm,
+        }}>
+          <Text style={{
+            fontSize: 18,
+            fontWeight: "600",
+            color: theme.colors.text,
+            marginBottom: 16,
+          }}>
+            Select Payment Method
+          </Text>
+          
+          {paymentOptions.map((option) => (
             <TouchableOpacity
-              onPress={handleProceed}
+              key={option.type}
+              onPress={() => handlePaymentTypeSelect(option.type)}
               style={{
-                backgroundColor: "black",
-                paddingVertical: 16,
-                paddingHorizontal: 32,
+                flexDirection: "row",
+                alignItems: "center",
+                padding: 16,
                 borderRadius: 12,
+                borderWidth: 2,
+                borderColor: selectedPaymentType === option.type ? option.color : "#e5e7eb",
+                backgroundColor: selectedPaymentType === option.type ? `${option.color}10` : "#f9fafb",
+                marginBottom: 12,
               }}
             >
-              <Text style={{
-                color: "white",
-                fontSize: 16,
-                fontWeight: "600",
+              <View style={{
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                backgroundColor: selectedPaymentType === option.type ? option.color : "#f3f4f6",
+                justifyContent: "center",
+                alignItems: "center",
+                marginRight: 16,
               }}>
-                PROCEED
+                {option.icon}
+              </View>
+              <Text style={{
+                fontSize: 16,
+                fontWeight: selectedPaymentType === option.type ? "600" : "500",
+                color: selectedPaymentType === option.type ? option.color : theme.colors.text,
+                flex: 1,
+              }}>
+                {option.label}
               </Text>
             </TouchableOpacity>
-          </View>
-        )}
+          ))}
+        </View>
 
-        {selectedPaymentType === "Split" && !showSplitPayment && (
+        {/* Split Payment Summary */}
+        {selectedPaymentType === "Split" && splitPayments.length > 0 && (
           <View style={{
             backgroundColor: "white",
-            padding: 24,
             borderRadius: 16,
-            width: "100%",
-            alignItems: "center",
+            padding: 16,
+            marginBottom: 24,
+            ...theme.shadows.sm,
           }}>
             <Text style={{
               fontSize: 18,
@@ -153,53 +216,81 @@ export default function PaymentScreen() {
               color: theme.colors.text,
               marginBottom: 16,
             }}>
-              Split Payment Configured
+              Split Payment Summary
             </Text>
+            
+            {splitPayments.map((payment, index) => (
+              <View key={index} style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                paddingVertical: 8,
+                borderBottomWidth: index < splitPayments.length - 1 ? 1 : 0,
+                borderBottomColor: "#f3f4f6",
+              }}>
+                <Text style={{
+                  fontSize: 16,
+                  color: theme.colors.text,
+                }}>
+                  {payment.type}
+                </Text>
+                <Text style={{
+                  fontSize: 16,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                }}>
+                  ₹{payment.amount.toFixed(2)}
+                </Text>
+              </View>
+            ))}
+            
             <TouchableOpacity
               onPress={() => setShowSplitPayment(true)}
               style={{
-                backgroundColor: "#2563eb",
+                backgroundColor: "#7c3aed",
                 paddingVertical: 12,
-                paddingHorizontal: 24,
+                paddingHorizontal: 16,
                 borderRadius: 8,
-                marginBottom: 12,
+                marginTop: 16,
+                alignItems: "center",
               }}
             >
               <Text style={{
                 color: "white",
                 fontSize: 14,
-                fontWeight: "500",
-              }}>
-                Edit Split
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleProceed}
-              style={{
-                backgroundColor: "black",
-                paddingVertical: 16,
-                paddingHorizontal: 32,
-                borderRadius: 12,
-              }}
-            >
-              <Text style={{
-                color: "white",
-                fontSize: 16,
                 fontWeight: "600",
               }}>
-                PROCEED
+                Edit Split Payment
               </Text>
             </TouchableOpacity>
           </View>
         )}
-      </View>
 
-      <PaymentTypeModal
-        visible={selectedPaymentType === null}
-        onSelectPayment={handlePaymentTypeSelect}
-        onCancel={() => router.back()}
-      />
+        {/* Proceed Button */}
+        {selectedPaymentType && (
+          <TouchableOpacity
+            onPress={handleProceed}
+            style={{
+              backgroundColor: theme.colors.primary,
+              paddingVertical: 18,
+              borderRadius: 12,
+              alignItems: "center",
+              marginBottom: 32,
+              ...theme.shadows.sm,
+            }}
+          >
+            <Text style={{
+              color: "white",
+              fontSize: 18,
+              fontWeight: "600",
+            }}>
+              Complete Payment
+            </Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
 
+      {/* Split Payment Modal */}
       <SplitPaymentModal
         visible={showSplitPayment}
         screen={splitModalScreen}

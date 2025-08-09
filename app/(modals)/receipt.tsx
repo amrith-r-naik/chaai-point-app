@@ -1,16 +1,16 @@
 import { theme } from "@/constants/theme";
-import { paymentService, Receipt, Bill } from "@/services/paymentService";
+import { Bill, paymentService, Receipt } from "@/services/paymentService";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, CheckCircle, Receipt as ReceiptIcon } from "lucide-react-native";
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -295,17 +295,40 @@ export default function ReceiptScreen() {
           </View>
         </ScrollView>
 
-        {/* Process Payment Button */}
+        {/* Action Buttons */}
         <View style={{
           backgroundColor: "white",
           borderTopWidth: 1,
           borderTopColor: "#f3f4f6",
           paddingHorizontal: 16,
           paddingVertical: 16,
+          flexDirection: "row",
+          gap: 12,
         }}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={{
+              flex: 1,
+              backgroundColor: "#f3f4f6",
+              paddingVertical: 16,
+              borderRadius: 12,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{
+              color: theme.colors.text,
+              fontWeight: "600",
+              fontSize: 16,
+            }}>
+              CANCEL
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={processPayment}
             style={{
+              flex: 2,
               backgroundColor: "#059669",
               paddingVertical: 16,
               borderRadius: 12,
@@ -317,7 +340,7 @@ export default function ReceiptScreen() {
             <Text style={{
               color: "white",
               fontWeight: "600",
-              fontSize: 18,
+              fontSize: 16,
             }}>
               PROCESS PAYMENT
             </Text>
@@ -528,7 +551,7 @@ export default function ReceiptScreen() {
             marginTop: 8,
             textAlign: "center",
           }}>
-            Thank you for your payment
+            {paymentType === "Credit" ? "Amount added to customer dues" : "Due amount cleared and added to revenue"}
           </Text>
         </View>
 

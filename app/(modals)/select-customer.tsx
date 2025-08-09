@@ -1,16 +1,16 @@
 // app/(modals)/select-customer.tsx
 import { use$ } from "@legendapp/state/react";
-import { Stack, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
+import { Stack, useRouter } from "expo-router";
 import { Plus, Search } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  FlatList,
-  Pressable,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    FlatList,
+    Pressable,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { theme } from "../../constants/theme";
 import { getAllCustomers } from "../../services/customerService";
@@ -31,6 +31,25 @@ function CustomerItem({
   customer: Customer;
   onSelect: (customer: Customer) => void;
 }) {
+  const getAvatarColor = (name: string): string => {
+    const colors = [
+      "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e",
+      "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1",
+      "#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e"
+    ];
+    const index = name.charCodeAt(0) % colors.length;
+    return colors[index];
+  };
+
+  const getCustomerInitials = (name: string): string => {
+    return name
+      .split(" ")
+      .map((n: string) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
   return (
     <Pressable
       onPress={() => onSelect(customer)}
@@ -47,7 +66,7 @@ function CustomerItem({
         style={{
           width: 48,
           height: 48,
-          backgroundColor: theme.colors.primaryLight,
+          backgroundColor: getAvatarColor(customer.name),
           borderRadius: 24,
           justifyContent: "center",
           alignItems: "center",
@@ -56,12 +75,12 @@ function CustomerItem({
       >
         <Text
           style={{
-            color: theme.colors.primary,
+            color: "white",
             fontWeight: "600",
             fontSize: 18,
           }}
         >
-          {customer.name.charAt(0).toUpperCase()}
+          {getCustomerInitials(customer.name)}
         </Text>
       </View>
       <View style={{ flex: 1 }}>
@@ -88,23 +107,23 @@ function CustomerItem({
       </View>
       <View
         style={{
-          width: 32,
-          height: 32,
-          borderWidth: 2,
-          borderColor: theme.colors.borderLight,
-          borderRadius: 16,
+          width: 24,
+          height: 24,
+          borderRadius: 12,
+          backgroundColor: theme.colors.primary,
           justifyContent: "center",
           alignItems: "center",
         }}
       >
-        <View
+        <Text
           style={{
-            width: 20,
-            height: 20,
-            backgroundColor: theme.colors.primary,
-            borderRadius: 10,
+            color: "white",
+            fontSize: 16,
+            fontWeight: "600",
           }}
-        />
+        >
+          ✓
+        </Text>
       </View>
     </Pressable>
   );

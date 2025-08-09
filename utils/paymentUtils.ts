@@ -30,6 +30,20 @@ export class SplitPaymentManager {
     type: "Cash" | "UPI" | "Credit",
     amount: number
   ): SplitPayment[] {
+    // Prevent adding duplicate Credit splits
+    if (type === "Credit") {
+      // Find existing credit split and update it
+      const existingCreditIndex = splitPayments.findIndex(p => p.type === "Credit");
+      if (existingCreditIndex !== -1) {
+        const updatedSplitPayments = [...splitPayments];
+        updatedSplitPayments[existingCreditIndex] = {
+          ...updatedSplitPayments[existingCreditIndex],
+          amount: updatedSplitPayments[existingCreditIndex].amount + amount
+        };
+        return updatedSplitPayments;
+      }
+    }
+
     const newSplit: SplitPayment = {
       id: Date.now().toString(),
       type,
@@ -61,11 +75,15 @@ export class SplitPaymentManager {
     // Remove the split
     const updatedSplitPayments = splitPayments.filter(payment => payment.id !== id);
     
-    // Find or create credit split to restore the amount
-    const existingCredit = updatedSplitPayments.find(p => p.type === "Credit");
-    if (existingCredit) {
-      existingCredit.amount += splitToRemove.amount;
+    // Find existing credit split to restore the amount, avoiding duplicates
+    const existingCreditIndex = updatedSplitPayments.findIndex(p => p.type === "Credit");
+    if (existingCreditIndex !== -1) {
+      updatedSplitPayments[existingCreditIndex] = {
+        ...updatedSplitPayments[existingCreditIndex],
+        amount: updatedSplitPayments[existingCreditIndex].amount + splitToRemove.amount
+      };
     } else {
+      // Only create new credit split if none exists
       updatedSplitPayments.push({
         id: "credit-restored",
         type: "Credit",

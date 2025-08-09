@@ -1,7 +1,7 @@
 import { formatCurrency } from "@/lib/money";
 import { getAllCustomers, searchCustomers } from "@/services/customerService";
 import { orderService } from "@/services/orderService";
-import { paymentService } from "@/services/paymentService";
+import { CompletedBillsGroupedByDate, OrdersGroupedByDate, statsService } from '@/services/statsService';
 import { authState } from "@/state/authState";
 import { customerState, ExtendedCustomer } from "@/state/customerState";
 import { use$ } from "@legendapp/state/react";
@@ -49,28 +49,9 @@ interface CustomerData {
   completedOrderCount: number;
 }
 
-interface DateGroup {
-  date: string;
-  displayDate: string;
-  customers: Record<string, CustomerData>;
-}
-
-interface CompletedBillGroup {
-  date: string;
-  displayDate: string;
-  bills: {
-    id: string;
-    billNumber: string;
-    receiptNo: string;
-    customerId: string;
-    customerName: string;
-    customerContact: string | null;
-    amount: number;
-    mode: string;
-    remarks: string | null;
-    createdAt: string;
-  }[];
-}
+// Align local types with statsService exports
+type DateGroup = OrdersGroupedByDate[string];
+type CompletedBillGroup = CompletedBillsGroupedByDate[string];
 
 type TabType = "active" | "completed" | "all";
 
@@ -79,8 +60,8 @@ export default function CustomersScreen() {
   const [activeTab, setActiveTab] = useState<TabType>("active");
   const [refreshing, setRefreshing] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const [dateGroups, setDateGroups] = useState<Record<string, DateGroup>>({});
-  const [completedBills, setCompletedBills] = useState<Record<string, CompletedBillGroup>>({});
+  const [dateGroups, setDateGroups] = useState<OrdersGroupedByDate>({});
+  const [completedBills, setCompletedBills] = useState<CompletedBillsGroupedByDate>({});
   const [isProcessingEOD, setIsProcessingEOD] = useState(false);
   const customerStateData = use$(customerState);
   const auth = use$(authState);
@@ -90,7 +71,7 @@ export default function CustomersScreen() {
     try {
       if (!auth.isDbReady) return;
 
-      const ordersGrouped = await orderService.getOrdersGroupedByDate();
+      const ordersGrouped = await statsService.getOrdersGroupedByDate();
       setDateGroups(ordersGrouped);
     } catch (error) {
       console.error("Error loading orders data:", error);
@@ -101,7 +82,7 @@ export default function CustomersScreen() {
     try {
       if (!auth.isDbReady) return;
 
-      const billsGrouped = await paymentService.getCompletedBillsGroupedByDate();
+      const billsGrouped = await statsService.getCompletedBillsGroupedByDate();
       setCompletedBills(billsGrouped);
     } catch (error) {
       console.error("Error loading completed bills data:", error);
@@ -631,86 +612,98 @@ export default function CustomersScreen() {
 
         {/* Customers for this date */}
         <View>
-          {customers.map((customerData: CustomerData, index) =>
-            <TouchableOpacity
-              key={`customer-${customerData.customer.id}-${index}`}
-              onPress={() => {
-                customerState.selectedCustomer.set({
-                  ...customerData.customer,
-                  contact: customerData.customer.contact || undefined,
-                });
-                router.push("/(modals)/customer-kots");
-              }}
-              className="flex-row items-center justify-between px-4 py-4 bg-white border-b border-gray-50 active:bg-gray-50"
-              activeOpacity={0.7}
-            >
-              {/* Customer Avatar and Info */}
-              <View className="flex-row items-center flex-1">
-                <View
-                  className={`w-14 h-14 rounded-full ${getAvatarColor(customerData.customer.name)} items-center justify-center mr-4 shadow-sm`}
-                >
-                  <Text className="text-white font-bold text-base">{getCustomerInitials(customerData.customer.name)}</Text>
+          {customers.map((customerDataRaw: any, index) => {
+            const customerData: CustomerData = {
+              ...customerDataRaw,
+              customer: {
+                id: customerDataRaw.customer.id,
+                name: customerDataRaw.customer.name,
+                contact: customerDataRaw.customer.contact,
+                createdAt: customerDataRaw.customer.createdAt || '',
+                updatedAt: customerDataRaw.customer.updatedAt || '',
+              }
+            };
+            return (
+              <TouchableOpacity
+                key={`customer-${customerData.customer.id}-${index}`}
+                onPress={() => {
+                  customerState.selectedCustomer.set({
+                    ...customerData.customer,
+                    contact: customerData.customer.contact || undefined,
+                  });
+                  router.push("/(modals)/customer-kots");
+                }}
+                className="flex-row items-center justify-between px-4 py-4 bg-white border-b border-gray-50 active:bg-gray-50"
+                activeOpacity={0.7}
+              >
+                {/* Customer Avatar and Info */}
+                <View className="flex-row items-center flex-1">
+                  <View
+                    className={`w-14 h-14 rounded-full ${getAvatarColor(customerData.customer.name)} items-center justify-center mr-4 shadow-sm`}
+                  >
+                    <Text className="text-white font-bold text-base">{getCustomerInitials(customerData.customer.name)}</Text>
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-gray-900 font-semibold text-base mb-1">
+                      {customerData.customer.name}
+                    </Text>
+                    {customerData.customer.contact && (
+                      <Text className="text-gray-500 text-sm">{customerData.customer.contact}</Text>
+                    )}
+                    <Text className="text-gray-400 text-xs mt-1">
+                      {activeTab === "active"
+                        ? customerData.activeOrderCount
+                        : activeTab === "completed"
+                          ? customerData.completedOrderCount
+                          : customerData.orderCount} order
+                      {(activeTab === "active"
+                        ? customerData.activeOrderCount
+                        : activeTab === "completed"
+                          ? customerData.completedOrderCount
+                          : customerData.orderCount) !== 1 ? "s" : ""}
+                    </Text>
+                  </View>
                 </View>
-                <View className="flex-1">
-                  <Text className="text-gray-900 font-semibold text-base mb-1">
-                    {customerData.customer.name}
-                  </Text>
-                  {customerData.customer.contact && (
-                    <Text className="text-gray-500 text-sm">{customerData.customer.contact}</Text>
-                  )}
-                  <Text className="text-gray-400 text-xs mt-1">
-                    {activeTab === "active"
-                      ? customerData.activeOrderCount
-                      : activeTab === "completed"
-                        ? customerData.completedOrderCount
-                        : customerData.orderCount} order
-                    {(activeTab === "active"
-                      ? customerData.activeOrderCount
-                      : activeTab === "completed"
-                        ? customerData.completedOrderCount
-                        : customerData.orderCount) !== 1 ? "s" : ""}
-                  </Text>
-                </View>
-              </View>
 
-              {/* Amount and Status */}
-              <View className="items-end">
-                <Text className="text-gray-900 font-bold text-lg mb-1">
-                  {formatCurrency(
-                    activeTab === "active"
-                      ? customerData.activeAmount
-                      : activeTab === "completed"
-                        ? customerData.completedAmount
-                        : customerData.totalAmount
-                  )}
-                </Text>
-                <View
-                  className={`px-2 py-1 rounded-full ${activeTab === "active"
-                    ? "bg-orange-100"  // Always orange for active tab
-                    : customerData.hasCompletedBilling
-                      ? (customerData.isPaidCustomer ? "bg-green-100" : "bg-orange-100")
-                      : "bg-orange-100"
-                    }`}
-                >
-                  <Text
-                    className={`text-xs font-medium ${activeTab === "active"
-                      ? "text-orange-700"  // Always orange text for active tab
+                {/* Amount and Status */}
+                <View className="items-end">
+                  <Text className="text-gray-900 font-bold text-lg mb-1">
+                    {formatCurrency(
+                      activeTab === "active"
+                        ? customerData.activeAmount
+                        : activeTab === "completed"
+                          ? customerData.completedAmount
+                          : customerData.totalAmount
+                    )}
+                  </Text>
+                  <View
+                    className={`px-2 py-1 rounded-full ${activeTab === "active"
+                      ? "bg-orange-100"  // Always orange for active tab
                       : customerData.hasCompletedBilling
-                        ? (customerData.isPaidCustomer ? "text-green-700" : "text-orange-700")
-                        : "text-orange-700"
+                        ? (customerData.isPaidCustomer ? "bg-green-100" : "bg-orange-100")
+                        : "bg-orange-100"
                       }`}
                   >
-                    {activeTab === "active"
-                      ? "Pending"
-                      : customerData.hasCompletedBilling
-                        ? (customerData.isPaidCustomer ? "Paid" : "Pending")
-                        : "Pending"
-                    }
-                  </Text>
+                    <Text
+                      className={`text-xs font-medium ${activeTab === "active"
+                        ? "text-orange-700"  // Always orange text for active tab
+                        : customerData.hasCompletedBilling
+                          ? (customerData.isPaidCustomer ? "text-green-700" : "text-orange-700")
+                          : "text-orange-700"
+                        }`}
+                    >
+                      {activeTab === "active"
+                        ? "Pending"
+                        : customerData.hasCompletedBilling
+                          ? (customerData.isPaidCustomer ? "Paid" : "Pending")
+                          : "Pending"
+                      }
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          )}
+              </TouchableOpacity>
+            )
+          })}
         </View>
       </View>
     );

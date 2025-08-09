@@ -213,6 +213,7 @@ async function runMigrations() {
   await ensureColumn('kot_orders', 'businessDate', 'TEXT');
   await ensureColumn('bills', 'businessDate', 'TEXT');
   await ensureColumn('receipts', 'businessDate', 'TEXT');
+  await ensureColumn('eod_runs', 'checksum', 'TEXT');
 
   const applied = await db.getAllAsync(`SELECT id FROM migrations`);
   const appliedSet = new Set(applied.map(r => (r as any).id));
@@ -301,6 +302,66 @@ async function runMigrations() {
     } catch (error) {
       console.error('Phase 2 Schema Hardening migration failed:', error);
       throw error;
+    }
+  }
+
+  // Migration: Add bills(customerId, createdAt) index if missing (performance)
+  const BILLS_CREATEDAT_INDEX_ID = '20250808_bills_customer_createdAt_index';
+  if (!appliedSet.has(BILLS_CREATEDAT_INDEX_ID)) {
+    try {
+      await db.runAsync(`CREATE INDEX IF NOT EXISTS idx_bills_customer_createdAt ON bills(customerId, createdAt)`);
+      await db.runAsync(`INSERT INTO migrations (id, appliedAt) VALUES (?, ?)`, [BILLS_CREATEDAT_INDEX_ID, new Date().toISOString()]);
+    } catch (e) {
+      console.warn('Failed creating bills(customerId, createdAt) index', e);
+    }
+  }
+
+  // Migration: Monetary audit (detect negative values) – logs only
+  const MONEY_AUDIT_ID = '20250808_money_audit';
+  if (!appliedSet.has(MONEY_AUDIT_ID)) {
+    try {
+      const billNeg = await db.getFirstAsync(`SELECT COUNT(*) as c FROM bills WHERE total < 0`) as any;
+      const receiptsNeg = await db.getFirstAsync(`SELECT COUNT(*) as c FROM receipts WHERE amount < 0`) as any;
+      const paymentsNeg = await db.getFirstAsync(`SELECT COUNT(*) as c FROM payments WHERE amount < 0`) as any;
+      const creditNeg = await db.getFirstAsync(`SELECT COUNT(*) as c FROM customers WHERE creditBalance < 0`) as any;
+      console.log('[money-audit] Negative values -> bills:', billNeg?.c, 'receipts:', receiptsNeg?.c, 'payments:', paymentsNeg?.c, 'creditBalance:', creditNeg?.c);
+      await db.runAsync(`INSERT INTO migrations (id, appliedAt) VALUES (?, ?)`, [MONEY_AUDIT_ID, new Date().toISOString()]);
+    } catch (e) {
+      console.warn('Money audit migration failed', e);
+    }
+  }
+
+  // Migration: Add FK "restrict" style delete triggers (simulate ON DELETE RESTRICT)
+  const FK_RESTRICT_TRIGGERS_ID = '20250808_fk_restrict_triggers';
+  if (!appliedSet.has(FK_RESTRICT_TRIGGERS_ID)) {
+    try {
+      // Customers referenced by kot_orders, bills, receipts, payments
+      await db.runAsync(`CREATE TRIGGER IF NOT EXISTS trg_restrict_delete_customer BEFORE DELETE ON customers
+        FOR EACH ROW WHEN EXISTS (SELECT 1 FROM kot_orders WHERE customerId = OLD.id)
+        BEGIN SELECT RAISE(ABORT, 'Cannot delete customer: kot_orders reference'); END;`);
+      await db.runAsync(`CREATE TRIGGER IF NOT EXISTS trg_restrict_delete_customer_bill BEFORE DELETE ON customers
+        FOR EACH ROW WHEN EXISTS (SELECT 1 FROM bills WHERE customerId = OLD.id)
+        BEGIN SELECT RAISE(ABORT, 'Cannot delete customer: bills reference'); END;`);
+      await db.runAsync(`CREATE TRIGGER IF NOT EXISTS trg_restrict_delete_customer_receipt BEFORE DELETE ON customers
+        FOR EACH ROW WHEN EXISTS (SELECT 1 FROM receipts WHERE customerId = OLD.id)
+        BEGIN SELECT RAISE(ABORT, 'Cannot delete customer: receipts reference'); END;`);
+      await db.runAsync(`CREATE TRIGGER IF NOT EXISTS trg_restrict_delete_customer_payment BEFORE DELETE ON customers
+        FOR EACH ROW WHEN EXISTS (SELECT 1 FROM payments WHERE customerId = OLD.id)
+        BEGIN SELECT RAISE(ABORT, 'Cannot delete customer: payments reference'); END;`);
+      // bills referenced by payments or kot_orders
+      await db.runAsync(`CREATE TRIGGER IF NOT EXISTS trg_restrict_delete_bill_payment BEFORE DELETE ON bills
+        FOR EACH ROW WHEN EXISTS (SELECT 1 FROM payments WHERE billId = OLD.id)
+        BEGIN SELECT RAISE(ABORT, 'Cannot delete bill: payments reference'); END;`);
+      await db.runAsync(`CREATE TRIGGER IF NOT EXISTS trg_restrict_delete_bill_kot BEFORE DELETE ON bills
+        FOR EACH ROW WHEN EXISTS (SELECT 1 FROM kot_orders WHERE billId = OLD.id)
+        BEGIN SELECT RAISE(ABORT, 'Cannot delete bill: kot_orders reference'); END;`);
+      // menu_items referenced by kot_items
+      await db.runAsync(`CREATE TRIGGER IF NOT EXISTS trg_restrict_delete_menu_item BEFORE DELETE ON menu_items
+        FOR EACH ROW WHEN EXISTS (SELECT 1 FROM kot_items WHERE itemId = OLD.id)
+        BEGIN SELECT RAISE(ABORT, 'Cannot delete menu item: kot_items reference'); END;`);
+      await db.runAsync(`INSERT INTO migrations (id, appliedAt) VALUES (?, ?)`, [FK_RESTRICT_TRIGGERS_ID, new Date().toISOString()]);
+    } catch (e) {
+      console.warn('FK restrict triggers migration failed', e);
     }
   }
 }

@@ -1,6 +1,8 @@
 import { computeISTBusinessDate, db } from "@/lib/db";
 import { SplitPayment } from "@/types/payment";
 import uuid from "react-native-uuid";
+import { billingService } from './billingService';
+import { statsService } from './statsService';
 
 export interface Bill {
   id: string;
@@ -88,25 +90,8 @@ class PaymentService {
   }
 
   async createBill(customerId: string, totalAmount: number): Promise<Bill> {
-    if (!db) throw new Error("Database not initialized");
-
-    const nowIso = new Date().toISOString();
-    const businessDate = computeISTBusinessDate(nowIso);
-    const billNumber = await this.getNextBillNumber();
-    const bill: Bill = {
-      id: uuid.v4() as string,
-      billNumber,
-      customerId,
-      total: totalAmount,
-      createdAt: nowIso,
-    };
-
-    await db.runAsync(`
-      INSERT INTO bills (id, billNumber, customerId, total, createdAt, businessDate)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `, [bill.id, bill.billNumber, bill.customerId, bill.total, bill.createdAt, businessDate]);
-
-    return bill;
+    const result = await billingService.createBill(customerId, totalAmount);
+    return { id: result.billId, billNumber: result.billNumber, customerId, total: totalAmount, createdAt: result.createdAt };
   }
 
   async processPayment(paymentData: PaymentProcessData): Promise<{ receipt: Receipt; bill: Bill }> {
@@ -299,97 +284,8 @@ class PaymentService {
     }));
   }
 
-  async getCompletedBillsGroupedByDate(): Promise<
-    Record<
-      string,
-      {
-        date: string;
-        displayDate: string;
-        bills: Array<{
-          id: string;
-          billNumber: string;
-          receiptNo: string;
-          customerId: string;
-          customerName: string;
-          customerContact: string | null;
-          amount: number;
-          mode: string;
-          remarks: string | null;
-          createdAt: string;
-        }>;
-      }
-    >
-  > {
-    if (!db) throw new Error("Database not initialized");
-
-    const bills = await db.getAllAsync(`
-      SELECT 
-        r.id,
-        r.receiptNo,
-        r.customerId,
-        r.amount,
-        r.mode,
-        r.remarks,
-        r.createdAt,
-        r.businessDate,
-        c.name as customerName,
-        c.contact as customerContact,
-        b.billNumber
-      FROM receipts r
-      LEFT JOIN customers c ON r.customerId = c.id
-      LEFT JOIN bills b ON r.customerId = b.customerId 
-        AND b.businessDate = r.businessDate
-      ORDER BY r.createdAt DESC
-    `) as any[];
-
-    const dateGroups: Record<string, any> = {};
-
-    bills.forEach((bill: any) => {
-      const billDate = bill.createdAt.split('T')[0];
-      const today = new Date().toISOString().split('T')[0];
-      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split('T')[0];
-
-      let displayDate: string;
-      if (billDate === today) {
-        displayDate = "Today";
-      } else if (billDate === yesterday) {
-        displayDate = "Yesterday";
-      } else {
-        const date = new Date(billDate);
-        const options: Intl.DateTimeFormatOptions = {
-          day: "2-digit",
-          month: "2-digit",
-          year: "2-digit",
-          weekday: "long",
-        };
-        displayDate = date.toLocaleDateString("en-GB", options);
-      }
-
-      if (!dateGroups[billDate]) {
-        dateGroups[billDate] = {
-          date: billDate,
-          displayDate,
-          bills: [],
-        };
-      }
-
-      dateGroups[billDate].bills.push({
-        id: bill.id,
-        billNumber: bill.billNumber || 'N/A',
-        receiptNo: bill.receiptNo,
-        customerId: bill.customerId,
-        customerName: bill.customerName,
-        customerContact: bill.customerContact,
-        amount: bill.amount, // Use direct amount from receipts (already in rupees)
-        mode: bill.mode,
-        remarks: bill.remarks,
-        createdAt: bill.createdAt,
-      });
-    });
-
-    return dateGroups;
+  async getCompletedBillsGroupedByDate() {
+    return await statsService.getCompletedBillsGroupedByDate();
   }
 
   async getBillDetails(receiptId: string): Promise<{

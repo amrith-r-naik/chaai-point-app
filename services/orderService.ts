@@ -1,7 +1,8 @@
 // services/orderService.ts
-import { db } from "../lib/db";
+import { db } from "../lib/db"; // Still used for per-customer queries; keep until migrated
 import { EodResult, eodService } from "./eodService";
 import { CreateKotData, KotItem, KotOrder, kotService, MenuItem } from "./kotService";
+import { statsService } from './statsService';
 
 // Re-export interfaces for backward compatibility
 export { CreateKotData, KotItem, KotOrder, MenuItem } from "./kotService";
@@ -62,153 +63,11 @@ class OrderService {
   }
 
   /**
-   * Get orders grouped by date with customer information
+   * @deprecated Use statsService.getOrdersGroupedByDate directly for aggregation.
+   * Kept as a thin delegation for backward compatibility.
    */
-  async getOrdersGroupedByDate(): Promise<
-    Record<
-      string,
-      {
-        date: string;
-        displayDate: string;
-        customers: Record<
-          string,
-          {
-            customer: any;
-            totalAmount: number;
-            orderCount: number;
-            hasCompletedBilling: boolean;
-            hasActiveOrders: boolean;
-            activeAmount: number;
-            completedAmount: number;
-            activeOrderCount: number;
-            completedOrderCount: number;
-            isPaidCustomer: boolean;
-          }
-        >;
-      }
-    >
-  > {
-    if (!db) throw new Error("Database not initialized");
-
-    const orders = (await db.getAllAsync(`
-      SELECT 
-        ko.id,
-        ko.kotNumber,
-        ko.customerId,
-        ko.billId,
-        ko.createdAt,
-        ko.businessDate,
-        c.name as customerName,
-        c.contact as customerContact,
-        COALESCE(SUM(ki.quantity * ki.priceAtTime), 0) as totalAmount,
-        COALESCE(ko.businessDate, DATE(ko.createdAt)) as orderDate,
-        p.mode as paymentMode
-      FROM kot_orders ko
-      LEFT JOIN customers c ON ko.customerId = c.id
-      LEFT JOIN kot_items ki ON ko.id = ki.kotId
-      LEFT JOIN bills b ON ko.billId = b.id
-      LEFT JOIN payments p ON b.id = p.billId
-      GROUP BY ko.id, c.name, c.contact, orderDate, p.mode
-      ORDER BY ko.createdAt DESC
-    `)) as any[];
-
-    // Group orders by date
-    const dateGroups: Record<
-      string,
-      {
-        date: string;
-        displayDate: string;
-        customers: Record<
-          string,
-          {
-            customer: any;
-            totalAmount: number;
-            orderCount: number;
-            hasCompletedBilling: boolean;
-            hasActiveOrders: boolean;
-            activeAmount: number;
-            completedAmount: number;
-            activeOrderCount: number;
-            completedOrderCount: number;
-            isPaidCustomer: boolean;
-          }
-        >;
-      }
-    > = {};
-
-    orders.forEach((order: any) => {
-      const orderDate = order.orderDate;
-      const today = new Date().toISOString().split("T")[0];
-      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split("T")[0];
-
-      let displayDate: string;
-      if (orderDate === today) {
-        displayDate = "Today";
-      } else if (orderDate === yesterday) {
-        displayDate = "Yesterday";
-      } else {
-        const date = new Date(orderDate);
-        const options: Intl.DateTimeFormatOptions = {
-          day: "2-digit",
-          month: "2-digit",
-          year: "2-digit",
-          weekday: "long",
-        };
-        displayDate = date.toLocaleDateString("en-GB", options);
-      }
-
-      if (!dateGroups[orderDate]) {
-        dateGroups[orderDate] = {
-          date: orderDate,
-          displayDate,
-          customers: {},
-        };
-      }
-
-      const customerId = order.customerId;
-      if (!dateGroups[orderDate].customers[customerId]) {
-        dateGroups[orderDate].customers[customerId] = {
-          customer: {
-            id: order.customerId,
-            name: order.customerName,
-            contact: order.customerContact,
-          },
-          totalAmount: 0,
-          orderCount: 0,
-          hasCompletedBilling: false,
-          hasActiveOrders: false,
-          isPaidCustomer: false,
-          activeAmount: 0,
-          completedAmount: 0,
-          activeOrderCount: 0,
-          completedOrderCount: 0,
-        };
-      }
-
-      const customerData = dateGroups[orderDate].customers[customerId];
-      customerData.totalAmount += order.totalAmount || 0;
-      customerData.orderCount += 1;
-
-      // Check billing status and track amounts and counts separately
-      if (order.billId) {
-        customerData.hasCompletedBilling = true;
-        customerData.completedAmount += order.totalAmount || 0;
-        customerData.completedOrderCount += 1;
-        
-        // Check if this is a paid customer (non-credit payment)
-        if (order.paymentMode && order.paymentMode !== 'Credit') {
-          customerData.isPaidCustomer = true;
-        }
-      } else {
-        customerData.hasActiveOrders = true;
-        customerData.activeAmount += order.totalAmount || 0;
-        customerData.activeOrderCount += 1;
-      }
-    });
-
-    return dateGroups;
+  async getOrdersGroupedByDate() {
+    return await statsService.getOrdersGroupedByDate();
   }
 
   async getOrdersByCustomerId(customerId: string): Promise<any[]> {

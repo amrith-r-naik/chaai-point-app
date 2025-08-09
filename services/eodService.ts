@@ -12,6 +12,7 @@ export interface EodRun {
   totalAmount: number;
   success: boolean;
   errorSummary: string | null;
+  checksum?: string | null;
 }
 
 export interface EodResult {
@@ -33,7 +34,7 @@ class EodService {
 
     // Idempotency: if a successful run already exists for this businessDate, return stored metrics
     const existingRun = await db.getFirstAsync(`
-      SELECT processedKots, totalAmount FROM eod_runs 
+      SELECT processedKots, totalAmount, checksum FROM eod_runs 
       WHERE businessDate = ? AND success = 1
       ORDER BY completedAt DESC LIMIT 1
     `, [businessDate]) as any;
@@ -51,8 +52,8 @@ class EodService {
 
     // Insert initial run record
     await db.runAsync(`
-      INSERT INTO eod_runs (id, businessDate, runType, startedAt, completedAt, processedKots, totalAmount, success, errorSummary)
-      VALUES (?, ?, ?, ?, NULL, 0, 0, 0, NULL)
+      INSERT INTO eod_runs (id, businessDate, runType, startedAt, completedAt, processedKots, totalAmount, success, errorSummary, checksum)
+      VALUES (?, ?, ?, ?, NULL, 0, 0, 0, NULL, NULL)
     `, [eodRunId, businessDate, 'manual', startedAt]);
 
     try {
@@ -116,12 +117,23 @@ class EodService {
         }
       }
 
-      // Update run record with success
+      // Compute checksum (simple deterministic hash surrogate)
+      const kotIds = activeKOTs.map((k: any) => k.id).sort().join('|');
+      const checksumSource = `${businessDate}|${activeKOTs.length}|${totalProcessedAmount}|${kotIds}`;
+      // Simple hash function (FNV-1a like)
+      let hash = 2166136261;
+      for (let i = 0; i < checksumSource.length; i++) {
+        hash ^= checksumSource.charCodeAt(i);
+        hash = (hash * 16777619) >>> 0;
+      }
+      const checksum = hash.toString(16);
+
+      // Update run record with success + checksum
       await db.runAsync(`
         UPDATE eod_runs
-        SET completedAt = ?, processedKots = ?, totalAmount = ?, success = 1
+        SET completedAt = ?, processedKots = ?, totalAmount = ?, success = 1, checksum = ?
         WHERE id = ?
-      `, [new Date().toISOString(), activeKOTs.length, totalProcessedAmount, eodRunId]);
+      `, [new Date().toISOString(), activeKOTs.length, totalProcessedAmount, checksum, eodRunId]);
 
       console.log(`EOD ${businessDate}: Successfully processed ${activeKOTs.length} KOTs totaling ₹${totalProcessedAmount}`);
       return { processedKOTs: activeKOTs.length, totalAmount: totalProcessedAmount };
@@ -155,7 +167,8 @@ class EodService {
         processedKots,
         totalAmount,
         success,
-        errorSummary
+        errorSummary,
+        checksum
       FROM eod_runs
       ORDER BY startedAt DESC
       LIMIT ?
@@ -167,10 +180,11 @@ class EodService {
       runType: row.runType,
       startedAt: row.startedAt,
       completedAt: row.completedAt,
-      processedKots: row.processedKots,
-      totalAmount: row.totalAmount,
+  processedKots: row.processedKots,
+  totalAmount: row.totalAmount,
       success: Boolean(row.success),
-      errorSummary: row.errorSummary,
+  errorSummary: row.errorSummary,
+  checksum: row.checksum,
     }));
   }
 
@@ -192,7 +206,8 @@ class EodService {
         processedKots,
         totalAmount,
         success,
-        errorSummary
+        errorSummary,
+        checksum
       FROM eod_runs
       WHERE businessDate = ?
       ORDER BY startedAt DESC
@@ -208,10 +223,11 @@ class EodService {
       runType: row.runType,
       startedAt: row.startedAt,
       completedAt: row.completedAt,
-      processedKots: row.processedKots,
-      totalAmount: row.totalAmount,
+  processedKots: row.processedKots,
+  totalAmount: row.totalAmount,
       success: Boolean(row.success),
-      errorSummary: row.errorSummary,
+  errorSummary: row.errorSummary,
+  checksum: row.checksum,
     };
   }
 

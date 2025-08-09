@@ -125,6 +125,9 @@ export async function recreateDatabase() {
       DROP TABLE IF EXISTS menu_items;
       DROP TABLE IF EXISTS customers;
       DROP TABLE IF EXISTS users;
+      DROP TABLE IF EXISTS sequences;
+      DROP TABLE IF EXISTS migrations;
+      DROP TABLE IF EXISTS eod_runs;
     `);
 
     console.log("All tables dropped");
@@ -146,7 +149,8 @@ export async function recreateDatabase() {
         name TEXT NOT NULL,
         contact TEXT UNIQUE,
         createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
+        updatedAt TEXT NOT NULL,
+        creditBalance INTEGER DEFAULT 0
       );
 
       CREATE TABLE menu_items (
@@ -165,6 +169,7 @@ export async function recreateDatabase() {
         customerId TEXT NOT NULL,
         billId TEXT,
         createdAt TEXT NOT NULL,
+        businessDate TEXT,
         FOREIGN KEY (customerId) REFERENCES customers(id),
         FOREIGN KEY (billId) REFERENCES bills(id)
       );
@@ -185,6 +190,7 @@ export async function recreateDatabase() {
         customerId TEXT NOT NULL,
         total INTEGER NOT NULL,
         createdAt TEXT NOT NULL,
+        businessDate TEXT,
         FOREIGN KEY (customerId) REFERENCES customers(id)
       );
 
@@ -208,6 +214,7 @@ export async function recreateDatabase() {
         mode TEXT NOT NULL,
         remarks TEXT,
         createdAt TEXT NOT NULL,
+        businessDate TEXT,
         FOREIGN KEY (customerId) REFERENCES customers(id)
       );
 
@@ -220,11 +227,92 @@ export async function recreateDatabase() {
         remarks TEXT,
         createdAt TEXT NOT NULL
       );
+
+      CREATE TABLE migrations (
+        id TEXT PRIMARY KEY,
+        appliedAt TEXT NOT NULL
+      );
+
+      CREATE TABLE sequences (
+        key TEXT PRIMARY KEY,
+        value INTEGER NOT NULL
+      );
+
+      CREATE TABLE eod_runs (
+        id TEXT PRIMARY KEY,
+        businessDate TEXT NOT NULL,
+        runType TEXT NOT NULL,
+        startedAt TEXT NOT NULL,
+        completedAt TEXT,
+        processedKots INTEGER NOT NULL,
+        totalAmount INTEGER NOT NULL,
+        success INTEGER NOT NULL,
+        errorSummary TEXT,
+        checksum TEXT
+      );
+
+      -- Core indexes (subset of production for speed in dev reset)
+      CREATE INDEX IF NOT EXISTS idx_kot_orders_businessDate ON kot_orders(businessDate);
+      CREATE INDEX IF NOT EXISTS idx_bills_businessDate ON bills(businessDate);
+      CREATE INDEX IF NOT EXISTS idx_receipts_businessDate ON receipts(businessDate);
+      CREATE INDEX IF NOT EXISTS idx_payments_customer_date ON payments(customerId, createdAt);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_bills_billNumber ON bills(billNumber);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_receiptNo ON receipts(receiptNo);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_expenses_voucherNo ON expenses(voucherNo);
     `);
 
     console.log("Database schema recreated successfully");
   } catch (error) {
     console.error("Recreation error:", error);
+  }
+}
+
+// New helper to seed a realistic billing + payment + credit scenario
+export async function seedSampleTransactions() {
+  if (!db) {
+    console.log('Database is not initialized');
+    return;
+  }
+  try {
+    const now = new Date().toISOString();
+    // Ensure base customers & menu items present
+    await seedTestCustomers();
+    await seedTestMenuItems();
+
+    // Create two KOT orders manually (simplified) then a bill & payments
+    // For brevity direct inserts (avoid service dependencies in debug layer)
+    const kotId = 'debug-kot-1';
+    await db.runAsync(`INSERT OR IGNORE INTO kot_orders (id, kotNumber, customerId, createdAt, businessDate) VALUES (?, ?, ?, ?, ?)`, [kotId, 1, 'customer-1', now, now.split('T')[0]]);
+    await db.runAsync(`INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime) VALUES (?, ?, ?, ?, ?)`, ['debug-kotitem-1', kotId, 'item_1', 2, 30]);
+    await db.runAsync(`INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime) VALUES (?, ?, ?, ?, ?)`, ['debug-kotitem-2', kotId, 'item_3', 1, 100]);
+
+    // Seed sequences keys if absent
+    const seqKeys = ['bill', 'receipt'];
+    for (const key of seqKeys) {
+      await db.runAsync(`INSERT OR IGNORE INTO sequences (key, value) VALUES (?, 0)`, [key]);
+    }
+    // Increment bill sequence
+    await db.runAsync(`UPDATE sequences SET value = value + 1 WHERE key = 'bill'`);
+    const billNoRow = await db.getFirstAsync(`SELECT value FROM sequences WHERE key = 'bill'`) as any;
+    const billNumber = billNoRow.value;
+    const billId = 'debug-bill-1';
+    const billTotal = 2*30 + 100; // 160
+    await db.runAsync(`INSERT OR REPLACE INTO bills (id, billNumber, customerId, total, createdAt, businessDate) VALUES (?, ?, ?, ?, ?, ?)`, [billId, billNumber, 'customer-1', billTotal, now, now.split('T')[0]]);
+    await db.runAsync(`UPDATE kot_orders SET billId = ? WHERE id = ?`, [billId, kotId]);
+
+    // Add split: 100 cash, 60 credit
+    await db.runAsync(`INSERT INTO payments (id, billId, customerId, amount, mode, createdAt) VALUES (?, ?, ?, ?, ?, ?)`, ['pay-cash-1', billId, 'customer-1', 100, 'Cash', now]);
+    await db.runAsync(`INSERT INTO payments (id, billId, customerId, amount, mode, createdAt) VALUES (?, ?, ?, ?, ?, ?)`, ['pay-credit-1', billId, 'customer-1', 60, 'Credit', now]);
+    await db.runAsync(`UPDATE customers SET creditBalance = creditBalance + ? WHERE id = ?`, [60, 'customer-1']);
+
+    // Seed a receipt for a different customer full payment
+    await db.runAsync(`UPDATE sequences SET value = value + 1 WHERE key = 'receipt'`);
+    const recNoRow = await db.getFirstAsync(`SELECT value FROM sequences WHERE key = 'receipt'`) as any;
+    await db.runAsync(`INSERT OR IGNORE INTO receipts (id, receiptNo, customerId, amount, mode, createdAt, businessDate) VALUES (?, ?, ?, ?, ?, ?, ?)`, ['debug-receipt-1', recNoRow.value, 'customer-2', 250, 'Cash', now, now.split('T')[0]]);
+
+    console.log('Sample transactions seeded (bill with split + standalone receipt)');
+  } catch (e) {
+    console.error('seedSampleTransactions error:', e);
   }
 }
 

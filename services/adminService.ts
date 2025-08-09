@@ -13,11 +13,16 @@ class AdminService {
 
       // Clear all tables in order (respecting foreign key constraints)
       // NOTE: Users table is preserved to maintain authentication
-      await db.runAsync(`DELETE FROM kot_items`);
-      await db.runAsync(`DELETE FROM payments`);
-      await db.runAsync(`DELETE FROM receipts`);
-      await db.runAsync(`DELETE FROM bills`);
-      await db.runAsync(`DELETE FROM kot_orders`);
+  // 1. Child rows of kot_orders
+  await db.runAsync(`DELETE FROM kot_items`);
+  // 2. Rows referencing bills (payments) before deleting bills
+  await db.runAsync(`DELETE FROM payments`);
+  // 3. KOT orders BEFORE bills to satisfy restrict trigger (kot_orders -> bills)
+  await db.runAsync(`DELETE FROM kot_orders`);
+  // 4. Now safe to delete bills
+  await db.runAsync(`DELETE FROM bills`);
+  // 5. Independent tables
+  await db.runAsync(`DELETE FROM receipts`);
       await db.runAsync(`DELETE FROM expenses`);
       await db.runAsync(`DELETE FROM menu_items`);
       await db.runAsync(`DELETE FROM customers`);
@@ -66,6 +71,20 @@ class AdminService {
     try {
       // Temporarily disable foreign key constraints for individual table clearing
       await db.runAsync(`PRAGMA foreign_keys = OFF`);
+      if (tableName === 'bills') {
+        // Ensure no kot_orders reference bills to satisfy restrict trigger
+        const ref = await db.getFirstAsync(`SELECT 1 as x FROM kot_orders WHERE billId IS NOT NULL LIMIT 1`) as any;
+        if (ref) {
+          throw new Error('Cannot clear bills while kot_orders still reference them. Clear kot_orders first (or clearAllTables).');
+        }
+      }
+      if (tableName === 'customers') {
+        // Quick safety: ensure no child refs (dev convenience). Not strictly needed; restrict triggers will catch.
+        const ref = await db.getFirstAsync(`SELECT 1 as x FROM kot_orders LIMIT 1`) as any;
+        if (ref) {
+          throw new Error('Cannot clear customers while related transactional data exists. Use clearAllTables instead.');
+        }
+      }
       await db.runAsync(`DELETE FROM ${tableName}`);
       await db.runAsync(`PRAGMA foreign_keys = ON`);
       

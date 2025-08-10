@@ -2,7 +2,7 @@
 import { use$ } from "@legendapp/state/react";
 import { Stack, useRouter } from "expo-router";
 import { Pencil, Plus, ShoppingBag, User } from "lucide-react-native";
-import React from "react";
+import React, { useEffect } from "react";
 import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { theme } from "../../constants/theme";
 import { orderService } from "../../services/orderService";
@@ -13,6 +13,12 @@ export default function CreateOrderScreen() {
   const router = useRouter();
   const orderStateData = use$(orderState);
   const customerStateData = use$(customerState);
+
+  // Always start with a clean slate when opening the create order flow
+  useEffect(() => {
+    orderState.selectedItems.set([]);
+    orderState.selectedCustomerId.set(null);
+  }, []);
 
   const handleSelectCustomer = () => {
     router.push("/(modals)/select-customer");
@@ -63,7 +69,7 @@ export default function CreateOrderScreen() {
     } catch (error) {
       console.error("Error creating order:", error);
       orderState.error.set("Failed to create order");
-      
+
       let errorMessage = "Failed to create order. Please try again.";
       if (error instanceof Error) {
         if (error.message.includes("Customer") && error.message.includes("does not exist")) {
@@ -74,7 +80,7 @@ export default function CreateOrderScreen() {
           errorMessage = "Data integrity error. Please ensure you have selected a valid customer and menu items.";
         }
       }
-      
+
       Alert.alert("Error", errorMessage);
     } finally {
       orderState.isCreatingOrder.set(false);
@@ -447,8 +453,8 @@ export default function CreateOrderScreen() {
             style={{
               backgroundColor:
                 selectedCustomer &&
-                orderStateData.selectedItems.length > 0 &&
-                !orderStateData.isCreatingOrder
+                  orderStateData.selectedItems.length > 0 &&
+                  !orderStateData.isCreatingOrder
                   ? theme.colors.primary
                   : "#d1d5db",
               paddingVertical: 16,
@@ -458,8 +464,8 @@ export default function CreateOrderScreen() {
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity:
                 selectedCustomer &&
-                orderStateData.selectedItems.length > 0 &&
-                !orderStateData.isCreatingOrder
+                  orderStateData.selectedItems.length > 0 &&
+                  !orderStateData.isCreatingOrder
                   ? 0.3
                   : 0,
               shadowRadius: 8,
@@ -470,8 +476,8 @@ export default function CreateOrderScreen() {
               style={{
                 color:
                   selectedCustomer &&
-                  orderStateData.selectedItems.length > 0 &&
-                  !orderStateData.isCreatingOrder
+                    orderStateData.selectedItems.length > 0 &&
+                    !orderStateData.isCreatingOrder
                     ? "white"
                     : "#9ca3af",
                 fontWeight: "600",

@@ -1,869 +1,398 @@
-// app/(modals)/select-items.tsx
-import { use$ } from "@legendapp/state/react";
-import { Stack, useRouter } from "expo-router";
-import { ArrowLeft, Minus, Plus, Search, X } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
-import {
-  FlatList,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { FABCategorySelector } from "../../components/FABCategorySelector";
-import { theme } from "../../constants/theme";
-import { MenuItem, orderService } from "../../services/orderService";
-import { orderState } from "../../state/orderState";
+import { use$ } from '@legendapp/state/react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Stack, useRouter } from 'expo-router';
+import { ArrowLeft, Minus, Plus, Search, X } from 'lucide-react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Keyboard, Platform, ScrollView, SectionList, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { CATEGORIES, getCategoryEmoji } from '../../constants/appConstants';
+import { theme } from '../../constants/theme';
+import { MenuItem, orderService } from '../../services/orderService';
+import { orderState } from '../../state/orderState';
 
-function ItemCard({
-  item,
-  onSelect,
-  selectedQuantity,
-}: {
-  item: MenuItem;
-  onSelect: (item: MenuItem, quantity: number) => void;
-  selectedQuantity: number;
-}) {
-  const [quantity, setQuantity] = useState(selectedQuantity || 1);
+// ---- Constants ----
+const ITEM_HEIGHT = 60;
+const ITEM_SPACING = 6;
+const HEADER_HEIGHT = 32;
 
-  const handleSelect = () => {
-    onSelect(item, quantity);
+// ---- Helpers ----
+interface Section { title: string; data: MenuItem[]; }
+
+// Simple debounce hook (local, minimal)
+function useDebounce<T>(value: T, delay = 220) {
+  const [d, setD] = useState(value);
+  useEffect(() => { const id = setTimeout(() => setD(value), delay); return () => clearTimeout(id); }, [value, delay]);
+  return d;
+}
+
+// ---- Item Row ----
+interface ItemRowProps { item: MenuItem; qty: number; onChange: (q: number) => void; }
+const ItemRow: React.FC<ItemRowProps> = React.memo(({ item, qty, onChange }) => {
+  const [local, setLocal] = useState(qty || 1);
+  // Keep local in sync only when external qty changes (avoid reset while typing fast)
+  useEffect(() => { if (qty === 0) setLocal(1); else if (qty !== local) setLocal(qty); }, [qty]); // eslint-disable-line react-hooks/exhaustive-deps
+  const inc = () => {
+    const n = local + 1; setLocal(n); if (qty > 0) onChange(n); // Only propagate if already added
   };
-
-  const incrementQuantity = () => {
-    const newQuantity = quantity + 1;
-    setQuantity(newQuantity);
-    if (selectedQuantity > 0) {
-      onSelect(item, newQuantity);
-    }
+  const dec = () => {
+    if (local > 1) { const n = local - 1; setLocal(n); if (qty > 0) onChange(n); }
+    else if (qty > 0) onChange(0);
   };
-
-  const decrementQuantity = () => {
-    if (quantity > 1) {
-      const newQuantity = quantity - 1;
-      setQuantity(newQuantity);
-      if (selectedQuantity > 0) {
-        onSelect(item, newQuantity);
-      }
-    } else if (selectedQuantity > 0) {
-      // Remove item when quantity becomes 0
-      onSelect(item, 0);
-    }
-  };
-
-  const getCategoryEmoji = (category: string | null) => {
-    if (!category) return "🍽️";
-    switch (category.toLowerCase()) {
-      case "tea":
-        return "🍵";
-      case "coffee":
-        return "☕";
-      case "pasta":
-        return "🍝";
-      case "snacks":
-        return "🍟";
-      case "dessert":
-        return "🍰";
-      case "beverage":
-        return "🥤";
-      default:
-        return "🍽️";
-    }
-  };
-
-  const getCategoryColor = (category: string | null) => {
-    if (!category) return { bg: "#f3f4f6", text: "#6b7280" };
-    switch (category.toLowerCase()) {
-      case "tea":
-      case "coffee":
-      case "beverage":
-        return { bg: "#fef3c7", text: "#d97706" };
-      case "pasta":
-      case "food":
-        return { bg: "#fce7f3", text: "#be185d" };
-      case "snacks":
-        return { bg: "#fef2e2", text: "#ea580c" };
-      case "dessert":
-        return { bg: "#f3e8ff", text: "#9333ea" };
-      default:
-        return { bg: "#f3f4f6", text: "#6b7280" };
-    }
-  };
-
-  const categoryStyle = getCategoryColor(item.category);
-
+  const add = () => onChange(local);
   return (
-    <View
-      style={{
-        backgroundColor: "white",
-        padding: 16,
-        borderRadius: 16,
-        marginBottom: 12,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 3,
-        borderWidth: selectedQuantity > 0 ? 2 : 1,
-        borderColor: selectedQuantity > 0 ? theme.colors.primary : "#e5e7eb",
-      }}
-    >
-      <View style={{ flexDirection: "row" }}>
-        {/* Item Image Placeholder */}
-        <View
-          style={{
-            width: 80,
-            height: 80,
-            backgroundColor: categoryStyle.bg,
-            borderRadius: 12,
-            justifyContent: "center",
-            alignItems: "center",
-            marginRight: 16,
-            position: "relative",
-          }}
-        >
-          <Text style={{ fontSize: 32 }}>
-            {getCategoryEmoji(item.category)}
-          </Text>
-
-          {/* Category Badge */}
-          {item.category && (
-            <View
-              style={{
-                position: "absolute",
-                bottom: -6,
-                backgroundColor: categoryStyle.text,
-                paddingHorizontal: 6,
-                paddingVertical: 2,
-                borderRadius: 8,
-              }}
-            >
-              <Text style={{ color: "white", fontSize: 10, fontWeight: "600" }}>
-                {item.category.toUpperCase()}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Item Details */}
-        <View style={{ flex: 1, justifyContent: "space-between" }}>
-          <View>
-            <Text
-              style={{
-                fontSize: 18,
-                fontWeight: "700",
-                color: theme.colors.text,
-                marginBottom: 4,
-              }}
-            >
-              {item.name}
-            </Text>
-
-            <Text
-              style={{
-                fontSize: 20,
-                fontWeight: "800",
-                color: theme.colors.primary,
-                marginBottom: 12,
-              }}
-            >
-              ₹{item.price}
-            </Text>
-          </View>
-
-          {/* Quantity Controls */}
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            {selectedQuantity > 0 ? (
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  backgroundColor: theme.colors.primaryLight,
-                  borderRadius: 25,
-                  paddingHorizontal: 4,
-                  paddingVertical: 4,
-                }}
-              >
-                <TouchableOpacity
-                  onPress={decrementQuantity}
-                  style={{
-                    width: 36,
-                    height: 36,
-                    backgroundColor: theme.colors.primary,
-                    borderRadius: 18,
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Minus size={18} color="white" />
-                </TouchableOpacity>
-
-                <Text
-                  style={{
-                    marginHorizontal: 16,
-                    fontSize: 18,
-                    fontWeight: "700",
-                    color: theme.colors.primary,
-                    minWidth: 24,
-                    textAlign: "center",
-                  }}
-                >
-                  {quantity}
-                </Text>
-
-                <TouchableOpacity
-                  onPress={incrementQuantity}
-                  style={{
-                    width: 36,
-                    height: 36,
-                    backgroundColor: theme.colors.primary,
-                    borderRadius: 18,
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Plus size={18} color="white" />
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                onPress={handleSelect}
-                style={{
-                  backgroundColor: theme.colors.primary,
-                  paddingHorizontal: 20,
-                  paddingVertical: 12,
-                  borderRadius: 25,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  shadowColor: theme.colors.primary,
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 8,
-                  elevation: 4,
-                }}
-                activeOpacity={0.8}
-              >
-                <Plus size={18} color="white" style={{ marginRight: 6 }} />
-                <Text
-                  style={{ color: "white", fontWeight: "600", fontSize: 16 }}
-                >
-                  Add
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
+    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 10, height: ITEM_HEIGHT, marginBottom: ITEM_SPACING, borderWidth: qty ? 2 : 1, borderColor: qty ? theme.colors.primary : '#e2e5e8' }}>
+      <View style={{ width: 40, height: 40, borderRadius: 8, backgroundColor: '#f2f3f5', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
+        <Text style={{ fontSize: 20 }}>{getCategoryEmoji(item.category)}</Text>
       </View>
+      <View style={{ flex: 1, marginRight: 8 }}>
+        <Text style={{ fontSize: 15, fontWeight: '600', color: theme.colors.text }} numberOfLines={1}>{item.name}</Text>
+        <Text style={{ fontSize: 13, fontWeight: '700', color: theme.colors.primary, marginTop: 4 }}>₹{item.price}</Text>
+      </View>
+      {qty ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.primaryLight, borderRadius: 16, paddingHorizontal: 4, height: 32 }}>
+          <TouchableOpacity onPress={dec} style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' }}><Minus size={14} color='#fff' /></TouchableOpacity>
+          <Text style={{ width: 24, textAlign: 'center', fontWeight: '700', fontSize: 14, color: theme.colors.primary }}>{local}</Text>
+          <TouchableOpacity onPress={inc} style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' }}><Plus size={14} color='#fff' /></TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity onPress={add} style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 12, height: 32, borderRadius: 16, flexDirection: 'row', alignItems: 'center' }}>
+          <Plus size={14} color='#fff' style={{ marginRight: 3 }} />
+          <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>Add</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
-}
+}, (prev, next) => prev.item.id === next.item.id && prev.qty === next.qty);
 
-function SelectedItemChip({
-  selectedItem,
-  onQuantityChange,
-  onPress,
-}: {
-  selectedItem: { item: MenuItem; quantity: number };
-  onQuantityChange: (item: MenuItem, quantity: number) => void;
-  onPress: () => void;
-}) {
-  const { item, quantity } = selectedItem;
-
-  const getCategoryEmoji = (category: string | null) => {
-    if (!category) return "🍽️";
-    switch (category.toLowerCase()) {
-      case "tea":
-        return "🍵";
-      case "coffee":
-        return "☕";
-      case "pasta":
-        return "🍝";
-      case "snacks":
-        return "🍟";
-      case "dessert":
-        return "🍰";
-      case "beverage":
-        return "🥤";
-      default:
-        return "🍽️";
-    }
-  };
-
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      style={{
-        backgroundColor: "white",
-        borderRadius: 12,
-        padding: 12,
-        marginRight: 12,
-        minWidth: 80,
-        borderWidth: 2,
-        borderColor: theme.colors.border,
-        overflow: "hidden",
-      }}
-      activeOpacity={0.8}
-    >
-      <View style={{ alignItems: "center" }}>
-        {/* Item Icon */}
-        <Text style={{ fontSize: 24, marginBottom: 4 }}>
-          {getCategoryEmoji(item.category)}
-        </Text>
-
-        {/* Item Name */}
-        <Text
-          style={{
-            fontSize: 12,
-            fontWeight: "600",
-            color: theme.colors.text,
-            textAlign: "center",
-            marginBottom: 6,
-          }}
-          numberOfLines={1}
-        >
-          {item.name}
-        </Text>
-
-        {/* Quantity Badge */}
-        <View
-          style={{
-            backgroundColor: theme.colors.primary,
-            borderBottomLeftRadius: 4,
-            height: 24,
-            width: 24,
-            justifyContent: "center",
-            alignItems: "center",
-            position: "absolute",
-            top: -13,
-            right: -13,
-          }}
-        >
-          <Text
-            style={{
-              color: "white",
-              fontWeight: "600",
-              fontSize: 12,
-            }}
-          >
-            {quantity}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-export default function SelectItemsScreen() {
+// ---- Main Component ----
+export default function SelectItemsModal() {
   const router = useRouter();
-  const orderStateData = use$(orderState);
+  const order$ = use$(orderState);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [recentItems, setRecentItems] = useState<MenuItem[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  const flatListRef = React.useRef<FlatList>(null);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 220);
+  const [category, setCategory] = useState<string>('All');
+  const listRef = useRef<SectionList<MenuItem>>(null);
+  const [showSelectedSheet, setShowSelectedSheet] = useState(false);
+  const pendingJumpItemIdRef = useRef<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Recent searches dropdown state
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  // Dynamic top position for dropdown (measured from search bar) so spacing is tight & consistent
+  const [searchDropdownTop, setSearchDropdownTop] = useState(60);
+  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Load menu, recents (items) and stored recent search terms
   useEffect(() => {
-    loadMenuItems();
-    loadRecentItems();
+    let mounted = true; (async () => {
+      try {
+        const [hardcoded, recent, storedSearches] = await Promise.all([
+          orderService.getHardcodedMenuItems(),
+          (async () => { try { return await orderService.getRecentlyOrderedItems(8); } catch { return []; } })(),
+          AsyncStorage.getItem('recentSearchTerms').catch(() => null)
+        ]);
+        if (!mounted) return;
+        setMenuItems(hardcoded);
+        setRecentItems(recent as MenuItem[]);
+        if (storedSearches) { try { const arr = JSON.parse(storedSearches); if (Array.isArray(arr)) setRecentSearches(arr.slice(0, 10)); } catch { } }
+      } finally { if (mounted) setLoading(false); }
+    })(); return () => { mounted = false; if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current); };
   }, []);
 
-  const loadMenuItems = async () => {
-    try {
-      const items = await orderService.getHardcodedMenuItems();
-      setMenuItems(items);
-    } catch (error) {
-      console.error("Error loading menu items:", error);
+  const categories = useMemo(() => ['All', ...CATEGORIES.map(c => c.name)], []);
+
+  // Pre-lowered names to avoid repeated toLowerCase during search
+  const loweredItems = useMemo(() => menuItems.map(m => ({ m, nameLower: m.name.toLowerCase() })), [menuItems]);
+
+  const sections: Section[] = useMemo(() => {
+    const term = debouncedSearch.trim().toLowerCase();
+    const filtered = term ? loweredItems.filter(obj => obj.nameLower.includes(term)).map(obj => obj.m) : menuItems;
+    if (category !== 'All') {
+      const data = filtered.filter(f => f.category === category);
+      return data.length ? [{ title: category, data }] : [];
     }
+    const group: Record<string, MenuItem[]> = {};
+    filtered.forEach(m => { const k = m.category || 'Uncategorized'; (group[k] = group[k] || []).push(m); });
+    const ordered: Section[] = [];
+    // Quick section (recent items) only when no search & All view
+    if (!term && recentItems.length) {
+      // Filter out items not present anymore and dedupe by id
+      const recentsFiltered: MenuItem[] = [];
+      const seen = new Set<string>();
+      for (const r of recentItems) { if (!seen.has(r.id) && filtered.find(f => f.id === r.id)) { seen.add(r.id); recentsFiltered.push(r); } }
+      if (recentsFiltered.length) ordered.push({ title: 'Quick', data: recentsFiltered.slice(0, 8) });
+    }
+    CATEGORIES.forEach(c => { if (group[c.name]) ordered.push({ title: c.name, data: group[c.name] }); });
+    Object.keys(group).filter(k => !CATEGORIES.find(c => c.name === k)).sort().forEach(k => ordered.push({ title: k, data: group[k] }));
+    return ordered;
+  }, [menuItems, debouncedSearch, category, recentItems]);
+
+  // Helper to add a recent search term
+  const addRecentSearch = (term: string) => {
+    const t = term.trim();
+    if (!t) return;
+    setRecentSearches(prev => {
+      const next = [t, ...prev.filter(p => p.toLowerCase() !== t.toLowerCase())].slice(0, 10);
+      AsyncStorage.setItem('recentSearchTerms', JSON.stringify(next)).catch(() => { });
+      return next;
+    });
   };
 
-  const loadRecentItems = async () => {
-    try {
-      const items = await orderService.getRecentlyOrderedItems(8);
-      setRecentItems(items);
-    } catch (error) {
-      console.error("Error loading recent items:", error);
-    }
+  const clearRecentSearches = () => {
+    setRecentSearches([]);
+    AsyncStorage.removeItem('recentSearchTerms').catch(() => { });
   };
 
-  const handleSelectItem = (item: MenuItem, quantity: number) => {
-    const currentItems = orderStateData.selectedItems;
-    const existingIndex = currentItems.findIndex(
-      (selectedItem) => selectedItem.item.id === item.id
-    );
+  // Category quantity map
+  const categoryQuantities = useMemo(() => {
+    const map: Record<string, number> = {};
+    order$.selectedItems.forEach(si => { const cat = si.item.category || 'Uncategorized'; map[cat] = (map[cat] || 0) + si.quantity; });
+    return map;
+  }, [order$.selectedItems]);
 
-    if (quantity === 0) {
-      // Remove item
-      if (existingIndex !== -1) {
-        const newItems = [...currentItems];
-        newItems.splice(existingIndex, 1);
-        orderState.selectedItems.set(newItems);
-      }
+  // Quantity map for O(1) lookup per row (avoids .find on each render)
+  const quantityMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    order$.selectedItems.forEach(si => { m[si.item.id] = si.quantity; });
+    return m;
+  }, [order$.selectedItems]);
+
+  const getQty = (id: string) => quantityMap[id] || 0;
+  const setQty = (item: MenuItem, qty: number) => {
+    const current = orderState.selectedItems.get();
+    const list = [...current];
+    const idx = list.findIndex(l => l.item.id === item.id);
+    if (qty <= 0) {
+      if (idx !== -1) list.splice(idx, 1);
+    } else if (idx === -1) {
+      list.push({ item, quantity: qty });
     } else {
-      // Add or update item
-      if (existingIndex !== -1) {
-        const newItems = [...currentItems];
-        newItems[existingIndex] = { item, quantity };
-        orderState.selectedItems.set(newItems);
-      } else {
-        orderState.selectedItems.set([...currentItems, { item, quantity }]);
+      list[idx] = { ...list[idx], quantity: qty };
+    }
+    orderState.selectedItems.set(list);
+  };
+
+  const totalItems = order$.selectedItems.reduce((t, s) => t + s.quantity, 0);
+  const totalAmount = order$.selectedItems.reduce((t, s) => t + s.quantity * s.item.price, 0);
+
+  const scrollToCategory = (cat: string) => {
+    setCategory(cat);
+    if (cat === 'All') return; // nothing to scroll because we rebuild sections
+    if (cat !== 'All' && category === 'All') {
+      const index = sections.findIndex(s => s.title === cat);
+      if (index !== -1) {
+        try { listRef.current?.scrollToLocation({ sectionIndex: index, itemIndex: 0, animated: true, viewPosition: 0 }); } catch { }
       }
     }
   };
 
-  const getSelectedQuantity = (itemId: string): number => {
-    const selectedItem = orderStateData.selectedItems.find(
-      (si) => si.item.id === itemId
-    );
-    return selectedItem ? selectedItem.quantity : 0;
-  };
-
-  const scrollToItem = (itemId: string) => {
-    const itemIndex = filteredItems.findIndex((item) => item.id === itemId);
-    if (itemIndex !== -1 && flatListRef.current) {
-      flatListRef.current.scrollToIndex({
-        index: itemIndex,
-        animated: true,
-        viewPosition: 0.5,
-      });
+  // Jump to a particular item (used from selected items sheet)
+  const jumpToItem = (itemId: string) => {
+    // Clear search so item will be visible (show soft notice)
+    if (search.length) {
+      setSearch('');
+      setNotice('Search cleared to locate item');
+      setTimeout(() => setNotice(null), 2200);
     }
+    // Ensure we're in full list mode
+    if (category !== 'All') {
+      pendingJumpItemIdRef.current = itemId;
+      setCategory('All');
+      return;
+    }
+    // Already in All view; attempt immediate scroll
+    setTimeout(() => {
+      for (let s = 0; s < sections.length; s++) {
+        const ix = sections[s].data.findIndex(i => i.id === itemId);
+        if (ix !== -1) {
+          try { listRef.current?.scrollToLocation({ sectionIndex: s, itemIndex: ix, animated: true, viewPosition: 0 }); } catch { }
+          break;
+        }
+      }
+    }, 30);
   };
 
-  const categories = [
-    { name: "All", emoji: "🍽️" },
-    { name: "Tea", emoji: "🍵" },
-    { name: "Coffee", emoji: "☕" },
-    { name: "Pasta", emoji: "🍝" },
-    { name: "Snacks", emoji: "🍟" },
-    { name: "Dessert", emoji: "🍰" },
-    { name: "Beverage", emoji: "🥤" },
-  ];
-
-  const filteredItems = menuItems.filter((item) => {
-    const matchesSearch = item.name
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    const matchesCategory =
-      selectedCategory === "All" || item.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  const totalSelectedItems = orderStateData.selectedItems.reduce(
-    (total, item) => total + item.quantity,
-    0
-  );
-
-  const totalAmount = orderStateData.selectedItems.reduce(
-    (total, selectedItem) =>
-      total + selectedItem.item.price * selectedItem.quantity,
-    0
-  );
+  // After category switches to All, if we had a pending item jump, perform it
+  useEffect(() => {
+    if (category === 'All' && pendingJumpItemIdRef.current) {
+      const id = pendingJumpItemIdRef.current;
+      pendingJumpItemIdRef.current = null;
+      jumpToItem(id);
+    }
+  }, [category, sections]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
-      <Stack.Screen
-        options={{
-          title: "Select Items",
-          headerStyle: {
-            backgroundColor: "white",
-          },
-          headerTitleStyle: {
-            fontSize: 20,
-            fontWeight: "600",
-            color: theme.colors.text,
-          },
-          headerLeft: () => (
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={{
-                padding: 8,
-                marginLeft: -8,
-                borderRadius: 8,
-              }}
-            >
-              <ArrowLeft size={24} color={theme.colors.text} />
-            </TouchableOpacity>
-          ),
-          // TODO:CHANGE THIS TO DONE BUTTON
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={() => {
-                router.back();
-              }}
-              style={{
-                padding: 8,
-                marginRight: -8,
-                borderRadius: 8,
-                backgroundColor: theme.colors.primary,
-              }}
-            >
-              <Text
-                style={{
-                  color: "white",
-                  fontWeight: "600",
-                }}
-              >
-                Done
-              </Text>
-            </TouchableOpacity>
-          ),
-          headerShadowVisible: true,
-        }}
-      />
-
+    <View style={{ flex: 1, backgroundColor: '#fff' }}>
+      <Stack.Screen options={{
+        title: 'Select Items', headerStyle: { backgroundColor: '#fff' }, headerTitleStyle: { fontSize: 17, fontWeight: '600', color: theme.colors.text }, headerLeft: () => (
+          <TouchableOpacity onPress={() => router.back()} style={{ padding: 6, marginLeft: -6 }}><ArrowLeft size={22} color={theme.colors.text} /></TouchableOpacity>
+        ), headerShadowVisible: true
+      }} />
       <View style={{ flex: 1 }}>
-        {/* Search and Categories */}
-        <View
-          style={{
-            backgroundColor: "white",
-            paddingHorizontal: 16,
-            paddingTop: 16,
-            paddingBottom: 16,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 8,
-            elevation: 4,
-          }}
-        >
-          {/* Search Bar */}
+        {/* Search & Categories */}
+        <View style={{ backgroundColor: '#fff', paddingHorizontal: 14, paddingTop: 10, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: '#eef1f3' }}>
           <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              backgroundColor: "#f3f4f6",
-              borderRadius: 12,
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              marginBottom: 16,
+            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 }}
+            onLayout={e => {
+              const { y, height } = e.nativeEvent.layout;
+              // Position dropdown just 4px below the search bar container
+              const top = y + height + 4;
+              if (Math.abs(top - searchDropdownTop) > 1) setSearchDropdownTop(top);
             }}
           >
             <Search size={20} color={theme.colors.textSecondary} />
             <TextInput
-              placeholder="Search menu items..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              style={{
-                flex: 1,
-                fontSize: 16,
-                color: theme.colors.text,
-                marginLeft: 12,
-              }}
+              placeholder='Search menu items...'
+              value={search}
+              onChangeText={text => { setSearch(text); if (!showSearchDropdown) setShowSearchDropdown(true); }}
+              style={{ flex: 1, fontSize: 14.5, color: theme.colors.text, marginLeft: 10, paddingVertical: Platform.OS === 'android' ? 0 : 4 }}
               placeholderTextColor={theme.colors.textSecondary}
+              returnKeyType='search'
+              onSubmitEditing={() => { Keyboard.dismiss(); addRecentSearch(search); setShowSearchDropdown(false); }}
+              onFocus={() => setShowSearchDropdown(true)}
+              onBlur={() => { blurTimeoutRef.current = setTimeout(() => setShowSearchDropdown(false), 120) as any; }}
             />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity
-                onPress={() => setSearchQuery("")}
-                activeOpacity={0.7}
-              >
-                <X size={20} color={theme.colors.textSecondary} />
-              </TouchableOpacity>
-            )}
+            {search.length > 0 && <TouchableOpacity onPress={() => setSearch('')}><X size={18} color={theme.colors.textSecondary} /></TouchableOpacity>}
           </View>
-
-          {/* Category Tabs */}
-          <View style={{ flexDirection: "row" }}>
-            <FlatList
-              data={categories}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(item) => item.name}
-              renderItem={({ item: category }) => (
-                <TouchableOpacity
-                  onPress={() => setSelectedCategory(category.name)}
-                  style={{
-                    paddingHorizontal: 20,
-                    paddingVertical: 10,
-                    borderRadius: 20,
-                    marginRight: 8,
-                    backgroundColor:
-                      selectedCategory === category.name
-                        ? theme.colors.primary
-                        : "transparent",
-                    borderWidth: 1,
-                    borderColor:
-                      selectedCategory === category.name
-                        ? theme.colors.primary
-                        : "#e5e7eb",
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={{
-                      fontWeight: "600",
-                      color:
-                        selectedCategory === category.name
-                          ? "white"
-                          : theme.colors.textSecondary,
-                    }}
-                  >
-                    {category.emoji} {category.name}
-                  </Text>
+          {/* Recent Search Dropdown */}
+          {showSearchDropdown && recentSearches.length > 0 && (
+            <View style={{ position: 'absolute', left: 14, right: 14, top: searchDropdownTop, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e3e5e8', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, elevation: 12, zIndex: 50, maxHeight: 220, overflow: 'hidden' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eef1f3' }}>
+                <Text style={{ flex: 1, fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary }}>Recent searches</Text>
+                <TouchableOpacity onPress={clearRecentSearches} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: theme.colors.primary }}>Clear</Text>
                 </TouchableOpacity>
-              )}
-              contentContainerStyle={{ paddingRight: 16 }}
-            />
-          </View>
-        </View>
-
-        {/* Selected Items Horizontal List */}
-        {orderStateData.selectedItems.length > 0 && (
-          <View
-            style={{
-              backgroundColor: "white",
-              paddingBottom: 12,
-              borderBottomWidth: 1,
-              borderBottomColor: "#f3f4f6",
-            }}
-          >
-            <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
-              <Text
-                style={{
-                  fontSize: 16,
-                  fontWeight: "700",
-                  color: theme.colors.text,
-                }}
-              >
-                Selected Items ({totalSelectedItems})
-              </Text>
-              <Text
-                style={{
-                  fontSize: 12,
-                  color: theme.colors.textSecondary,
-                }}
-              >
-                Tap to find item in menu
-              </Text>
-            </View>
-
-            <FlatList
-              data={orderStateData.selectedItems}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(item) => item.item.id}
-              renderItem={({ item: selectedItem }) => (
-                <SelectedItemChip
-                  selectedItem={selectedItem}
-                  onQuantityChange={handleSelectItem}
-                  onPress={() => scrollToItem(selectedItem.item.id)}
-                />
-              )}
-              contentContainerStyle={{ paddingHorizontal: 16 }}
-            />
-          </View>
-        )}
-
-        {/* Recently Ordered Items */}
-        {recentItems.length > 0 && !searchQuery && selectedCategory === "All" && (
-          <View
-            style={{
-              backgroundColor: "white",
-              paddingBottom: 12,
-              borderBottomWidth: 1,
-              borderBottomColor: "#f3f4f6",
-            }}
-          >
-            <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
-              <Text
-                style={{
-                  fontSize: 16,
-                  fontWeight: "700",
-                  color: theme.colors.text,
-                }}
-              >
-                Recently Ordered ⚡
-              </Text>
-              <Text
-                style={{
-                  fontSize: 12,
-                  color: theme.colors.textSecondary,
-                }}
-              >
-                Tap to quickly add to your order
-              </Text>
-            </View>
-
-            <FlatList
-              data={recentItems}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(item) => `recent-${item.id}`}
-              renderItem={({ item }) => {
-                const selectedQuantity = getSelectedQuantity(item.id);
-                const getCategoryEmoji = (category: string | null) => {
-                  if (!category) return "🍽️";
-                  switch (category.toLowerCase()) {
-                    case "tea":
-                      return "🍵";
-                    case "coffee":
-                      return "☕";
-                    case "pasta":
-                      return "🍝";
-                    case "snacks":
-                      return "🍟";
-                    case "dessert":
-                      return "🍰";
-                    case "beverage":
-                      return "🥤";
-                    default:
-                      return "🍽️";
-                  }
-                };
-
-                return (
-                  <TouchableOpacity
-                    onPress={() => handleSelectItem(item, selectedQuantity > 0 ? selectedQuantity + 1 : 1)}
-                    style={{
-                      backgroundColor: selectedQuantity > 0 ? theme.colors.primaryLight : "white",
-                      borderRadius: 12,
-                      padding: 12,
-                      marginRight: 12,
-                      minWidth: 100,
-                      borderWidth: selectedQuantity > 0 ? 2 : 1,
-                      borderColor: selectedQuantity > 0 ? theme.colors.primary : "#e5e7eb",
-                      alignItems: "center",
-                      shadowColor: "#000",
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.1,
-                      shadowRadius: 4,
-                      elevation: 2,
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={{ fontSize: 24, marginBottom: 4 }}>
-                      {getCategoryEmoji(item.category)}
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: "600",
-                        color: selectedQuantity > 0 ? theme.colors.primary : theme.colors.text,
-                        textAlign: "center",
-                        marginBottom: 4,
-                      }}
-                      numberOfLines={2}
-                    >
-                      {item.name}
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        fontWeight: "700",
-                        color: selectedQuantity > 0 ? theme.colors.primary : theme.colors.text,
-                      }}
-                    >
-                      ₹{item.price}
-                    </Text>
-                    {selectedQuantity > 0 && (
-                      <View
-                        style={{
-                          position: "absolute",
-                          top: -8,
-                          right: -8,
-                          backgroundColor: theme.colors.primary,
-                          borderRadius: 12,
-                          width: 24,
-                          height: 24,
-                          justifyContent: "center",
-                          alignItems: "center",
-                        }}
-                      >
-                        <Text
-                          style={{
-                            color: "white",
-                            fontWeight: "600",
-                            fontSize: 12,
-                          }}
-                        >
-                          {selectedQuantity}
-                        </Text>
-                      </View>
-                    )}
+              </View>
+              <ScrollView keyboardShouldPersistTaps='handled'>
+                {recentSearches.map(rs => (
+                  <TouchableOpacity key={rs} onPress={() => { setSearch(rs); addRecentSearch(rs); setShowSearchDropdown(false); Keyboard.dismiss(); }} style={{ paddingVertical: 10, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: '#f4f5f6' }}>
+                    <Text style={{ fontSize: 13.5, color: theme.colors.text }}>{rs}</Text>
                   </TouchableOpacity>
-                );
-              }}
-              contentContainerStyle={{ paddingHorizontal: 16 }}
-            />
-          </View>
-        )}
-
-        {/* Items List */}
+                ))}
+              </ScrollView>
+            </View>
+          )}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 8 }} style={{ zIndex: 1 }}>
+            {categories.map(cat => {
+              const active = category === cat; return (
+                <TouchableOpacity key={cat} onPress={() => scrollToCategory(cat)} style={{ paddingHorizontal: 14, height: 34, borderRadius: 17, backgroundColor: active ? theme.colors.primary : '#fff', borderWidth: 1, borderColor: active ? theme.colors.primary : '#e3e5e8', alignItems: 'center', justifyContent: 'center', marginRight: 8, position: 'relative' }}>
+                  <Text style={{ color: active ? '#fff' : theme.colors.text, fontSize: 13, fontWeight: '600' }}>{cat}</Text>
+                  {cat !== 'All' && categoryQuantities[cat] ? (
+                    <View style={{ position: 'absolute', top: -6, right: -4, backgroundColor: active ? '#fff' : theme.colors.primary, minWidth: 18, paddingHorizontal: 4, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center' }}>
+                      <Text style={{ color: active ? theme.colors.primary : '#fff', fontSize: 10, fontWeight: '700' }}>{categoryQuantities[cat]}</Text>
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          {notice && (
+            <View style={{ backgroundColor: '#eef7ff', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+              <Text style={{ flex: 1, fontSize: 12.5, fontWeight: '600', color: theme.colors.primary }}>{notice}</Text>
+              <TouchableOpacity onPress={() => setNotice(null)} style={{ padding: 4 }}>
+                <X size={14} color={theme.colors.primary} />
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+        {/* List */}
         <View style={{ flex: 1 }}>
-          {filteredItems.length === 0 ? (
-            <View
-              style={{
-                flex: 1,
-                justifyContent: "center",
-                alignItems: "center",
-                paddingHorizontal: 32,
-              }}
-            >
-              <Text style={{ fontSize: 64, marginBottom: 16 }}>🍽️</Text>
-              <Text
-                style={{
-                  fontSize: 20,
-                  fontWeight: "600",
-                  color: theme.colors.text,
-                  marginBottom: 8,
-                  textAlign: "center",
-                }}
-              >
-                {searchQuery ? "No items found" : "No items available"}
-              </Text>
-              <Text
-                style={{
-                  fontSize: 16,
-                  color: theme.colors.textSecondary,
-                  textAlign: "center",
-                  lineHeight: 24,
-                }}
-              >
-                {searchQuery
-                  ? `Try searching for something else or check a different category.`
-                  : "Our menu items will appear here once they're loaded."}
-              </Text>
+          {loading ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size='small' color={theme.colors.primary} /></View>
+          ) : menuItems.length === 0 ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }}>
+              <Text style={{ fontSize: 50, marginBottom: 12 }}>🍽️</Text>
+              <Text style={{ fontSize: 17, fontWeight: '600', color: theme.colors.text, marginBottom: 6 }}>No menu items</Text>
+              <Text style={{ fontSize: 13.5, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 }}>Menu will appear here once items are added.</Text>
+            </View>
+          ) : sections.length === 0 ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }}>
+              <Text style={{ fontSize: 46, marginBottom: 10 }}>🔍</Text>
+              <Text style={{ fontSize: 16.5, fontWeight: '600', color: theme.colors.text, marginBottom: 6 }}>No matches</Text>
+              <Text style={{ fontSize: 13.5, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 }}>Try a different search term.</Text>
             </View>
           ) : (
-            <FlatList
-              ref={flatListRef}
-              data={filteredItems}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <ItemCard
-                  item={item}
-                  onSelect={handleSelectItem}
-                  selectedQuantity={getSelectedQuantity(item.id)}
-                />
+            <SectionList
+              ref={listRef}
+              sections={sections}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => <ItemRow item={item} qty={getQty(item.id)} onChange={(q) => setQty(item, q)} />}
+              renderSectionHeader={({ section: { title } }) => (
+                <View style={{ height: HEADER_HEIGHT, justifyContent: 'flex-end', paddingBottom: 2 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.text }}>{getCategoryEmoji(title)} {title}</Text>
+                </View>
               )}
+              stickySectionHeadersEnabled={category === 'All'}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{
-                paddingHorizontal: 16,
-                paddingTop: 16,
-                paddingBottom: 32,
-              }}
-              onScrollToIndexFailed={(info) => {
-                // Handle scroll failure gracefully
-                const wait = new Promise((resolve) => setTimeout(resolve, 500));
-                wait.then(() => {
-                  flatListRef.current?.scrollToIndex({
-                    index: info.index,
-                    animated: true,
-                    viewPosition: 0.5,
-                  });
-                });
-              }}
+              keyboardDismissMode='on-drag'
+              contentContainerStyle={{ paddingTop: 4, paddingHorizontal: 10, paddingBottom: 80 }}
             />
           )}
         </View>
+        {order$.selectedItems.length > 0 && (
+          <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: 'rgba(255,255,255,0.96)', borderTopWidth: 1, borderTopColor: '#e5e7eb', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: theme.colors.text }} numberOfLines={1}>{totalItems} item{totalItems !== 1 ? 's' : ''} • ₹{totalAmount}</Text>
+            <TouchableOpacity onPress={() => setShowSelectedSheet(true)} style={{ backgroundColor: '#f1f2f4', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18 }}>
+              <Text style={{ color: theme.colors.text, fontSize: 12.5, fontWeight: '600' }}>View</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 18 }}>
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {/* Selected Items Bottom Sheet */}
+        {showSelectedSheet && (
+          <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'flex-end' }}>
+            {/* Backdrop */}
+            <TouchableOpacity activeOpacity={1} onPress={() => setShowSelectedSheet(false)} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
+            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: '70%', paddingBottom: (order$.selectedItems.length ? 70 : 20), paddingHorizontal: 14, paddingTop: 10 }}>
+              <View style={{ alignItems: 'center', marginBottom: 8 }}>
+                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: '#e1e3e6' }} />
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                <Text style={{ flex: 1, fontSize: 15.5, fontWeight: '700', color: theme.colors.text }}>Selected Items ({totalItems})</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.primary }}>₹{totalAmount}</Text>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
+                {order$.selectedItems.map(si => (
+                  <View key={si.item.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f2f3f5' }}>
+                    <TouchableOpacity onPress={() => { setShowSelectedSheet(false); jumpToItem(si.item.id); }} style={{ flex: 1, marginRight: 8 }}>
+                      <Text style={{ fontSize: 14.5, fontWeight: '600', color: theme.colors.text }} numberOfLines={1}>{si.item.name}</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary, marginTop: 2 }}>₹{si.item.price}</Text>
+                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.primaryLight, borderRadius: 16, paddingHorizontal: 4, height: 32, marginRight: 6 }}>
+                      <TouchableOpacity onPress={() => setQty(si.item, si.quantity - 1)} style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' }}>
+                        <Minus size={14} color='#fff' />
+                      </TouchableOpacity>
+                      <Text style={{ width: 26, textAlign: 'center', fontWeight: '700', fontSize: 14, color: theme.colors.primary }}>{si.quantity}</Text>
+                      <TouchableOpacity onPress={() => setQty(si.item, si.quantity + 1)} style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' }}>
+                        <Plus size={14} color='#fff' />
+                      </TouchableOpacity>
+                    </View>
+                    <TouchableOpacity onPress={() => setQty(si.item, 0)} style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+                      <Text style={{ fontSize: 11, fontWeight: '600', color: '#d11' }}>Remove</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                {order$.selectedItems.length === 0 && (
+                  <View style={{ paddingVertical: 30, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 14, color: theme.colors.textSecondary }}>No items selected.</Text>
+                  </View>
+                )}
+              </ScrollView>
+              <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#edf0f2', backgroundColor: '#fff', borderBottomLeftRadius: 18, borderBottomRightRadius: 18 }}>
+                <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: theme.colors.text }}>{totalItems} item{totalItems !== 1 ? 's' : ''} • ₹{totalAmount}</Text>
+                <TouchableOpacity onPress={() => { setShowSelectedSheet(false); router.back(); }} style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 18 }}>
+                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
       </View>
-
-      {/* FAB Category Selector */}
-      <FABCategorySelector
-        categories={categories}
-        selectedCategory={selectedCategory}
-        onCategorySelect={setSelectedCategory}
-      />
     </View>
   );
 }
+

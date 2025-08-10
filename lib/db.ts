@@ -31,7 +31,8 @@ async function initializeSchema() {
       name TEXT NOT NULL,
       contact TEXT UNIQUE,
       createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
+  updatedAt TEXT NOT NULL,
+  creditBalance INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS menu_items (
@@ -115,4 +116,18 @@ async function initializeSchema() {
       FOREIGN KEY (receiptId) REFERENCES receipts(id)
     );
   `);
+}
+
+// Helper to run a set of DB operations inside a transaction safely.
+export async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
+  if (!db) throw new Error("Database not initialized");
+  await db.execAsync("BEGIN TRANSACTION");
+  try {
+    const result = await fn();
+    await db.execAsync("COMMIT");
+    return result;
+  } catch (err) {
+    await db.execAsync("ROLLBACK");
+    throw err;
+  }
 }

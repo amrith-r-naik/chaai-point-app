@@ -229,52 +229,30 @@ class PaymentService {
 
   private async processCreditPayment(paymentData: PaymentProcessData): Promise<{ receipt: Receipt; bill: Bill }> {
     if (!db) throw new Error("Database not initialized");
-
-    // For credit payments, we create a receipt but no bill (KOTs remain unbilled = dues)
-    const receiptNo = await this.getNextReceiptNumber();
-    
-    const receipt: Receipt = {
-      id: uuid.v4() as string,
-      receiptNo,
+    // Pure credit: only add to customer credit balance, no receipt or bill persistence
+    await this.updateCustomerCredit(paymentData.customerId, paymentData.totalAmount);
+    const placeholderReceipt: Receipt = {
+      id: "credit-only-" + Date.now(),
+      receiptNo: "0",
       customerId: paymentData.customerId,
-      amount: paymentData.totalAmount, // Store in rupees (direct KOT total)
+      amount: paymentData.totalAmount,
       mode: "Credit",
-      remarks: (paymentData.remarks || "") + " (Credit - Amount added to dues)",
+      remarks: (paymentData.remarks || "") + " (Added to credit)",
       createdAt: new Date().toISOString(),
     };
-
-    await db.runAsync(`
-      INSERT INTO receipts (id, receiptNo, customerId, amount, mode, remarks, createdAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [receipt.id, receipt.receiptNo, receipt.customerId, receipt.amount, receipt.mode, receipt.remarks, receipt.createdAt]);
-
-    // Create a dummy bill for receipt display purposes
-    const dummyBill: Bill = {
-      id: "credit-bill-" + receipt.id,
-      billNumber: "CREDIT",
+    const placeholderBill: Bill = {
+      id: "credit-only-bill-" + Date.now(),
+      billNumber: "0",
       customerId: paymentData.customerId,
-      total: paymentData.totalAmount, // Store in rupees (direct KOT total)
+      total: paymentData.totalAmount,
       createdAt: new Date().toISOString(),
     };
-
-    // KOTs remain unbilled (billId stays NULL) so they count as dues
-    
-    return { receipt, bill: dummyBill };
+    return { receipt: placeholderReceipt, bill: placeholderBill };
   }
 
   private async updateCustomerCredit(customerId: string, amount: number): Promise<void> {
     if (!db) throw new Error("Database not initialized");
-
-    // First, check if customer credit column exists, if not add it
-    try {
-      await db.execAsync(`
-        ALTER TABLE customers ADD COLUMN creditBalance INTEGER DEFAULT 0
-      `);
-    } catch (error) {
-      // Column might already exist, that's fine
-    }
-
-    // Update customer credit balance
+    // Column guaranteed in schema; just update
     await db.runAsync(`
       UPDATE customers 
       SET creditBalance = COALESCE(creditBalance, 0) + ?

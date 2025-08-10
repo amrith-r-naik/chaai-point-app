@@ -4,16 +4,16 @@ import { router } from "expo-router";
 import { ArrowLeft, Edit3, Plus, Trash2, X } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Modal,
-    SafeAreaView,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { FABCategorySelector } from "../components/FABCategorySelector";
 
@@ -22,6 +22,7 @@ export default function MenuManagementScreen() {
   const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  const [searchQuery, setSearchQuery] = useState("");
   const [showMenuModal, setShowMenuModal] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [menuForm, setMenuForm] = useState({
@@ -53,7 +54,7 @@ export default function MenuManagementScreen() {
 
   useEffect(() => {
     filterItems();
-  }, [menuItems, selectedCategory]);
+  }, [menuItems, selectedCategory, searchQuery]);
 
   const loadMenuItems = async () => {
     try {
@@ -69,11 +70,12 @@ export default function MenuManagementScreen() {
   };
 
   const filterItems = () => {
-    if (selectedCategory === "All") {
-      setFilteredItems(menuItems);
-    } else {
-      setFilteredItems(menuItems.filter(item => item.category === selectedCategory));
-    }
+    const categoryFiltered = selectedCategory === "All" ? menuItems : menuItems.filter(item => item.category === selectedCategory);
+    const q = searchQuery.trim().toLowerCase();
+    const finalFiltered = q
+      ? categoryFiltered.filter(item => item.name.toLowerCase().includes(q) || (item.category || '').toLowerCase().includes(q))
+      : categoryFiltered;
+    setFilteredItems(finalFiltered);
   };
 
   const handleCategorySelect = (categoryName: string) => {
@@ -294,6 +296,23 @@ export default function MenuManagementScreen() {
           borderBottomColor: theme.colors.border,
         }}
       >
+        {/* Search */}
+        <TextInput
+          placeholder="Search items or categories"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          style={{
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            borderRadius: 10,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            backgroundColor: '#f9fafb',
+            marginBottom: 12,
+            fontSize: 16,
+          }}
+          placeholderTextColor="#9ca3af"
+        />
         <TouchableOpacity
           onPress={handleAddMenuItem}
           style={{

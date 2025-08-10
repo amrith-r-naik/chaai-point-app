@@ -1,22 +1,25 @@
 import { theme } from "@/constants/theme";
 import { adminService } from "@/services/adminService";
+import { excelExportService } from "@/services/excelExportService";
 import { CreateMenuItemData, MenuItem, menuService } from "@/services/menuService";
+import { testService } from "@/services/testService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import { router } from "expo-router";
-import { Database, Lock, Settings, Trash2, Users, X } from "lucide-react-native";
+import { Database, Download, Lock, Settings, TestTube2, Trash2, Users, X } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  SafeAreaView,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Modal,
+    SafeAreaView,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
+import ExportModal from "./(modals)/export-data";
 
 export default function AdminSettingsScreen() {
   const auth = use$(authState);
@@ -30,6 +33,7 @@ export default function AdminSettingsScreen() {
     category: "",
     price: "",
   });
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const categories = [
     "Tea",
@@ -274,6 +278,60 @@ export default function AdminSettingsScreen() {
             }
           },
         },
+      ]
+    );
+  };
+
+  const handleTestExport = async () => {
+    Alert.alert(
+      "Test Export System",
+      "This will test the export functionality. Choose an option:",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Create Test Data",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const result = await testService.createSampleData();
+              await loadTableCounts();
+              Alert.alert("Success", `Test data created: ${result.customers} customers, ${result.expenses} expenses, ${result.orders} orders`);
+            } catch (error) {
+              Alert.alert("Error", `Failed to create test data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+        {
+          text: "Test Database",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await excelExportService.testDatabase();
+              Alert.alert("Success", "Database test completed. Check console for details.");
+            } catch (error) {
+              Alert.alert("Error", `Database test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+        {
+          text: "Test Export",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const fileUris = await excelExportService.exportAllData();
+              await excelExportService.shareFiles(fileUris);
+              Alert.alert("Success", "Export test completed successfully!");
+            } catch (error) {
+              Alert.alert("Error", `Export test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            } finally {
+              setLoading(false);
+            }
+          },
+        }
       ]
     );
   };
@@ -596,6 +654,27 @@ export default function AdminSettingsScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Data Export */}
+        <View style={{ marginBottom: 32 }}>
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: "bold",
+              color: theme.colors.text,
+              marginBottom: 16,
+            }}
+          >
+            Data Export
+          </Text>
+
+          <AdminCard
+            title="Export Business Data"
+            description="Export customers, expenses, sales data to CSV files for external analysis"
+            icon={Download}
+            onPress={() => setShowExportModal(true)}
+          />
+        </View>
+
         {/* Customer Management */}
         <View style={{ marginBottom: 32 }}>
           <Text
@@ -635,6 +714,13 @@ export default function AdminSettingsScreen() {
             description="Clear all business data (preserves users) and setup with demo menu items and customers"
             icon={Database}
             onPress={handleSetupDemoData}
+          />
+
+          <AdminCard
+            title="Test Export System"
+            description="Test the export functionality and create sample data for debugging"
+            icon={TestTube2}
+            onPress={handleTestExport}
           />
 
           <AdminCard
@@ -825,6 +911,12 @@ export default function AdminSettingsScreen() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      {/* Export Modal */}
+      <ExportModal
+        visible={showExportModal}
+        onClose={() => setShowExportModal(false)}
+      />
     </SafeAreaView>
   );
 }

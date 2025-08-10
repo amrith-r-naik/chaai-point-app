@@ -43,8 +43,16 @@ export async function createCustomer(
   try {
     if (!db) throw new Error("Database not initialized");
 
+    // Generate unique walk-in customer ID for customers without contact
+    let customerId: string;
+    if (!contact || contact.trim() === '') {
+      customerId = await generateWalkInCustomerId();
+    } else {
+      customerId = uuid.v4() as string;
+    }
+
     const customer: Customer = {
-      id: uuid.v4() as string,
+      id: customerId,
       name: name.trim(),
       contact: contact?.trim(),
       createdAt: new Date().toISOString(),
@@ -67,6 +75,34 @@ export async function createCustomer(
   } catch (error) {
     console.error("Error creating customer:", error);
     throw error;
+  }
+}
+
+async function generateWalkInCustomerId(): Promise<string> {
+  if (!db) throw new Error("Database not initialized");
+
+  try {
+    // Get the next customer number by finding the highest existing walk-in customer ID
+    const result = await db.getFirstAsync(`
+      SELECT id FROM customers 
+      WHERE id LIKE 'C%' 
+      AND id REGEXP '^C[0-9]+$'
+      ORDER BY CAST(SUBSTR(id, 2) AS INTEGER) DESC 
+      LIMIT 1
+    `) as { id?: string } | null;
+
+    let nextNumber = 1;
+    if (result?.id) {
+      const currentNumber = parseInt(result.id.substring(1));
+      nextNumber = currentNumber + 1;
+    }
+
+    // Format as C001, C002, etc.
+    return `C${nextNumber.toString().padStart(3, '0')}`;
+  } catch (error) {
+    console.error("Error generating walk-in customer ID:", error);
+    // Fallback to timestamp-based ID if regex fails
+    return `C${Date.now().toString().slice(-6)}`;
   }
 }
 

@@ -246,6 +246,7 @@ class OrderService {
       WHERE DATE(createdAt) = DATE(?)
     `, [today])) as any;
 
+    // Reset daily - start from 1 each day
     return (result?.maxKot || 0) + 1;
   }
 

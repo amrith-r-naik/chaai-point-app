@@ -1,14 +1,18 @@
 import AddExpenseModal from "@/app/(modals)/add-expense";
 import { Loading, Typography } from "@/components/ui";
 import { theme } from "@/constants/theme";
-import { dashboardService, DateFilterOptions, ExpenseData } from "@/services/dashboardService";
+import { dashboardService, DateFilterOptions, DetailedAnalytics, ExpenseData } from "@/services/dashboardService";
 import { dueService } from "@/services/dueService";
+import { excelExportService } from "@/services/excelExportService";
 import { useRouter } from "expo-router";
 import {
   Activity,
+  BarChart3,
   Calendar,
   Clock,
   DollarSign,
+  Download,
+  PieChart,
   Plus,
   Receipt,
   TrendingDown,
@@ -329,6 +333,9 @@ export default function BillingScreen() {
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [pendingDues, setPendingDues] = useState(0);
+  const [detailedAnalytics, setDetailedAnalytics] = useState<DetailedAnalytics | null>(null);
+  const [showDetailedView, setShowDetailedView] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
 
   const getDateFilter = (): DateFilterOptions | undefined => {
     const today = new Date();
@@ -360,12 +367,14 @@ export default function BillingScreen() {
   const loadExpenses = async () => {
     try {
       const dateFilter = getDateFilter();
-      const [expensesData, duesAmount] = await Promise.all([
+      const [expensesData, duesAmount, analytics] = await Promise.all([
         dashboardService.getExpenses(dateFilter),
-        dueService.getTotalPendingDues()
+        dueService.getTotalPendingDues(),
+        selectedFilter !== "all" ? dashboardService.getDetailedAnalytics(selectedFilter) : null
       ]);
       setExpenses(expensesData);
       setPendingDues(duesAmount);
+      setDetailedAnalytics(analytics);
       
       const total = expensesData.reduce((sum, expense) => sum + expense.amount, 0);
       setTotalExpenses(total);
@@ -389,6 +398,82 @@ export default function BillingScreen() {
 
   const handleExpenseAdded = () => {
     loadExpenses();
+  };
+
+  const handleExport = async () => {
+    setExportLoading(true);
+    try {
+      const dateFilter = getDateFilter();
+      
+      Alert.alert(
+        "Export Data",
+        "What would you like to export?",
+        [
+          {
+            text: "Cancel",
+            style: "cancel"
+          },
+          {
+            text: "Customers",
+            onPress: async () => {
+              try {
+                const fileUri = await excelExportService.exportCustomers(dateFilter);
+                await excelExportService.shareFiles([fileUri]);
+                Alert.alert("Success", "Customer data exported successfully!");
+              } catch (error) {
+                console.error('Customer export error:', error);
+                Alert.alert("Error", "Failed to export customer data");
+              }
+            }
+          },
+          {
+            text: "Expenses",
+            onPress: async () => {
+              try {
+                const fileUri = await excelExportService.exportExpenses(dateFilter);
+                await excelExportService.shareFiles([fileUri]);
+                Alert.alert("Success", "Expense data exported successfully!");
+              } catch (error) {
+                console.error('Expenses export error:', error);
+                Alert.alert("Error", "Failed to export expense data");
+              }
+            }
+          },
+          {
+            text: "Sales",
+            onPress: async () => {
+              try {
+                const fileUri = await excelExportService.exportSales(dateFilter);
+                await excelExportService.shareFiles([fileUri]);
+                Alert.alert("Success", "Sales data exported successfully!");
+              } catch (error) {
+                console.error('Sales export error:', error);
+                Alert.alert("Error", "Failed to export sales data");
+              }
+            }
+          },
+          {
+            text: "All Data",
+            onPress: async () => {
+              try {
+                const fileUris = await excelExportService.exportAllData(dateFilter);
+                await excelExportService.shareFiles(fileUris);
+                Alert.alert("Success", "All business data exported successfully!");
+              } catch (error) {
+                console.error('All data export error:', error);
+                Alert.alert("Error", "Failed to export complete data");
+              }
+            }
+          }
+        ],
+        { cancelable: true }
+      );
+    } catch (error) {
+      console.error('Export initialization error:', error);
+      Alert.alert("Error", "Failed to initiate export");
+    } finally {
+      setExportLoading(false);
+    }
   };
 
   if (loading) {
@@ -429,7 +514,7 @@ export default function BillingScreen() {
           shadowRadius: 16,
           elevation: 8,
         }}>
-          {/* Header Title and Action */}
+          {/* Header Title and Actions */}
           <View style={{ 
             flexDirection: 'row', 
             justifyContent: 'space-between', 
@@ -447,7 +532,7 @@ export default function BillingScreen() {
                   lineHeight: 38
                 }}
               >
-                Expenses
+                Analytics
               </Typography>
               <Typography 
                 style={{ 
@@ -456,17 +541,31 @@ export default function BillingScreen() {
                   lineHeight: 22
                 }}
               >
-                Track and manage your business expenses
+                Track expenses and business insights
               </Typography>
             </View>
             
-                <TouchableOpacity 
-                  style={[styles.actionButton, styles.primaryActionButton]}
-                  onPress={() => setShowAddExpense(true)}
-                >
-                  <Plus size={18} color={theme.colors.primary} />
-                  <Typography style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 13 }}>Add</Typography>
-                </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity 
+                style={[styles.actionButton]}
+                onPress={handleExport}
+                disabled={exportLoading}
+              >
+                {exportLoading ? (
+                  <Activity size={18} color="rgba(255,255,255,0.9)" />
+                ) : (
+                  <Download size={18} color="rgba(255,255,255,0.9)" />
+                )}
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.primaryActionButton]}
+                onPress={() => setShowAddExpense(true)}
+              >
+                <Plus size={18} color={theme.colors.primary} />
+                <Typography style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 13 }}>Add</Typography>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Enhanced Filter Section */}
@@ -509,151 +608,342 @@ export default function BillingScreen() {
 
         {/* Stats Cards Section */}
         <View style={{ paddingHorizontal: 24, marginTop: -20 }}>
-          {/* Total Expenses Card */}
-          <StatCard
-            icon={<TrendingDown size={28} color="#EF4444" />}
-            title={`Total Expenses ${selectedFilter !== "all" ? `(${selectedFilter})` : ""}`}
-            value={formatCurrency(totalExpenses)}
-            trend="down"
-            color="#EF4444"
-            backgroundColor="#FEF2F2"
-          />
-
-          {/* Pending Dues Card */}
-          <StatCard
-            icon={<Clock size={28} color="#D97706" />}
-            title="Pending Dues"
-            value={formatCurrency(pendingDues)}
-            trend={pendingDues > 0 ? "neutral" : "up"}
-            color={pendingDues > 0 ? "#D97706" : "#10B981"}
-            backgroundColor={pendingDues > 0 ? "#FEF3C7" : "#D1FAE5"}
-            onPress={() => router.push("/(modals)/due-management")}
-          />
-
-          {/* Section Header */}
-          <View style={{ 
-            flexDirection: 'row', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
-            marginBottom: 20,
-            marginTop: 12
-          }}>
-            <Typography 
-              variant="h3" 
-              weight="bold"
-              style={{ color: '#1E293B', fontSize: 22 }}
-            >
-              Recent Expenses
-            </Typography>
-            <View style={{
+          {/* Analytics Toggle */}
+          {detailedAnalytics && (
+            <View style={{ 
+              flexDirection: 'row', 
+              marginBottom: 16,
               backgroundColor: 'white',
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              borderRadius: 20,
-              borderWidth: 1,
-              borderColor: '#E2E8F0',
+              borderRadius: 16,
+              padding: 4,
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.05,
-              shadowRadius: 4,
-              elevation: 2,
+              shadowOpacity: 0.06,
+              shadowRadius: 8,
+              elevation: 3,
             }}>
-              <Typography 
-                variant="caption" 
-                style={{ 
-                  color: theme.colors.primary, 
-                  fontWeight: '700',
-                  fontSize: 11
-                }}
-              >
-                {expenses.length} expense{expenses.length !== 1 ? 's' : ''}
-              </Typography>
-            </View>
-          </View>
-
-          {/* Expenses List or Empty State */}
-          {expenses.length === 0 ? (
-            <View style={{
-              backgroundColor: 'white',
-              alignItems: 'center',
-              padding: 40,
-              borderRadius: 24,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.08,
-              shadowRadius: 12,
-              elevation: 6,
-              borderWidth: 1,
-              borderColor: '#F8FAFC',
-            }}>
-              <View style={{
-                width: 100,
-                height: 100,
-                backgroundColor: '#F8FAFC',
-                borderRadius: 50,
-                justifyContent: 'center',
-                alignItems: 'center',
-                marginBottom: 24,
-                borderWidth: 3,
-                borderColor: '#E2E8F0',
-              }}>
-                <DollarSign size={48} color="#94A3B8" />
-              </View>
-              
-              <Typography 
-                variant="h3" 
-                weight="bold"
-                style={{ 
-                  marginBottom: 12, 
-                  color: '#1E293B',
-                  fontSize: 22
-                }}
-              >
-                No Expenses Found
-              </Typography>
-              
-              <Typography 
-                variant="body" 
-                color="textSecondary" 
-                style={{ 
-                  textAlign: 'center', 
-                  marginBottom: 32, 
-                  lineHeight: 24,
-                  paddingHorizontal: 20
-                }}
-              >
-                {selectedFilter === "all" 
-                  ? "You haven't added any expenses yet. Start tracking your business expenses to get better insights."
-                  : `No expenses found for ${selectedFilter}. Try selecting a different time period or add a new expense.`}
-              </Typography>
-              
               <TouchableOpacity
-                onPress={() => setShowAddExpense(true)}
                 style={{
-                  backgroundColor: theme.colors.primary,
-                  paddingHorizontal: 32,
-                  paddingVertical: 16,
-                  borderRadius: 16,
+                  flex: 1,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 12,
+                  backgroundColor: !showDetailedView ? theme.colors.primary : 'transparent',
                   flexDirection: 'row',
                   alignItems: 'center',
-                  shadowColor: theme.colors.primary,
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 8,
-                  elevation: 6,
+                  justifyContent: 'center'
                 }}
+                onPress={() => setShowDetailedView(false)}
               >
-                <Plus size={20} color="white" style={{ marginRight: 8 }} />
-                <Typography style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>
-                  Add First Expense
+                <Receipt size={16} color={!showDetailedView ? 'white' : theme.colors.textSecondary} style={{ marginRight: 6 }} />
+                <Typography style={{ 
+                  color: !showDetailedView ? 'white' : theme.colors.textSecondary, 
+                  fontWeight: '600',
+                  fontSize: 13
+                }}>
+                  Expenses
+                </Typography>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 12,
+                  backgroundColor: showDetailedView ? theme.colors.primary : 'transparent',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                onPress={() => setShowDetailedView(true)}
+              >
+                <BarChart3 size={16} color={showDetailedView ? 'white' : theme.colors.textSecondary} style={{ marginRight: 6 }} />
+                <Typography style={{ 
+                  color: showDetailedView ? 'white' : theme.colors.textSecondary, 
+                  fontWeight: '600',
+                  fontSize: 13
+                }}>
+                  Analytics
                 </Typography>
               </TouchableOpacity>
             </View>
+          )}
+
+          {showDetailedView && detailedAnalytics ? (
+            // Detailed Analytics View
+            <View>
+              {/* Performance Cards */}
+              <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
+                <View style={{ flex: 1 }}>
+                  <StatCard
+                    icon={<DollarSign size={24} color="#10B981" />}
+                    title={`Revenue (${detailedAnalytics.period})`}
+                    value={formatCurrency(detailedAnalytics.revenue.total)}
+                    trend={detailedAnalytics.revenue.growth > 0 ? 'up' : detailedAnalytics.revenue.growth < 0 ? 'down' : 'neutral'}
+                    color="#10B981"
+                    backgroundColor="#D1FAE5"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <StatCard
+                    icon={<Activity size={24} color="#3B82F6" />}
+                    title={`Orders (${detailedAnalytics.period})`}
+                    value={detailedAnalytics.orders.total.toString()}
+                    trend={detailedAnalytics.orders.growth > 0 ? 'up' : detailedAnalytics.orders.growth < 0 ? 'down' : 'neutral'}
+                    color="#3B82F6"
+                    backgroundColor="#DBEAFE"
+                  />
+                </View>
+              </View>
+
+              {/* Growth Indicators */}
+              <View style={{
+                backgroundColor: 'white',
+                borderRadius: 16,
+                padding: 20,
+                marginBottom: 16,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.06,
+                shadowRadius: 8,
+                elevation: 3,
+              }}>
+                <Typography variant="h4" weight="bold" style={{ marginBottom: 16, color: '#1E293B' }}>
+                  Growth Comparison
+                </Typography>
+                
+                <View style={{ gap: 12 }}>
+                  {[
+                    { label: 'Revenue', current: detailedAnalytics.revenue.total, growth: detailedAnalytics.revenue.growth },
+                    { label: 'Orders', current: detailedAnalytics.orders.total, growth: detailedAnalytics.orders.growth },
+                    { label: 'Profit', current: detailedAnalytics.profit.total, growth: detailedAnalytics.profit.growth }
+                  ].map((item) => (
+                    <View key={item.label} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Typography style={{ color: '#64748B', fontSize: 14, fontWeight: '500' }}>
+                        {item.label}
+                      </Typography>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Typography style={{ 
+                          color: item.growth > 0 ? '#10B981' : item.growth < 0 ? '#EF4444' : '#64748B',
+                          fontSize: 14,
+                          fontWeight: '600',
+                          marginRight: 6
+                        }}>
+                          {item.growth > 0 ? '+' : ''}{item.growth.toFixed(1)}%
+                        </Typography>
+                        {item.growth > 0 ? (
+                          <TrendingUp size={14} color="#10B981" />
+                        ) : item.growth < 0 ? (
+                          <TrendingDown size={14} color="#EF4444" />
+                        ) : (
+                          <Activity size={14} color="#64748B" />
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              {/* Top Items */}
+              {detailedAnalytics.topItems.length > 0 && (
+                <View style={{
+                  backgroundColor: 'white',
+                  borderRadius: 16,
+                  padding: 20,
+                  marginBottom: 16,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.06,
+                  shadowRadius: 8,
+                  elevation: 3,
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                    <PieChart size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                    <Typography variant="h4" weight="bold" style={{ color: '#1E293B' }}>
+                      Top Selling Items
+                    </Typography>
+                  </View>
+                  
+                  {detailedAnalytics.topItems.map((item, index) => (
+                    <View key={index} style={{ 
+                      flexDirection: 'row', 
+                      alignItems: 'center', 
+                      justifyContent: 'space-between',
+                      paddingVertical: 8,
+                      borderBottomWidth: index < detailedAnalytics.topItems.length - 1 ? 1 : 0,
+                      borderBottomColor: '#F1F5F9'
+                    }}>
+                      <View style={{ flex: 1 }}>
+                        <Typography style={{ fontWeight: '600', color: '#1E293B', fontSize: 14 }}>
+                          {item.name}
+                        </Typography>
+                        <Typography style={{ color: '#64748B', fontSize: 12 }}>
+                          {item.quantity} sold
+                        </Typography>
+                      </View>
+                      <Typography style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 14 }}>
+                        {formatCurrency(item.revenue)}
+                      </Typography>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
           ) : (
-            <View style={{ marginBottom: 20 }}>
-              {expenses.map((expense, index) => (
-                <ExpenseItem key={expense.id} expense={expense} index={index} />
-              ))}
+            // Original Expenses View
+            <View>
+              {/* Total Expenses Card */}
+              <StatCard
+                icon={<TrendingDown size={28} color="#EF4444" />}
+                title={`Total Expenses ${selectedFilter !== "all" ? `(${selectedFilter})` : ""}`}
+                value={formatCurrency(totalExpenses)}
+                trend="down"
+                color="#EF4444"
+                backgroundColor="#FEF2F2"
+              />
+
+              {/* Pending Dues Card */}
+              <StatCard
+                icon={<Clock size={28} color="#D97706" />}
+                title="Pending Dues"
+                value={formatCurrency(pendingDues)}
+                trend={pendingDues > 0 ? "neutral" : "up"}
+                color={pendingDues > 0 ? "#D97706" : "#10B981"}
+                backgroundColor={pendingDues > 0 ? "#FEF3C7" : "#D1FAE5"}
+                onPress={() => router.push("/(modals)/due-management")}
+              />
+            </View>
+          )}
+
+          {!showDetailedView && (
+            <View>
+              {/* Section Header */}
+              <View style={{ 
+                flexDirection: 'row', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                marginBottom: 20,
+                marginTop: 12
+              }}>
+                <Typography 
+                  variant="h3" 
+                  weight="bold"
+                  style={{ color: '#1E293B', fontSize: 22 }}
+                >
+                  Recent Expenses
+                </Typography>
+                <View style={{
+                  backgroundColor: 'white',
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 20,
+                  borderWidth: 1,
+                  borderColor: '#E2E8F0',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.05,
+                  shadowRadius: 4,
+                  elevation: 2,
+                }}>
+                  <Typography 
+                    variant="caption" 
+                    style={{ 
+                      color: theme.colors.primary, 
+                      fontWeight: '700',
+                      fontSize: 11
+                    }}
+                  >
+                    {expenses.length} expense{expenses.length !== 1 ? 's' : ''}
+                  </Typography>
+                </View>
+              </View>
+
+              {/* Expenses List or Empty State */}
+              {expenses.length === 0 ? (
+                <View style={{
+                  backgroundColor: 'white',
+                  alignItems: 'center',
+                  padding: 40,
+                  borderRadius: 24,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.08,
+                  shadowRadius: 12,
+                  elevation: 6,
+                  borderWidth: 1,
+                  borderColor: '#F8FAFC',
+                }}>
+                  <View style={{
+                    width: 100,
+                    height: 100,
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: 50,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    marginBottom: 24,
+                    borderWidth: 3,
+                    borderColor: '#E2E8F0',
+                  }}>
+                    <DollarSign size={48} color="#94A3B8" />
+                  </View>
+                  
+                  <Typography 
+                    variant="h3" 
+                    weight="bold"
+                    style={{ 
+                      marginBottom: 12, 
+                      color: '#1E293B',
+                      fontSize: 22
+                    }}
+                  >
+                    No Expenses Found
+                  </Typography>
+                  
+                  <Typography 
+                    variant="body" 
+                    color="textSecondary" 
+                    style={{ 
+                      textAlign: 'center', 
+                      marginBottom: 32, 
+                      lineHeight: 24,
+                      paddingHorizontal: 20
+                    }}
+                  >
+                    {selectedFilter === "all" 
+                      ? "You haven't added any expenses yet. Start tracking your business expenses to get better insights."
+                      : `No expenses found for ${selectedFilter}. Try selecting a different time period or add a new expense.`}
+                  </Typography>
+                  
+                  <TouchableOpacity
+                    onPress={() => setShowAddExpense(true)}
+                    style={{
+                      backgroundColor: theme.colors.primary,
+                      paddingHorizontal: 32,
+                      paddingVertical: 16,
+                      borderRadius: 16,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      shadowColor: theme.colors.primary,
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: 0.3,
+                      shadowRadius: 8,
+                      elevation: 6,
+                    }}
+                  >
+                    <Plus size={20} color="white" style={{ marginRight: 8 }} />
+                    <Typography style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>
+                      Add First Expense
+                    </Typography>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={{ marginBottom: 20 }}>
+                  {expenses.map((expense, index) => (
+                    <ExpenseItem key={expense.id} expense={expense} index={index} />
+                  ))}
+                </View>
+              )}
             </View>
           )}
         </View>

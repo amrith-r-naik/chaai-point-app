@@ -45,11 +45,11 @@ class PaymentService {
   private async getNextReceiptNumber(): Promise<string> {
     if (!db) throw new Error("Database not initialized");
     
-    // Get current year
+    // Get current year for yearly reset
     const currentYear = new Date().getFullYear();
     
     const result = await db.getFirstAsync(`
-      SELECT MAX(receiptNo) as maxReceiptNo FROM receipts
+      SELECT MAX(CAST(receiptNo AS INTEGER)) as maxReceiptNo FROM receipts
       WHERE strftime('%Y', createdAt) = ?
     `, [currentYear.toString()]) as { maxReceiptNo: number | null };
     
@@ -60,11 +60,11 @@ class PaymentService {
   private async getNextBillNumber(): Promise<string> {
     if (!db) throw new Error("Database not initialized");
     
-    // Get current year
+    // Get current year for yearly reset
     const currentYear = new Date().getFullYear();
     
     const result = await db.getFirstAsync(`
-      SELECT MAX(billNumber) as maxBillNumber FROM bills
+      SELECT MAX(CAST(billNumber AS INTEGER)) as maxBillNumber FROM bills
       WHERE strftime('%Y', createdAt) = ?
     `, [currentYear.toString()]) as { maxBillNumber: number | null };
     

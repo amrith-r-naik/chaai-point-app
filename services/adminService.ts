@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { db, withTransaction } from "@/lib/db";
 import { createCustomer } from "./customerService";
 import { menuService } from "./menuService";
 
@@ -8,28 +8,36 @@ class AdminService {
     if (!db) throw new Error("Database not initialized");
 
     try {
-      // Temporarily disable foreign key constraints
-      await db.runAsync(`PRAGMA foreign_keys = OFF`);
+      await withTransaction(async () => {
+        if (!db) throw new Error("Database not initialized");
+        
+        // Temporarily disable foreign key constraints
+        await db.runAsync(`PRAGMA foreign_keys = OFF`);
 
-      // Clear all tables in order (respecting foreign key constraints)
-      // NOTE: Users table is preserved to maintain authentication
-      await db.runAsync(`DELETE FROM kot_items`);
-      await db.runAsync(`DELETE FROM payments`);
-      await db.runAsync(`DELETE FROM receipts`);
-      await db.runAsync(`DELETE FROM bills`);
-      await db.runAsync(`DELETE FROM kot_orders`);
-      await db.runAsync(`DELETE FROM expenses`);
-      await db.runAsync(`DELETE FROM menu_items`);
-      await db.runAsync(`DELETE FROM customers`);
+        // Clear all tables in order (respecting foreign key constraints)
+        // NOTE: Users table is preserved to maintain authentication
+        // Delete in reverse dependency order to avoid foreign key constraint violations
+        await db.runAsync(`DELETE FROM split_payments`);   // References receipts
+        await db.runAsync(`DELETE FROM kot_items`);        // References kot_orders and menu_items
+        await db.runAsync(`DELETE FROM payments`);         // References bills and customers
+        await db.runAsync(`DELETE FROM receipts`);         // References customers
+        await db.runAsync(`DELETE FROM kot_orders`);       // References customers and bills
+        await db.runAsync(`DELETE FROM bills`);            // References customers
+        await db.runAsync(`DELETE FROM expenses`);         // No foreign key dependencies
+        await db.runAsync(`DELETE FROM menu_items`);       // No foreign key dependencies
+        await db.runAsync(`DELETE FROM customers`);        // Referenced by other tables
 
-      // Re-enable foreign key constraints
-      await db.runAsync(`PRAGMA foreign_keys = ON`);
+        // Re-enable foreign key constraints
+        await db.runAsync(`PRAGMA foreign_keys = ON`);
+      });
 
       console.log("All data tables cleared successfully (users preserved)");
     } catch (error) {
       // Make sure to re-enable foreign keys even if there's an error
       try {
-        await db.runAsync(`PRAGMA foreign_keys = ON`);
+        if (db) {
+          await db.runAsync(`PRAGMA foreign_keys = ON`);
+        }
       } catch (pragmaError) {
         console.error("Error re-enabling foreign keys:", pragmaError);
       }
@@ -43,6 +51,7 @@ class AdminService {
     if (!db) throw new Error("Database not initialized");
 
     const allowedTables = [
+      "split_payments",
       "kot_items",
       "payments", 
       "receipts",
@@ -59,16 +68,22 @@ class AdminService {
     }
 
     try {
-      // Temporarily disable foreign key constraints for individual table clearing
-      await db.runAsync(`PRAGMA foreign_keys = OFF`);
-      await db.runAsync(`DELETE FROM ${tableName}`);
-      await db.runAsync(`PRAGMA foreign_keys = ON`);
+      await withTransaction(async () => {
+        if (!db) throw new Error("Database not initialized");
+        
+        // Temporarily disable foreign key constraints for individual table clearing
+        await db.runAsync(`PRAGMA foreign_keys = OFF`);
+        await db.runAsync(`DELETE FROM ${tableName}`);
+        await db.runAsync(`PRAGMA foreign_keys = ON`);
+      });
       
       console.log(`Table ${tableName} cleared successfully`);
     } catch (error) {
       // Make sure to re-enable foreign keys even if there's an error
       try {
-        await db.runAsync(`PRAGMA foreign_keys = ON`);
+        if (db) {
+          await db.runAsync(`PRAGMA foreign_keys = ON`);
+        }
       } catch (pragmaError) {
         console.error("Error re-enabling foreign keys:", pragmaError);
       }
@@ -88,6 +103,10 @@ class AdminService {
         "menu_items",
         "kot_orders",
         "kot_items",
+        "bills",
+        "payments",
+        "receipts",
+        "split_payments",
         "expenses",
       ];
       const counts: Record<string, number> = {};

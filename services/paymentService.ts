@@ -1,6 +1,8 @@
+import { ENABLE_NEW_PAYMENT_FLOW, PaymentMode } from "@/constants/paymentConstants";
 import { db } from "@/lib/db";
 import { SplitPayment } from "@/types/payment";
 import uuid from "react-native-uuid";
+import { enhancedPaymentService } from "./enhancedPaymentService";
 
 export interface Bill {
   id: string;
@@ -95,6 +97,79 @@ class PaymentService {
   async processPayment(paymentData: PaymentProcessData): Promise<{ receipt: Receipt; bill: Bill }> {
     if (!db) throw new Error("Database not initialized");
 
+    // Route through new unified flow if feature flag is enabled
+    if (ENABLE_NEW_PAYMENT_FLOW) {
+      return this.processPaymentNew(paymentData);
+    }
+
+    // Legacy implementation (unchanged)
+    return this.processPaymentLegacy(paymentData);
+  }
+
+  private async processPaymentNew(paymentData: PaymentProcessData): Promise<{ receipt: Receipt; bill: Bill }> {
+    // Convert legacy request to new format
+    const components = [];
+    let creditPortion = 0;
+
+    if (paymentData.paymentType === "Credit") {
+      // Pure credit
+      creditPortion = paymentData.totalAmount;
+      components.push({
+        mode: PaymentMode.CREDIT,
+        amount: paymentData.totalAmount
+      });
+    } else if (paymentData.paymentType === "Split" && paymentData.splitPayments) {
+      // Split payment
+      for (const split of paymentData.splitPayments) {
+        if (split.type === "Credit") {
+          creditPortion += split.amount;
+          components.push({
+            mode: PaymentMode.CREDIT,
+            amount: split.amount
+          });
+        } else {
+          components.push({
+            mode: split.type === "Cash" ? PaymentMode.CASH : PaymentMode.UPI,
+            amount: split.amount
+          });
+        }
+      }
+    } else {
+      // Single payment (Cash/UPI)
+      components.push({
+        mode: paymentData.paymentType === "Cash" ? PaymentMode.CASH : PaymentMode.UPI,
+        amount: paymentData.totalAmount
+      });
+    }
+
+    const result = await enhancedPaymentService.processBillSettlement({
+      customerId: paymentData.customerId,
+      components,
+      creditPortion,
+      remarks: paymentData.remarks,
+      targetDate: paymentData.targetDate
+    });
+
+    // For pure credit, return placeholder receipt to maintain backward compatibility
+    if (creditPortion === paymentData.totalAmount) {
+      const placeholderReceipt: Receipt = {
+        id: "credit-only-" + Date.now(),
+        receiptNo: "0",
+        customerId: paymentData.customerId,
+        amount: paymentData.totalAmount,
+        mode: "Credit",
+        remarks: (paymentData.remarks || "") + " (Added to credit)",
+        createdAt: new Date().toISOString(),
+      };
+      return { receipt: placeholderReceipt, bill: result.bill };
+    }
+
+    return { receipt: result.receipt!, bill: result.bill };
+  }
+
+  private async processPaymentLegacy(paymentData: PaymentProcessData): Promise<{ receipt: Receipt; bill: Bill }> {
+    if (!db) throw new Error("Database not initialized");
+    
     // Handle Credit payment separately - just add to dues without creating bill
     if (paymentData.paymentType === "Credit") {
       return this.processCreditPayment(paymentData);
@@ -258,6 +333,21 @@ class PaymentService {
       SET creditBalance = COALESCE(creditBalance, 0) + ?
       WHERE id = ?
     `, [amount, customerId]); // Store direct amount (already in rupees)
+  }
+
+  /**
+   * Clear customer credit balance (new API)
+   */
+  async clearCredit(customerId: string, components: any[], remarks?: string): Promise<{ receipt: any; toastMessage: string }> {
+    if (ENABLE_NEW_PAYMENT_FLOW) {
+      return enhancedPaymentService.clearCredit({
+        customerId,
+        components,
+        remarks
+      });
+    } else {
+      throw new Error("Credit clearance not available in legacy mode");
+    }
   }
 
   async getCustomerCreditBalance(customerId: string): Promise<number> {

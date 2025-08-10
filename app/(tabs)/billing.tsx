@@ -1,9 +1,10 @@
 import AddExpenseModal from "@/app/(modals)/add-expense";
 import { Loading, Typography } from "@/components/ui";
 import { theme } from "@/constants/theme";
+import { creditService } from "@/services/creditService";
 import { dashboardService, DateFilterOptions, DetailedAnalytics, ExpenseData } from "@/services/dashboardService";
-import { dueService } from "@/services/dueService";
 import { excelExportService } from "@/services/excelExportService";
+import { useCreditRefreshTrigger, useTotalCreditBalance } from "@/state/creditState";
 import { useRouter } from "expo-router";
 import {
   Activity,
@@ -332,10 +333,13 @@ export default function BillingScreen() {
   const [selectedFilter, setSelectedFilter] = useState<"today" | "week" | "month" | "all">("today");
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [totalExpenses, setTotalExpenses] = useState(0);
-  const [pendingDues, setPendingDues] = useState(0);
   const [detailedAnalytics, setDetailedAnalytics] = useState<DetailedAnalytics | null>(null);
   const [showDetailedView, setShowDetailedView] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
+  
+  // Use global credit state
+  const pendingDues = useTotalCreditBalance();
+  const creditRefreshTrigger = useCreditRefreshTrigger();
 
   const getDateFilter = (): DateFilterOptions | undefined => {
     const today = new Date();
@@ -367,17 +371,18 @@ export default function BillingScreen() {
   const loadExpenses = async () => {
     try {
       const dateFilter = getDateFilter();
-      const [expensesData, duesAmount, analytics] = await Promise.all([
+      const [expensesData, analytics] = await Promise.all([
         dashboardService.getExpenses(dateFilter),
-        dueService.getTotalPendingDues(),
         selectedFilter !== "all" ? dashboardService.getDetailedAnalytics(selectedFilter) : null
       ]);
       setExpenses(expensesData);
-      setPendingDues(duesAmount);
       setDetailedAnalytics(analytics);
       
       const total = expensesData.reduce((sum, expense) => sum + expense.amount, 0);
       setTotalExpenses(total);
+
+      // Load credit state to ensure it's up to date
+      await creditService.loadAndUpdateCreditState();
     } catch (error) {
       console.error("Error loading expenses:", error);
       Alert.alert("Error", "Failed to load expenses");
@@ -390,6 +395,14 @@ export default function BillingScreen() {
   useEffect(() => {
     loadExpenses();
   }, [selectedFilter]);
+
+  // Listen for credit refresh triggers
+  useEffect(() => {
+    if (creditRefreshTrigger > 0) {
+      // Credit state has been updated, no need to reload since we're using global state
+      console.log("Credit state updated, billing screen will reflect new values");
+    }
+  }, [creditRefreshTrigger]);
 
   const handleRefresh = () => {
     setRefreshing(true);

@@ -1,16 +1,19 @@
+import { ENABLE_NEW_PAYMENT_FLOW } from "@/constants/paymentConstants";
 import { theme } from "@/constants/theme";
 import { Bill, paymentService, Receipt } from "@/services/paymentService";
+import { formatCurrency } from "@/utils/paymentUtils";
+import ToastUtil from "@/utils/toastUtil";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, CheckCircle, Receipt as ReceiptIcon } from "lucide-react-native";
+import { ArrowLeft, CheckCircle, Eye, Receipt as ReceiptIcon } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -62,10 +65,29 @@ export default function ReceiptScreen() {
       const result = await paymentService.processPayment(paymentData);
       setReceipt(result.receipt);
       setBill(result.bill);
+
+      // Show appropriate toast based on payment type
+      if (ENABLE_NEW_PAYMENT_FLOW) {
+        if (paymentType === "Credit") {
+          ToastUtil.creditUpdate(`Added to credit: ${formatCurrency(total)}`);
+        } else if (paymentType === "Split") {
+          const creditAmount = parsedSplitPayments.find((p: any) => p.type === "Credit")?.amount || 0;
+          if (creditAmount > 0) {
+            const paidAmount = total - creditAmount;
+            ToastUtil.creditUpdate(`Paid ${formatCurrency(paidAmount)} • Credit ${formatCurrency(creditAmount)} added`);
+          } else {
+            ToastUtil.paymentSuccess("Payment successful");
+          }
+        } else {
+          ToastUtil.paymentSuccess("Payment successful");
+        }
+      }
+
     } catch (err: any) {
       setError(err.message || "Failed to process payment");
       setShowPaymentForm(true);
       console.error("Payment processing error:", err);
+      ToastUtil.paymentError(err.message || "Failed to process payment");
     } finally {
       setProcessing(false);
     }
@@ -326,10 +348,11 @@ export default function ReceiptScreen() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={processPayment}
+            onPress={processing ? undefined : processPayment}
+            disabled={processing}
             style={{
               flex: 2,
-              backgroundColor: "#059669",
+              backgroundColor: processing ? "#9CA3AF" : "#059669",
               paddingVertical: 16,
               borderRadius: 12,
               flexDirection: "row",
@@ -342,7 +365,7 @@ export default function ReceiptScreen() {
               fontWeight: "600",
               fontSize: 16,
             }}>
-              PROCESS PAYMENT
+              {processing ? "PROCESSING..." : "PROCESS PAYMENT"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -710,18 +733,21 @@ export default function ReceiptScreen() {
                 fontWeight: "600",
                 color: theme.colors.text,
               }}>
-                Total Amount:
+                {paymentType === "Split" ? "Amount Paid:" : "Total Amount:"}
               </Text>
               <Text style={{
                 fontSize: 16,
                 fontWeight: "700",
                 color: theme.colors.text,
               }}>
-                ₹{total.toFixed(2)}
+                {paymentType === "Split" ? 
+                  `₹${(receipt?.amount || total).toFixed(2)}` : 
+                  `₹${total.toFixed(2)}`
+                }
               </Text>
             </View>
 
-            {/* Payment Method Details */}
+            {/* Payment Breakdown Details */}
             <View style={{
               backgroundColor: "#f9fafb",
               borderRadius: 8,
@@ -733,12 +759,14 @@ export default function ReceiptScreen() {
                 color: theme.colors.text,
                 marginBottom: 8,
               }}>
-                Payment Method:
+                Payment Breakdown:
               </Text>
 
               {paymentType === "Split" ? (
                 <View>
-                  {parsedSplitPayments.map((payment: any, index: number) => (
+                  {parsedSplitPayments
+                    .filter((payment: any) => payment.type !== "Credit") // Hide credit portion from receipt
+                    .map((payment: any, index: number) => (
                     <View key={index} style={{
                       flexDirection: "row",
                       justifyContent: "space-between",
@@ -759,6 +787,28 @@ export default function ReceiptScreen() {
                       </Text>
                     </View>
                   ))}
+                  
+                  {/* Show credit portion separately if exists */}
+                  {(() => {
+                    const creditPayment = parsedSplitPayments.find((p: any) => p.type === "Credit");
+                    return creditPayment ? (
+                      <View style={{
+                        marginTop: 8,
+                        paddingTop: 8,
+                        borderTopWidth: 1,
+                        borderTopColor: "#e5e7eb",
+                      }}>
+                        <Text style={{
+                          fontSize: 12,
+                          color: "#d97706",
+                          textAlign: "center",
+                          fontStyle: "italic",
+                        }}>
+                          ₹{creditPayment.amount.toFixed(2)} added to credit balance
+                        </Text>
+                      </View>
+                    ) : null;
+                  })()}
                 </View>
               ) : (
                 <Text style={{
@@ -801,7 +851,7 @@ export default function ReceiptScreen() {
         </View>
       </ScrollView>
 
-      {/* Done Button */}
+      {/* Action Buttons */}
       <View style={{
         backgroundColor: "white",
         borderTopWidth: 1,
@@ -809,6 +859,36 @@ export default function ReceiptScreen() {
         paddingHorizontal: 16,
         paddingVertical: 16,
       }}>
+        {/* View Bill Button - only show for non-credit payments */}
+        {bill && receipt && receipt.receiptNo !== "0" && (
+          <TouchableOpacity
+            onPress={() => {
+              router.push({
+                pathname: "/(modals)/receipt-details",
+                params: { receiptId: receipt.id }
+              });
+            }}
+            style={{
+              backgroundColor: theme.colors.primary,
+              paddingVertical: 12,
+              borderRadius: 8,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: 12,
+            }}
+          >
+            <Eye size={18} color="white" style={{ marginRight: 8 }} />
+            <Text style={{
+              color: "white",
+              fontWeight: "600",
+              fontSize: 16,
+            }}>
+              View Bill Details
+            </Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity
           onPress={handleDone}
           style={{

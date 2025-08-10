@@ -79,7 +79,7 @@ async function initializeSchema() {
       billId TEXT,
       customerId TEXT NOT NULL,
       amount INTEGER NOT NULL,
-      mode TEXT NOT NULL,
+      mode TEXT NOT NULL CHECK (mode IN ('Cash', 'UPI', 'Credit', 'CreditClear', 'Split')),
       remarks TEXT,
       createdAt TEXT NOT NULL,
       FOREIGN KEY (billId) REFERENCES bills(id),
@@ -91,7 +91,7 @@ async function initializeSchema() {
       receiptNo INTEGER NOT NULL,
       customerId TEXT NOT NULL,
       amount INTEGER NOT NULL,
-      mode TEXT NOT NULL,
+      mode TEXT NOT NULL CHECK (mode IN ('Cash', 'UPI', 'Credit', 'Split')),
       remarks TEXT,
       createdAt TEXT NOT NULL,
       FOREIGN KEY (customerId) REFERENCES customers(id)

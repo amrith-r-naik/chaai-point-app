@@ -1,3 +1,9 @@
+/**
+ * @deprecated This service is being replaced by creditService.ts as part of the unified payment flow
+ * All due management functionality has been migrated to the new credit management system.
+ * This file will be removed in a future version.
+ */
+
 import { db } from "../lib/db";
 
 export interface CustomerDue {

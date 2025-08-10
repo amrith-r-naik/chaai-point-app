@@ -1,5 +1,5 @@
 import { db } from "../lib/db";
-import { dueService } from "./dueService";
+import { creditService } from "./creditService";
 
 export interface DashboardStats {
   totalOrders: number;
@@ -338,8 +338,8 @@ class DashboardService {
   private async getPendingDues(): Promise<number> {
     if (!db) throw new Error("Database not initialized");
     
-    // Use the new due service to get actual pending dues
-    return await dueService.getTotalPendingDues();
+    // Get pending credit balances instead of dues
+    return await creditService.getTotalCreditBalance();
   }
 
   private async getTotalExpenses(startDate: string, endDate: string): Promise<number> {

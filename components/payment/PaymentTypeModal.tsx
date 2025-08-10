@@ -7,14 +7,18 @@ interface PaymentTypeModalProps {
   visible: boolean;
   onSelectPayment: (type: PaymentType) => void;
   onCancel: () => void;
+  excludeOptions?: PaymentType[]; // Allow excluding certain payment types
 }
 
 export const PaymentTypeModal: React.FC<PaymentTypeModalProps> = ({
   visible,
   onSelectPayment,
   onCancel,
+  excludeOptions = [],
 }) => {
-  const paymentOptions: PaymentType[] = ["Cash", "UPI", "Credit", "Split"];
+  const paymentOptions: PaymentType[] = ["Cash", "UPI", "Credit", "Split"].filter(
+    option => !excludeOptions.includes(option)
+  );
 
   return (
     <Modal

@@ -1,3 +1,5 @@
+import { PaymentMode } from "@/constants/paymentConstants";
+
 export type PaymentType = "Cash" | "UPI" | "Credit" | "Split";
 
 export interface SplitPayment {
@@ -16,3 +18,23 @@ export interface PaymentData {
 }
 
 export type SplitModalScreen = "list" | "add";
+
+// New interfaces for the refactored payment flow
+export interface PaymentComponent {
+  mode: PaymentMode;
+  amount: number;
+}
+
+export interface BillSettlementRequest {
+  customerId: string;
+  components: PaymentComponent[];
+  creditPortion: number;
+  remarks?: string;
+  targetDate?: string;
+}
+
+export interface CreditClearanceRequest {
+  customerId: string;
+  components: PaymentComponent[];
+  remarks?: string;
+}

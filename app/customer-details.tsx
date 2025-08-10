@@ -1,33 +1,34 @@
 import { theme } from "@/constants/theme";
-import { dueService } from "@/services/dueService";
+import { creditService } from "@/services/creditService";
 import { orderService } from "@/services/orderService";
 import { paymentService } from "@/services/paymentService";
 import { authState } from "@/state/authState";
+import { useCreditRefreshTrigger } from "@/state/creditState";
 import { use$ } from "@legendapp/state/react";
 import { router, useLocalSearchParams } from "expo-router";
 import {
-  ArrowLeft,
-  Calendar,
-  CreditCard,
-  DollarSign,
-  History,
-  Plus,
-  Receipt,
-  TrendingDown,
-  TrendingUp,
-  Wallet
+    ArrowLeft,
+    Calendar,
+    CreditCard,
+    DollarSign,
+    History,
+    Plus,
+    Receipt,
+    TrendingDown,
+    TrendingUp,
+    Wallet
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 interface CustomerOrder {
@@ -71,6 +72,7 @@ export default function CustomerDetailsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'paid' | 'credit'>('all');
   const auth = use$(authState);
+  const creditRefreshTrigger = useCreditRefreshTrigger(); // Listen for credit updates
 
   const loadCustomerData = useCallback(async () => {
     if (!customerId || !auth.isDbReady) return;
@@ -136,6 +138,13 @@ export default function CustomerDetailsScreen() {
     loadCustomerData();
   }, [loadCustomerData]);
 
+  // Listen for credit refresh triggers and reload data
+  useEffect(() => {
+    if (creditRefreshTrigger > 0 && customerId && auth.isDbReady) {
+      loadCustomerData();
+    }
+  }, [creditRefreshTrigger, customerId, auth.isDbReady, loadCustomerData]);
+
   useEffect(() => {
     filterOrders();
   }, [orders, selectedFilter]);
@@ -176,16 +185,20 @@ export default function CustomerDetailsScreen() {
             try {
               setLoading(true);
               
-              // Process due payment to clear credit
-              await dueService.processCustomerDuePayment({
+              // Process credit clearance using new unified flow
+              await creditService.collectCredit({
                 customerId,
                 amount: stats.creditBalance,
-                paymentMode: 'Cash',
+                paymentComponents: [{
+                  type: 'Cash',
+                  amount: stats.creditBalance
+                }],
                 remarks: 'Credit balance clearance'
               });
 
               Alert.alert("Success", "Credit balance cleared successfully!");
-              loadCustomerData(); // Refresh data
+              // The global state will be automatically updated by creditService
+              // Customer data will refresh via useEffect listening to creditRefreshTrigger
             } catch (error: any) {
               console.error("Error clearing credit:", error);
               Alert.alert("Error", error.message || "Failed to clear credit balance");

@@ -1,6 +1,84 @@
+import { PaymentMode, SettlementType } from "@/constants/paymentConstants";
+import { db } from "@/lib/db";
 import { SplitPayment } from "@/types/payment";
 
 export const paymentTypes: ("Cash" | "UPI" | "Credit")[] = ["Cash", "UPI", "Credit"];
+
+/**
+ * Enhanced payment utilities for the new payment flow
+ */
+
+export interface BillStatus {
+  settlementType: SettlementType;
+  paidPortion: number;
+  creditPortion: number;
+}
+
+/**
+ * Derive settlement status for a bill based on its payments
+ */
+export async function deriveBillStatus(billId: string): Promise<BillStatus> {
+  if (!db) throw new Error("Database not initialized");
+
+  const bill = await db.getFirstAsync(`
+    SELECT total FROM bills WHERE id = ?
+  `, [billId]) as { total: number } | null;
+
+  if (!bill) {
+    throw new Error("Bill not found");
+  }
+
+  // Get all non-credit payments for this bill
+  const paidPayments = await db.getFirstAsync(`
+    SELECT COALESCE(SUM(amount), 0) as totalPaid 
+    FROM payments 
+    WHERE billId = ? AND mode NOT IN (?, ?)
+  `, [billId, PaymentMode.CREDIT, PaymentMode.CREDIT_CLEAR]) as { totalPaid: number };
+
+  // Get credit payments for this bill
+  const creditPayments = await db.getFirstAsync(`
+    SELECT COALESCE(SUM(amount), 0) as totalCredit 
+    FROM payments 
+    WHERE billId = ? AND mode = ?
+  `, [billId, PaymentMode.CREDIT]) as { totalCredit: number };
+
+  const paidPortion = paidPayments?.totalPaid || 0;
+  const creditPortion = creditPayments?.totalCredit || 0;
+  const totalAmount = bill.total;
+
+  let settlementType: SettlementType;
+
+  if (paidPortion === totalAmount && creditPortion === 0) {
+    settlementType = SettlementType.FULLY_PAID;
+  } else if (paidPortion === 0 && creditPortion === totalAmount) {
+    settlementType = SettlementType.FULLY_CREDIT;
+  } else {
+    settlementType = SettlementType.PARTIALLY_PAID;
+  }
+
+  return {
+    settlementType,
+    paidPortion,
+    creditPortion,
+  };
+}
+
+/**
+ * Format currency consistently
+ */
+export function formatCurrency(amount: number): string {
+  return `₹${amount.toLocaleString("en-IN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+/**
+ * Validate amount is within acceptable range
+ */
+export function validateAmount(amount: number, min: number = 0.01, max: number = 999999.99): boolean {
+  return amount >= min && amount <= max && Number.isFinite(amount);
+}
 
 export class SplitPaymentManager {
   static validateSplitAmount(amount: string, maxAmount: number): boolean {

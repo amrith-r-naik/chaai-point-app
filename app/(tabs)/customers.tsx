@@ -1,7 +1,9 @@
+import { creditService } from "@/services/creditService";
 import { getAllCustomers, searchCustomers } from "@/services/customerService";
 import { orderService } from "@/services/orderService";
 import { paymentService } from "@/services/paymentService";
 import { authState } from "@/state/authState";
+import { useCreditRefreshTrigger } from "@/state/creditState";
 import { customerState } from "@/state/customerState";
 import { use$ } from "@legendapp/state/react";
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -9,14 +11,14 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    RefreshControl,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -84,6 +86,7 @@ export default function CustomersScreen() {
   const customerStateData = use$(customerState);
   const auth = use$(authState);
   const router = useRouter();
+  const creditRefreshTrigger = useCreditRefreshTrigger(); // Listen for credit updates
 
   const loadOrdersData = useCallback(async () => {
     try {
@@ -132,7 +135,10 @@ export default function CustomersScreen() {
               totalAmount += order.totalAmount;
 
               if (order.paymentStatus === 'paid') {
-                paidAmount += order.totalAmount;
+                // For paid orders, use the actual amount paid (handles split payments correctly)
+                paidAmount += order.amountPaid || order.totalAmount;
+                // Credit amount is the difference between total and paid
+                creditAmount += (order.totalAmount - (order.amountPaid || order.totalAmount));
                 paidOrders++;
               } else if (order.paymentStatus === 'credit') {
                 creditAmount += order.totalAmount;
@@ -358,14 +364,29 @@ export default function CustomersScreen() {
     loadCustomers();
   }, [loadCustomers, activeTab]);
 
-  // Auto-refresh when screen comes into focus
+  // Auto-refresh when screen comes into focus or when credit state changes
   useFocusEffect(
     useCallback(() => {
       if (auth.isDbReady) {
         loadOrdersData();
+        // Load credit state when screen focuses
+        creditService.loadAndUpdateCreditState();
       }
     }, [auth.isDbReady, loadOrdersData])
   );
+
+  // Listen for credit refresh triggers and reload data
+  useEffect(() => {
+    if (creditRefreshTrigger > 0 && auth.isDbReady) {
+      // Refresh customer data when credit state changes
+      if (activeTab === "all") {
+        loadCustomersWithStats();
+      } else {
+        loadOrdersData();
+        loadCompletedBillsData();
+      }
+    }
+  }, [creditRefreshTrigger, auth.isDbReady, activeTab, loadCustomersWithStats, loadOrdersData, loadCompletedBillsData]);
 
   const handleAddCustomer = () => {
     customerState.selectedCustomer.set(null);
@@ -594,7 +615,7 @@ export default function CustomersScreen() {
 
     return (
       <View
-        key={`active-date-${date}`}
+        key={`active-date-section-${date}`}
         className="mb-6 bg-white rounded-lg overflow-hidden shadow-sm"
       >
         {/* Date Header with Stats and EOD Button */}
@@ -651,7 +672,7 @@ export default function CustomersScreen() {
         <View>
           {customers.map((customerData: any, index) =>
             <TouchableOpacity
-              key={`customer-${customerData.customer.id}-${index}`}
+              key={`active-customer-${customerData.customer.id}-${date}-${index}`}
               onPress={() => {
                 customerState.selectedCustomer.set({
                   ...customerData.customer,
@@ -740,7 +761,7 @@ export default function CustomersScreen() {
 
     return (
       <View
-        key={`completed-date-${date} w-full`}
+        key={`completed-date-section-${date}`}
         className="mb-6 bg-white rounded-lg overflow-hidden shadow-sm"
       >
         {/* Date Header with Stats */}
@@ -770,7 +791,7 @@ export default function CustomersScreen() {
         <View className="pb-40 w-full">
           {bills.map((bill: any, index: number) =>
             <TouchableOpacity
-              key={`bill-${bill.id}-${index}`}
+              key={`completed-bill-${bill.id}-${date}-${index}`}
               onPress={() => {
                 // Navigate to receipt details
                 router.push({
@@ -987,7 +1008,7 @@ export default function CustomersScreen() {
               <View className="px-4 pt-4">
                 {allCustomers.map((customer, index) =>
                   <TouchableOpacity
-                    key={`enhanced-${customer.id}-${index}`}
+                    key={`all-customer-${customer.id}-${index}`}
                     className="mb-4 bg-white rounded-lg overflow-hidden shadow-sm"
                     activeOpacity={0.7}
                     onPress={() => {
@@ -1079,14 +1100,14 @@ export default function CustomersScreen() {
               // Render completed bills grouped by date
               <View className="px-4 pt-4">
                 {sortedDates.map((date, index) =>
-                  renderCompletedBillDateSection(`${date}-${index}`, completedBillGroups[date])
+                  renderCompletedBillDateSection(`${date}-completed-${index}`, completedBillGroups[date])
                 )}
               </View>
             ) : (
               // Render active customers grouped by date
               <View className="px-4 pt-4">
                 {sortedDates.map((date, index) =>
-                  renderDateSection(`${date}-${index}`, filteredDateGroups[date])
+                  renderDateSection(`${date}-active-${index}`, filteredDateGroups[date])
                 )}
               </View>
             )}

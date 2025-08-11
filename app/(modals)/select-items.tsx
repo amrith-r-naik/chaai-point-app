@@ -116,13 +116,13 @@ export default function SelectItemsModal() {
     const group: Record<string, MenuItem[]> = {};
     filtered.forEach(m => { const k = m.category || 'Uncategorized'; (group[k] = group[k] || []).push(m); });
     const ordered: Section[] = [];
-    // Quick section (recent items) only when no search & All view
+    // Recently Ordered section - only when no search & All view
     if (!term && recentItems.length) {
       // Filter out items not present anymore and dedupe by id
       const recentsFiltered: MenuItem[] = [];
       const seen = new Set<string>();
       for (const r of recentItems) { if (!seen.has(r.id) && filtered.find(f => f.id === r.id)) { seen.add(r.id); recentsFiltered.push(r); } }
-      if (recentsFiltered.length) ordered.push({ title: 'Quick', data: recentsFiltered.slice(0, 8) });
+      if (recentsFiltered.length) ordered.push({ title: 'Recently Ordered', data: recentsFiltered.slice(0, 8) });
     }
     CATEGORIES.forEach(c => { if (group[c.name]) ordered.push({ title: c.name, data: group[c.name] }); });
     Object.keys(group).filter(k => !CATEGORIES.find(c => c.name === k)).sort().forEach(k => ordered.push({ title: k, data: group[k] }));
@@ -321,7 +321,9 @@ export default function SelectItemsModal() {
               renderItem={({ item }) => <ItemRow item={item} qty={getQty(item.id)} onChange={(q) => setQty(item, q)} />}
               renderSectionHeader={({ section: { title } }) => (
                 <View style={{ height: HEADER_HEIGHT, justifyContent: 'flex-end', paddingBottom: 2 }}>
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.text }}>{getCategoryEmoji(title)} {title}</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.text }}>
+                    {title === 'Recently Ordered' ? '🔥' : getCategoryEmoji(title)} {title}
+                  </Text>
                 </View>
               )}
               stickySectionHeadersEnabled={category === 'All'}

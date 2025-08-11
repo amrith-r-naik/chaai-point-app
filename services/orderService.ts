@@ -246,6 +246,7 @@ class OrderService {
       WHERE DATE(createdAt) = DATE(?)
     `, [today])) as any;
 
+    // Reset daily - start from 1 each day
     return (result?.maxKot || 0) + 1;
   }
 
@@ -558,33 +559,72 @@ class OrderService {
     if (!db) throw new Error("Database not initialized");
 
     try {
-      // Get all KOTs for the customer with bill and payment information
+      // Get all KOTs for the customer with enhanced payment status calculation
       const orders = await db.getAllAsync(`
-        SELECT 
+        SELECT DISTINCT
           ko.id,
           ko.kotNumber,
           ko.customerId,
           ko.billId,
           ko.createdAt,
           c.name as customerName,
-          CASE 
-            WHEN ko.billId IS NOT NULL AND p.mode = 'Credit' THEN 'credit'
-            WHEN ko.billId IS NOT NULL AND p.mode != 'Credit' THEN 'paid'
-            ELSE 'pending'
-          END as paymentStatus,
-          COALESCE(b.total, 0) as totalAmount,
-          0 as amountPaid
+          COALESCE(b.total, 0) as totalAmount
         FROM kot_orders ko
         LEFT JOIN customers c ON ko.customerId = c.id
         LEFT JOIN bills b ON ko.billId = b.id
-        LEFT JOIN payments p ON b.id = p.billId
         WHERE ko.customerId = ?
         ORDER BY ko.createdAt DESC
       `, [customerId]);
 
+      // For each order, calculate the correct payment status based on actual payments
+      const ordersWithPaymentStatus = await Promise.all(
+        orders.map(async (order: any) => {
+          if (!db) throw new Error("Database not initialized");
+          
+          let paymentStatus = 'pending';
+          let amountPaid = 0;
+
+          if (order.billId) {
+            // Get all payments for this bill to determine actual payment status
+            const payments = await db.getAllAsync(`
+              SELECT mode, amount 
+              FROM payments 
+              WHERE billId = ?
+            `, [order.billId]);
+
+            if (payments.length > 0) {
+              const totalPaid = payments
+                .filter((p: any) => p.mode !== 'Credit')
+                .reduce((sum: number, p: any) => sum + p.amount, 0);
+              
+              const totalCredit = payments
+                .filter((p: any) => p.mode === 'Credit')
+                .reduce((sum: number, p: any) => sum + p.amount, 0);
+
+              amountPaid = totalPaid;
+
+              // Determine payment status based on actual payment breakdown
+              if (totalPaid === order.totalAmount && totalCredit === 0) {
+                paymentStatus = 'paid'; // Fully paid
+              } else if (totalPaid === 0 && totalCredit === order.totalAmount) {
+                paymentStatus = 'credit'; // Fully credit
+              } else if (totalPaid > 0 || totalCredit > 0) {
+                paymentStatus = 'paid'; // Split payment or partially paid - consider as paid since money was received
+              }
+            }
+          }
+
+          return {
+            ...order,
+            paymentStatus,
+            amountPaid
+          };
+        })
+      );
+
       // Get items for each order
       const ordersWithItems = await Promise.all(
-        orders.map(async (order: any) => {
+        ordersWithPaymentStatus.map(async (order: any) => {
           if (!db) throw new Error("Database not initialized");
           
           const items = await db.getAllAsync(`
@@ -599,7 +639,7 @@ class OrderService {
             WHERE ki.kotId = ?
           `, [order.id]);
 
-          const calculatedTotal = items.reduce((sum: number, item: any) => sum + item.total, 0); // Direct KOT total
+          const calculatedTotal = items.reduce((sum: number, item: any) => sum + item.total, 0);
 
           return {
             id: order.id,
@@ -607,7 +647,7 @@ class OrderService {
             customerId: order.customerId,
             customerName: order.customerName,
             totalAmount: calculatedTotal, // Use calculated total directly from KOT
-            amountPaid: order.paymentStatus === 'paid' ? calculatedTotal : 0,
+            amountPaid: order.amountPaid,
             paymentStatus: order.paymentStatus,
             createdAt: order.createdAt,
             items: items.map((item: any) => ({
@@ -676,20 +716,37 @@ class OrderService {
       // Process each customer's KOTs as credit payment (each processPayment handles its own transaction)
       for (const [customerId, customerData] of Object.entries(kotsByCustomer)) {
         try {
-          // Import paymentService dynamically to avoid circular imports
-          const paymentServiceModule = await import('./paymentService');
-          const paymentService = paymentServiceModule.paymentService;
+          // Import enhanced payment service for new unified flow
+          const { enhancedPaymentService } = await import('./enhancedPaymentService');
+          const { ENABLE_NEW_PAYMENT_FLOW, PaymentMode, EOD_CREDIT_REMARK_PREFIX } = await import('@/constants/paymentConstants');
           
-          // Process as credit payment (amount is already in rupees from KOT calculation)
-          await paymentService.processPayment({
-            billId: '', // Will be generated by createBill in processPayment
-            customerId: customerId,
-            customerName: customerData.customerName,
-            totalAmount: customerData.totalAmount, // Use KOT total directly (already in rupees)
-            paymentType: 'Credit',
-            remarks: `EOD Credit Payment - ${targetDate}`,
-            targetDate: targetDate, // Pass target date for proper KOT linking
-          });
+          if (ENABLE_NEW_PAYMENT_FLOW) {
+            // Use new unified payment flow for EOD
+            await enhancedPaymentService.processBillSettlement({
+              customerId: customerId,
+              components: [{
+                mode: PaymentMode.CREDIT,
+                amount: customerData.totalAmount
+              }],
+              creditPortion: customerData.totalAmount,
+              remarks: `${EOD_CREDIT_REMARK_PREFIX} - ${targetDate}`,
+              targetDate: targetDate
+            });
+          } else {
+            // Legacy EOD processing
+            const paymentServiceModule = await import('./paymentService');
+            const paymentService = paymentServiceModule.paymentService;
+            
+            await paymentService.processPayment({
+              billId: '', // Will be generated by createBill in processPayment
+              customerId: customerId,
+              customerName: customerData.customerName,
+              totalAmount: customerData.totalAmount, // Use KOT total directly (already in rupees)
+              paymentType: 'Credit',
+              remarks: `EOD Credit Payment - ${targetDate}`,
+              targetDate: targetDate, // Pass target date for proper KOT linking
+            });
+          }
 
           totalProcessedAmount += customerData.totalAmount;
           processedCustomers.add(customerId);

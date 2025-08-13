@@ -6,11 +6,11 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, FileText } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 export default function ReceiptDetailsScreen() {
@@ -177,7 +177,7 @@ export default function ReceiptDetailsScreen() {
         }}
       />
 
-      <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+      <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 96 }}>
         {/* Receipt Header */}
         <View style={{
           backgroundColor: "white",
@@ -194,7 +194,7 @@ export default function ReceiptDetailsScreen() {
                 color: theme.colors.text,
                 marginBottom: 4,
               }}>
-                Receipt #{billDetails.receipt.receiptNo}
+                {billDetails.receipt.billId ? `Receipt #${billDetails.receipt.receiptNo}` : `Credit Clearance #${billDetails.receipt.receiptNo}`}
               </Text>
               <Text style={{
                 fontSize: 18,
@@ -232,7 +232,7 @@ export default function ReceiptDetailsScreen() {
                   fontSize: 12,
                   fontWeight: "600",
                 }}>
-                  {billDetails.receipt.mode}
+                  {billDetails.receipt.billId ? billDetails.receipt.mode : 'Credit Clearance'}
                 </Text>
               </View>
             </View>
@@ -250,7 +250,7 @@ export default function ReceiptDetailsScreen() {
               color: theme.colors.textSecondary,
               marginBottom: 4,
             }}>
-              Amount Paid
+              Amount {billDetails.receipt.billId ? 'Paid' : 'Cleared'}
             </Text>
             <Text style={{
               fontSize: 32,
@@ -286,103 +286,103 @@ export default function ReceiptDetailsScreen() {
           )}
         </View>
 
-          {/* Split Payment Breakdown */}
-          {billDetails.splitPayments && billDetails.splitPayments.length > 0 && (
-            <View style={{ paddingHorizontal: 16, paddingVertical: 16 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
-                <Text style={{ fontSize: 20, marginRight: 8 }}>💳</Text>
-                <Text style={{
-                  fontSize: 18,
-                  fontWeight: "600",
-                  color: theme.colors.text,
-                }}>
-                  Payment Breakdown
-                </Text>
-              </View>
-
-              <View style={{
-                backgroundColor: "white",
-                borderRadius: 12,
-                padding: 16,
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                elevation: 2,
+        {/* Split Payment Breakdown */}
+        {billDetails.splitPayments && billDetails.splitPayments.length > 0 && (
+          <View style={{ paddingHorizontal: 16, paddingVertical: 16 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
+              <Text style={{ fontSize: 20, marginRight: 8 }}>💳</Text>
+              <Text style={{
+                fontSize: 18,
+                fontWeight: "600",
+                color: theme.colors.text,
               }}>
-                {billDetails.splitPayments.map((split: any, index: number) => (
-                  <View
-                    key={split.id}
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      paddingVertical: 12,
-                      borderBottomWidth: index < billDetails.splitPayments.length - 1 ? 1 : 0,
-                      borderBottomColor: "#f3f4f6",
-                    }}
-                  >
-                    <View style={{ flexDirection: "row", alignItems: "center" }}>
-                      <View style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: 4,
-                        backgroundColor: split.paymentType === "Credit" 
-                          ? "#f59e0b" 
-                          : split.paymentType === "Cash" 
-                            ? "#10b981" 
-                            : "#3b82f6",
-                        marginRight: 12,
-                      }} />
-                      <Text style={{
-                        fontSize: 16,
-                        fontWeight: "500",
-                        color: theme.colors.text,
-                      }}>
-                        {split.paymentType}
-                      </Text>
-                    </View>
+                Payment Breakdown
+              </Text>
+            </View>
+
+            <View style={{
+              backgroundColor: "white",
+              borderRadius: 12,
+              padding: 16,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.1,
+              shadowRadius: 4,
+              elevation: 2,
+            }}>
+              {billDetails.splitPayments.map((split: any, index: number) => (
+                <View
+                  key={split.id}
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingVertical: 12,
+                    borderBottomWidth: index < billDetails.splitPayments.length - 1 ? 1 : 0,
+                    borderBottomColor: "#f3f4f6",
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <View style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 4,
+                      backgroundColor: split.paymentType === "Credit"
+                        ? "#f59e0b"
+                        : split.paymentType === "Cash"
+                          ? "#10b981"
+                          : "#3b82f6",
+                      marginRight: 12,
+                    }} />
                     <Text style={{
                       fontSize: 16,
-                      fontWeight: "600",
+                      fontWeight: "500",
                       color: theme.colors.text,
                     }}>
-                      ₹{split.amount.toFixed(2)}
+                      {split.paymentType}
                     </Text>
                   </View>
-                ))}
-                
-                {/* Total */}
-                <View style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  paddingTop: 16,
-                  marginTop: 8,
-                  borderTopWidth: 2,
-                  borderTopColor: "#e5e7eb",
-                }}>
                   <Text style={{
                     fontSize: 16,
                     fontWeight: "600",
                     color: theme.colors.text,
                   }}>
-                    Total Paid
-                  </Text>
-                  <Text style={{
-                    fontSize: 18,
-                    fontWeight: "700",
-                    color: theme.colors.text,
-                  }}>
-                    ₹{billDetails.receipt.amount.toFixed(2)}
+                    ₹{split.amount.toFixed(2)}
                   </Text>
                 </View>
+              ))}
+
+              {/* Total */}
+              <View style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                paddingTop: 16,
+                marginTop: 8,
+                borderTopWidth: 2,
+                borderTopColor: "#e5e7eb",
+              }}>
+                <Text style={{
+                  fontSize: 16,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                }}>
+                  Total Paid
+                </Text>
+                <Text style={{
+                  fontSize: 18,
+                  fontWeight: "700",
+                  color: theme.colors.text,
+                }}>
+                  ₹{billDetails.receipt.amount.toFixed(2)}
+                </Text>
               </View>
             </View>
-          )}
+          </View>
+        )}
 
-          {/* KOT Details */}
-        {billDetails.kots && billDetails.kots.length > 0 && (
+        {/* KOT Details */}
+        {billDetails.receipt.billId && billDetails.kots && billDetails.kots.length > 0 && (
           <View style={{ paddingHorizontal: 16, paddingVertical: 16 }}>
             <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
               <FileText size={20} color={theme.colors.text} />
@@ -446,9 +446,62 @@ export default function ReceiptDetailsScreen() {
           </View>
         )}
 
-        {/* Spacer */}
-        <View style={{ height: 20 }} />
+        {/* Thank You Banner (mirror final payment screen) */}
+        <View style={{
+          backgroundColor: "#ecfdf5",
+          borderRadius: 12,
+          padding: 16,
+          borderWidth: 1,
+          borderColor: "#a7f3d0",
+          marginHorizontal: 16,
+          marginTop: 8,
+        }}>
+          <Text style={{
+            fontSize: 16,
+            fontWeight: "500",
+            color: "#059669",
+            textAlign: "center",
+            marginBottom: 4,
+          }}>
+            Thank you for visiting Chai Point!
+          </Text>
+          <Text style={{
+            fontSize: 14,
+            color: "#047857",
+            textAlign: "center",
+          }}>
+            Have a great day! ☕
+          </Text>
+        </View>
       </ScrollView>
+      {/* Done Button */}
+      <View style={{
+        backgroundColor: "white",
+        borderTopWidth: 1,
+        borderTopColor: "#f3f4f6",
+        paddingHorizontal: 16,
+        paddingVertical: 16,
+      }}>
+        <TouchableOpacity
+          onPress={() => router.push('/(tabs)/customers')}
+          style={{
+            backgroundColor: "#059669",
+            paddingVertical: 16,
+            borderRadius: 12,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{
+            color: "white",
+            fontWeight: "600",
+            fontSize: 18,
+          }}>
+            DONE
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }

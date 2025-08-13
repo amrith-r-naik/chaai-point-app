@@ -7,14 +7,16 @@ interface PaymentTypeModalProps {
   visible: boolean;
   onSelectPayment: (type: PaymentType) => void;
   onCancel: () => void;
+  hideCredit?: boolean;
 }
 
 export const PaymentTypeModal: React.FC<PaymentTypeModalProps> = ({
   visible,
   onSelectPayment,
   onCancel,
+  hideCredit = false,
 }) => {
-  const paymentOptions: PaymentType[] = ["Cash", "UPI", "Credit", "Split"];
+  const paymentOptions: PaymentType[] = hideCredit ? ["Cash", "UPI", "Split"] : ["Cash", "UPI", "Credit", "Split"];
 
   return (
     <Modal

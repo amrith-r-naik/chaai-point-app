@@ -7,5 +7,5 @@ export { Loading } from "./Loading";
 export { LoadingOverlay } from "./LoadingOverlay";
 export { Modal } from "./Modal";
 export { Typography } from "./Typography";
-export { default as UnbilledOrdersCard } from "./UnbilledOrdersCard";
+// UnbilledOrdersCard removed (unbilled KOT concept deprecated)
 

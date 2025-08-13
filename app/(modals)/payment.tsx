@@ -1,6 +1,7 @@
 import { SplitPaymentModal } from "@/components/payment/SplitPaymentModal";
 import { theme } from "@/constants/theme";
 import { usePaymentState } from "@/hooks/usePaymentState";
+import { paymentService } from "@/services/paymentService";
 import { PaymentType } from "@/types/payment";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, CreditCard, DollarSign, QrCode, Split } from "lucide-react-native";
@@ -10,14 +11,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function PaymentScreen() {
   const router = useRouter();
-  const { billId, customerId, customerName, totalAmount } = useLocalSearchParams<{
+  const { billId, customerId, customerName, totalAmount, clearance } = useLocalSearchParams<{
     billId: string;
     customerId: string;
     customerName: string;
     totalAmount: string;
+    clearance?: string; // '1' for credit clearance mode (no bill)
   }>();
 
   const total = parseFloat(totalAmount || "0");
+  const isClearance = clearance === '1';
 
   const {
     selectedPaymentType,
@@ -36,53 +39,62 @@ export default function PaymentScreen() {
     handleConfirmAddSplit,
     handleRemoveSplit,
     validatePayment,
-  } = usePaymentState({ totalAmount: total });
+  } = usePaymentState({ totalAmount: total, isClearance });
 
+  // Build payment options. In clearance mode, hide standalone Credit.
   const paymentOptions: { type: PaymentType; label: string; icon: React.ReactNode; color: string }[] = [
-    { 
-      type: "Cash", 
-      label: "Cash Payment", 
-      icon: <DollarSign size={24} color="#16a34a" />, 
-      color: "#16a34a" 
+    {
+      type: "Cash",
+      label: "Cash Payment",
+      icon: <DollarSign size={24} color="#16a34a" />,
+      color: "#16a34a"
     },
-    { 
-      type: "UPI", 
-      label: "UPI Payment", 
-      icon: <QrCode size={24} color="#2563eb" />, 
-      color: "#2563eb" 
+    {
+      type: "UPI",
+      label: "UPI Payment",
+      icon: <QrCode size={24} color="#2563eb" />,
+      color: "#2563eb"
     },
-    { 
-      type: "Credit", 
-      label: "Credit Payment", 
-      icon: <CreditCard size={24} color="#dc2626" />, 
-      color: "#dc2626" 
+    {
+      type: "Split",
+      label: "Split Payment",
+      icon: <Split size={24} color="#7c3aed" />,
+      color: "#7c3aed"
     },
-    { 
-      type: "Split", 
-      label: "Split Payment", 
-      icon: <Split size={24} color="#7c3aed" />, 
-      color: "#7c3aed" 
-    },
+    // Only show Credit in normal payment flow
+    ...(!isClearance
+      ? [{
+        type: "Credit" as PaymentType,
+        label: "Credit",
+        icon: <CreditCard size={24} color="#f59e0b" />,
+        color: "#f59e0b",
+      }]
+      : []),
   ];
 
-  const handleProceed = () => {
+  const handleProceed = async () => {
     if (!validatePayment()) {
       Alert.alert("Invalid Payment", "Please select a valid payment method.");
       return;
     }
-
-    // Navigate directly to receipt page
-    router.push({
-      pathname: "/(modals)/receipt",
-      params: {
-        billId,
-        customerId,
-        customerName,
-        totalAmount: totalAmount,
-        paymentType: selectedPaymentType as string,
-        splitPayments: selectedPaymentType === "Split" ? JSON.stringify(splitPayments) : "",
-      },
-    });
+    if (isClearance) {
+      try {
+        // Only Cash/UPI or Split with those; proceed via service
+        const splits = selectedPaymentType === 'Split' ? splitPayments.filter(p => p.type !== 'Credit') : [{ id: 'one', type: selectedPaymentType as any, amount: total }];
+        const { receipt } = await paymentService.processCreditClearance(customerId as string, splits as any, 'Credit Clearance');
+        // Navigate to receipt details for clearance
+        router.push({ pathname: '/(modals)/receipt-details', params: { receiptId: receipt.id } });
+      } catch (e: any) {
+        Alert.alert('Error', e.message || 'Failed to record clearance');
+      }
+      return;
+    }
+    // For pure Credit in normal flow, skip the receipt form and auto-record credit sale
+    if (selectedPaymentType === 'Credit') {
+      router.push({ pathname: '/(modals)/receipt', params: { billId, customerId, customerName, totalAmount: totalAmount, paymentType: 'Credit', skipForm: '1' } });
+      return;
+    }
+    router.push({ pathname: '/(modals)/receipt', params: { billId, customerId, customerName, totalAmount: totalAmount, paymentType: selectedPaymentType as string, splitPayments: selectedPaymentType === 'Split' ? JSON.stringify(splitPayments) : '' } });
   };
 
   const handleSplitProceed = () => {
@@ -94,7 +106,7 @@ export default function PaymentScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: "#f9fafb" }}>
       <Stack.Screen
         options={{
-          title: "Payment",
+          title: isClearance ? "Credit Clearance" : "Payment",
           headerStyle: { backgroundColor: "white" },
           headerTitleStyle: {
             fontSize: 18,
@@ -114,7 +126,7 @@ export default function PaymentScreen() {
       />
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
-        {/* Bill Summary */}
+        {/* Summary */}
         <View style={{
           backgroundColor: "white",
           padding: 24,
@@ -142,7 +154,7 @@ export default function PaymentScreen() {
             fontSize: 14,
             color: theme.colors.textSecondary,
           }}>
-            Total Amount
+            {isClearance ? 'Outstanding Credit' : 'Total Amount'}
           </Text>
         </View>
 
@@ -160,9 +172,9 @@ export default function PaymentScreen() {
             color: theme.colors.text,
             marginBottom: 16,
           }}>
-            Select Payment Method
+            {isClearance ? 'Select Clearance Method' : 'Select Payment Method'}
           </Text>
-          
+
           {paymentOptions.map((option) => (
             <TouchableOpacity
               key={option.type}
@@ -218,7 +230,7 @@ export default function PaymentScreen() {
             }}>
               Split Payment Summary
             </Text>
-            
+
             {splitPayments.map((payment, index) => (
               <View key={index} style={{
                 flexDirection: "row",
@@ -243,7 +255,7 @@ export default function PaymentScreen() {
                 </Text>
               </View>
             ))}
-            
+
             <TouchableOpacity
               onPress={() => setShowSplitPayment(true)}
               style={{

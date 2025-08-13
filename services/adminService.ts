@@ -11,16 +11,17 @@ class AdminService {
       // Temporarily disable foreign key constraints
       await db.runAsync(`PRAGMA foreign_keys = OFF`);
 
-      // Clear all tables in order (respecting foreign key constraints)
-      // NOTE: Users table is preserved to maintain authentication
-      await db.runAsync(`DELETE FROM kot_items`);
-      await db.runAsync(`DELETE FROM payments`);
-      await db.runAsync(`DELETE FROM receipts`);
-      await db.runAsync(`DELETE FROM bills`);
-      await db.runAsync(`DELETE FROM kot_orders`);
-      await db.runAsync(`DELETE FROM expenses`);
-      await db.runAsync(`DELETE FROM menu_items`);
-      await db.runAsync(`DELETE FROM customers`);
+  // Clear all tables in correct order to respect foreign key constraints
+  // NOTE: Users table is preserved to maintain authentication
+  await db.runAsync(`DELETE FROM kot_items`);
+  await db.runAsync(`DELETE FROM split_payments`);
+  await db.runAsync(`DELETE FROM payments`);
+  await db.runAsync(`DELETE FROM receipts`);
+  await db.runAsync(`DELETE FROM kot_orders`);
+  await db.runAsync(`DELETE FROM bills`);
+  await db.runAsync(`DELETE FROM expenses`);
+  await db.runAsync(`DELETE FROM menu_items`);
+  await db.runAsync(`DELETE FROM customers`);
 
       // Re-enable foreign key constraints
       await db.runAsync(`PRAGMA foreign_keys = ON`);

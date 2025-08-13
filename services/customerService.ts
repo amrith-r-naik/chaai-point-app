@@ -36,6 +36,55 @@ export async function getAllCustomers(): Promise<Customer[]> {
   }
 }
 
+// Minimal aggregated stats per customer for lightweight listing
+export async function getCustomersSummary(): Promise<Array<{
+  id: string;
+  name: string;
+  contact?: string;
+  creditBalance: number;
+  billCount: number;
+  totalBilled: number;
+  lastBillAt: string | null;
+}>> {
+  try {
+    if (!db) throw new Error("Database not initialized");
+
+    // Ensure DB ready
+    let retries = 0;
+    while (!authState.isDbReady.get() && retries < 50) {
+      await new Promise(r => setTimeout(r, 100));
+      retries++;
+    }
+    if (!authState.isDbReady.get()) throw new Error("Database not ready after timeout");
+
+    const rows = await db.getAllAsync(`
+      SELECT 
+        c.id,
+        c.name,
+        c.contact,
+        COALESCE(c.creditBalance,0) as creditBalance,
+        (SELECT COUNT(*) FROM bills b WHERE b.customerId = c.id) as billCount,
+        COALESCE((SELECT SUM(total) FROM bills b2 WHERE b2.customerId = c.id),0) as totalBilled,
+        (SELECT MAX(createdAt) FROM bills b3 WHERE b3.customerId = c.id) as lastBillAt
+      FROM customers c
+      ORDER BY c.name ASC
+    `) as any[];
+
+    return rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      contact: r.contact || undefined,
+      creditBalance: r.creditBalance || 0,
+      billCount: r.billCount || 0,
+      totalBilled: r.totalBilled || 0,
+      lastBillAt: r.lastBillAt || null,
+    }));
+  } catch (error) {
+    console.error('Error fetching customer summaries:', error);
+    return [];
+  }
+}
+
 export async function createCustomer(
   name: string,
   contact?: string

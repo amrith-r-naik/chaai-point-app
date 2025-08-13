@@ -2,7 +2,6 @@ import AddExpenseModal from "@/app/(modals)/add-expense";
 import { Loading, Typography } from "@/components/ui";
 import { theme } from "@/constants/theme";
 import { dashboardService, DateFilterOptions, ExpenseData } from "@/services/dashboardService";
-import { dueService } from "@/services/dueService";
 import { useRouter } from "expo-router";
 import {
   Activity,
@@ -38,11 +37,12 @@ const formatCurrency = (amount: number): string => {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value);
-  
+
   return amount < 0 ? `-${formatted}` : formatted;
 };
 
-const styles = StyleSheet.create({actionButton: {
+const styles = StyleSheet.create({
+  actionButton: {
     width: 44,
     height: 44,
     borderRadius: 14,
@@ -59,13 +59,14 @@ const styles = StyleSheet.create({actionButton: {
     paddingVertical: 10,
     width: "auto",
     gap: 6,
-  }});
-  
+  }
+});
+
 // Get appropriate font size based on amount length
 const getCurrencyFontSize = (amount: number, baseFontSize: number = 18): number => {
   const formatted = formatCurrency(amount);
   const length = formatted.length;
-  
+
   if (length <= 8) return baseFontSize;
   if (length <= 12) return baseFontSize * 0.85;
   if (length <= 16) return baseFontSize * 0.75;
@@ -99,7 +100,7 @@ const FilterButton: React.FC<{
     <Typography
       variant="caption"
       weight="bold"
-      style={{ 
+      style={{
         color: active ? theme.colors.primary : "white",
         fontSize: 13
       }}
@@ -150,18 +151,18 @@ const StatCard: React.FC<{
           {icon}
         </View>
         <View style={{ flex: 1 }}>
-          <Typography 
-            variant="caption" 
-            color="textSecondary" 
+          <Typography
+            variant="caption"
+            color="textSecondary"
             weight="medium"
             style={{ marginBottom: 4, fontSize: 12 }}
           >
             {title}
           </Typography>
-          <Typography 
-            variant="h3" 
-            weight="bold" 
-            style={{ 
+          <Typography
+            variant="h3"
+            weight="bold"
+            style={{
               color: color,
               fontSize: getCurrencyFontSize(parseFloat(value.replace(/[^\d.-]/g, '')), 22),
               lineHeight: 28
@@ -240,12 +241,12 @@ const ExpenseItem: React.FC<{ expense: ExpenseData; index: number }> = ({ expens
             </Typography>
           </View>
         </View>
-        
-        <Typography 
-          variant="body" 
-          weight="bold" 
-          style={{ 
-            marginBottom: 6, 
+
+        <Typography
+          variant="body"
+          weight="bold"
+          style={{
+            marginBottom: 6,
             fontSize: 16,
             color: '#1E293B',
             lineHeight: 22
@@ -253,7 +254,7 @@ const ExpenseItem: React.FC<{ expense: ExpenseData; index: number }> = ({ expens
         >
           {expense.towards}
         </Typography>
-        
+
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
           <View style={{
             backgroundColor: '#F8FAFC',
@@ -274,7 +275,7 @@ const ExpenseItem: React.FC<{ expense: ExpenseData; index: number }> = ({ expens
             })}
           </Typography>
         </View>
-        
+
         {expense.remarks && (
           <View style={{
             backgroundColor: '#FFFBEB',
@@ -290,11 +291,11 @@ const ExpenseItem: React.FC<{ expense: ExpenseData; index: number }> = ({ expens
           </View>
         )}
       </View>
-      
+
       <View style={{ alignItems: 'flex-end' }}>
-        <Typography 
-          variant="h4" 
-          weight="bold" 
+        <Typography
+          variant="h4"
+          weight="bold"
           style={{
             color: '#EF4444',
             fontSize: getCurrencyFontSize(expense.amount, 20),
@@ -328,28 +329,28 @@ export default function BillingScreen() {
   const [selectedFilter, setSelectedFilter] = useState<"today" | "week" | "month" | "all">("today");
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [totalExpenses, setTotalExpenses] = useState(0);
-  const [pendingDues, setPendingDues] = useState(0);
+  const [outstandingCredit, setOutstandingCredit] = useState(0);
 
   const getDateFilter = (): DateFilterOptions | undefined => {
     const today = new Date();
     const endDate = today.toISOString().split('T')[0];
-    
+
     switch (selectedFilter) {
       case "today":
         return { startDate: endDate, endDate };
       case "week":
         const weekStart = new Date(today);
         weekStart.setDate(today.getDate() - 6);
-        return { 
-          startDate: weekStart.toISOString().split('T')[0], 
-          endDate 
+        return {
+          startDate: weekStart.toISOString().split('T')[0],
+          endDate
         };
       case "month":
         const monthStart = new Date(today);
         monthStart.setDate(1);
-        return { 
-          startDate: monthStart.toISOString().split('T')[0], 
-          endDate 
+        return {
+          startDate: monthStart.toISOString().split('T')[0],
+          endDate
         };
       case "all":
       default:
@@ -360,13 +361,13 @@ export default function BillingScreen() {
   const loadExpenses = async () => {
     try {
       const dateFilter = getDateFilter();
-      const [expensesData, duesAmount] = await Promise.all([
+      const [expensesData, stats] = await Promise.all([
         dashboardService.getExpenses(dateFilter),
-        dueService.getTotalPendingDues()
+        dashboardService.getDashboardStats()
       ]);
       setExpenses(expensesData);
-      setPendingDues(duesAmount);
-      
+      setOutstandingCredit(stats.outstandingCredit || 0);
+
       const total = expensesData.reduce((sum, expense) => sum + expense.amount, 0);
       setTotalExpenses(total);
     } catch (error) {
@@ -403,12 +404,12 @@ export default function BillingScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
-      <ScrollView 
+      <ScrollView
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={handleRefresh}
             colors={[theme.colors.primary]}
             tintColor={theme.colors.primary}
@@ -416,7 +417,7 @@ export default function BillingScreen() {
         }
       >
         {/* Enhanced Header */}
-        <View style={{ 
+        <View style={{
           backgroundColor: theme.colors.primary,
           paddingTop: insets.top + 20,
           paddingBottom: 40,
@@ -430,18 +431,18 @@ export default function BillingScreen() {
           elevation: 8,
         }}>
           {/* Header Title and Action */}
-          <View style={{ 
-            flexDirection: 'row', 
-            justifyContent: 'space-between', 
+          <View style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
             alignItems: 'flex-start',
             marginBottom: 28
           }}>
             <View style={{ flex: 1 }}>
-              <Typography 
-                variant="h1" 
+              <Typography
+                variant="h1"
                 weight="bold"
-                style={{ 
-                  color: 'white', 
+                style={{
+                  color: 'white',
                   marginBottom: 6,
                   fontSize: 32,
                   lineHeight: 38
@@ -449,8 +450,8 @@ export default function BillingScreen() {
               >
                 Expenses
               </Typography>
-              <Typography 
-                style={{ 
+              <Typography
+                style={{
                   color: 'rgba(255,255,255,0.85)',
                   fontSize: 16,
                   lineHeight: 22
@@ -459,14 +460,14 @@ export default function BillingScreen() {
                 Track and manage your business expenses
               </Typography>
             </View>
-            
-                <TouchableOpacity 
-                  style={[styles.actionButton, styles.primaryActionButton]}
-                  onPress={() => setShowAddExpense(true)}
-                >
-                  <Plus size={18} color={theme.colors.primary} />
-                  <Typography style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 13 }}>Add</Typography>
-                </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionButton, styles.primaryActionButton]}
+              onPress={() => setShowAddExpense(true)}
+            >
+              <Plus size={18} color={theme.colors.primary} />
+              <Typography style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 13 }}>Add</Typography>
+            </TouchableOpacity>
           </View>
 
           {/* Enhanced Filter Section */}
@@ -477,7 +478,7 @@ export default function BillingScreen() {
                 Filter by period:
               </Typography>
             </View>
-            
+
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <FilterButton
                 active={selectedFilter === "today"}
@@ -519,27 +520,26 @@ export default function BillingScreen() {
             backgroundColor="#FEF2F2"
           />
 
-          {/* Pending Dues Card */}
+          {/* Outstanding Credit Card */}
           <StatCard
             icon={<Clock size={28} color="#D97706" />}
-            title="Pending Dues"
-            value={formatCurrency(pendingDues)}
-            trend={pendingDues > 0 ? "neutral" : "up"}
-            color={pendingDues > 0 ? "#D97706" : "#10B981"}
-            backgroundColor={pendingDues > 0 ? "#FEF3C7" : "#D1FAE5"}
-            onPress={() => router.push("/(modals)/due-management")}
+            title="Outstanding Credit"
+            value={formatCurrency(outstandingCredit)}
+            trend={outstandingCredit > 0 ? "neutral" : "up"}
+            color={outstandingCredit > 0 ? "#D97706" : "#10B981"}
+            backgroundColor={outstandingCredit > 0 ? "#FEF3C7" : "#D1FAE5"}
           />
 
           {/* Section Header */}
-          <View style={{ 
-            flexDirection: 'row', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
+          <View style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
             marginBottom: 20,
             marginTop: 12
           }}>
-            <Typography 
-              variant="h3" 
+            <Typography
+              variant="h3"
               weight="bold"
               style={{ color: '#1E293B', fontSize: 22 }}
             >
@@ -558,10 +558,10 @@ export default function BillingScreen() {
               shadowRadius: 4,
               elevation: 2,
             }}>
-              <Typography 
-                variant="caption" 
-                style={{ 
-                  color: theme.colors.primary, 
+              <Typography
+                variant="caption"
+                style={{
+                  color: theme.colors.primary,
                   fontWeight: '700',
                   fontSize: 11
                 }}
@@ -599,34 +599,34 @@ export default function BillingScreen() {
               }}>
                 <DollarSign size={48} color="#94A3B8" />
               </View>
-              
-              <Typography 
-                variant="h3" 
+
+              <Typography
+                variant="h3"
                 weight="bold"
-                style={{ 
-                  marginBottom: 12, 
+                style={{
+                  marginBottom: 12,
                   color: '#1E293B',
                   fontSize: 22
                 }}
               >
                 No Expenses Found
               </Typography>
-              
-              <Typography 
-                variant="body" 
-                color="textSecondary" 
-                style={{ 
-                  textAlign: 'center', 
-                  marginBottom: 32, 
+
+              <Typography
+                variant="body"
+                color="textSecondary"
+                style={{
+                  textAlign: 'center',
+                  marginBottom: 32,
                   lineHeight: 24,
                   paddingHorizontal: 20
                 }}
               >
-                {selectedFilter === "all" 
+                {selectedFilter === "all"
                   ? "You haven't added any expenses yet. Start tracking your business expenses to get better insights."
                   : `No expenses found for ${selectedFilter}. Try selecting a different time period or add a new expense.`}
               </Typography>
-              
+
               <TouchableOpacity
                 onPress={() => setShowAddExpense(true)}
                 style={{

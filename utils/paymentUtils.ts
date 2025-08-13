@@ -44,26 +44,29 @@ export class SplitPaymentManager {
       }
     }
 
-    const newSplit: SplitPayment = {
-      id: Date.now().toString(),
-      type,
-      amount,
-    };
+    // Find existing non-credit split of same type
+    const existingIndex = splitPayments.findIndex(p => p.type === type && type !== 'Credit');
+    let updatedSplitPayments = [...splitPayments];
 
-    // Update credit split by reducing its amount
-    const updatedSplitPayments = splitPayments.map(payment => 
-      payment.type === "Credit" 
-        ? { ...payment, amount: payment.amount - amount }
-        : payment
-    );
+    if (existingIndex !== -1) {
+      // Merge amounts
+      updatedSplitPayments[existingIndex] = {
+        ...updatedSplitPayments[existingIndex],
+        amount: updatedSplitPayments[existingIndex].amount + amount
+      };
+    } else {
+      const newSplit: SplitPayment = {
+        id: Date.now().toString(),
+        type,
+        amount,
+      };
+      updatedSplitPayments.push(newSplit);
+    }
 
-    // Add the new split
-    updatedSplitPayments.push(newSplit);
-
-    // Remove credit split if amount becomes 0
-    return updatedSplitPayments.filter(payment => 
-      payment.type !== "Credit" || payment.amount > 0
-    );
+    // Reduce credit remainder
+    updatedSplitPayments = updatedSplitPayments.map(p => p.type === 'Credit' ? { ...p, amount: p.amount - amount } : p);
+    // Remove zero credit rows
+    return updatedSplitPayments.filter(p => p.type !== 'Credit' || p.amount > 0);
   }
 
   static removeSplitPayment(splitPayments: SplitPayment[], id: string): SplitPayment[] {

@@ -1,62 +1,30 @@
 import { theme } from "@/constants/theme";
-import { dueService } from "@/services/dueService";
-import { orderService } from "@/services/orderService";
 import { paymentService } from "@/services/paymentService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import { router, useLocalSearchParams } from "expo-router";
 import {
   ArrowLeft,
-  Calendar,
   CreditCard,
   DollarSign,
   History,
   Plus,
   Receipt,
-  TrendingDown,
-  TrendingUp,
   Wallet
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   RefreshControl,
   SafeAreaView,
   ScrollView,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
-interface CustomerOrder {
-  id: string;
-  orderNumber: string;
-  totalAmount: number;
-  amountPaid: number;
-  paymentStatus: 'paid' | 'credit' | 'pending';
-  createdAt: string;
-  items: {
-    id: string;
-    menuItemName: string;
-    quantity: number;
-    price: number;
-    total: number;
-  }[];
-}
-
-interface CustomerStats {
-  totalOrders: number;
-  totalAmount: number;
-  paidAmount: number;
-  creditAmount: number;
-  paidOrders: number;
-  creditOrders: number;
-  pendingOrders: number;
-  pendingAmount: number;
-  creditBalance: number;
-}
+interface CustomerStats { totalBilled: number; billCount: number; creditBalance: number; lastBillAt: string | null; }
 
 export default function CustomerDetailsScreen() {
   const { customerId, customerName } = useLocalSearchParams<{
@@ -64,12 +32,11 @@ export default function CustomerDetailsScreen() {
     customerName: string;
   }>();
 
-  const [orders, setOrders] = useState<CustomerOrder[]>([]);
-  const [filteredOrders, setFilteredOrders] = useState<CustomerOrder[]>([]);
+  const [billHistory, setBillHistory] = useState<any[]>([]);
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [stats, setStats] = useState<CustomerStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'paid' | 'credit'>('all');
   const auth = use$(authState);
 
   const loadCustomerData = useCallback(async () => {
@@ -77,52 +44,15 @@ export default function CustomerDetailsScreen() {
 
     try {
       setLoading(true);
-
-      // Load order history
-      const customerOrders = await orderService.getOrdersByCustomerId(customerId);
-      setOrders(customerOrders);
-
-      // Calculate stats
-      let totalOrders = customerOrders.length;
-      let totalAmount = 0;
-      let paidAmount = 0;
-      let creditAmount = 0;
-      let paidOrders = 0;
-      let creditOrders = 0;
-      let pendingOrders = 0;
-      let pendingAmount = 0;
-
-      customerOrders.forEach(order => {
-        totalAmount += order.totalAmount;
-
-        if (order.paymentStatus === 'paid') {
-          paidAmount += order.totalAmount;
-          paidOrders++;
-        } else if (order.paymentStatus === 'credit') {
-          creditAmount += order.totalAmount;
-          creditOrders++;
-        } else if (order.paymentStatus === 'pending') {
-          pendingAmount += order.totalAmount;
-          pendingOrders++;
-        }
-      });
-
-      // Get customer credit balance
       const creditBalance = await paymentService.getCustomerCreditBalance(customerId);
-
-      const customerStats: CustomerStats = {
-        totalOrders,
-        totalAmount,
-        paidAmount,
-        creditAmount,
-        paidOrders,
-        creditOrders,
-        pendingOrders,
-        pendingAmount,
-        creditBalance,
-      };
-
-      setStats(customerStats);
+      const bills = await paymentService.getCustomerBillsWithPayments(customerId);
+      const paymentRows = await paymentService.getPaymentHistory(customerId);
+      const totalBilled = bills.reduce((s: number, b: any) => s + b.total, 0);
+      const billCount = bills.length;
+      const lastBillAt = bills[0]?.createdAt || null;
+      setStats({ totalBilled, billCount, creditBalance, lastBillAt });
+      setBillHistory(bills);
+      setPaymentHistory(paymentRows);
     } catch (error) {
       console.error("Error loading customer data:", error);
       Alert.alert("Error", "Failed to load customer data");
@@ -136,22 +66,7 @@ export default function CustomerDetailsScreen() {
     loadCustomerData();
   }, [loadCustomerData]);
 
-  useEffect(() => {
-    filterOrders();
-  }, [orders, selectedFilter]);
-
-  const filterOrders = () => {
-    switch (selectedFilter) {
-      case 'paid':
-        setFilteredOrders(orders.filter(order => order.paymentStatus === 'paid'));
-        break;
-      case 'credit':
-        setFilteredOrders(orders.filter(order => order.paymentStatus === 'credit'));
-        break;
-      default:
-        setFilteredOrders(orders);
-    }
-  };
+  // Removed per-order filtering for minimal version
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -160,41 +75,11 @@ export default function CustomerDetailsScreen() {
 
   const handleCreditClearance = () => {
     if (!stats || stats.creditBalance <= 0) {
-      Alert.alert("No Credit", "This customer has no outstanding credit balance.");
+      Alert.alert('No Credit', 'Nothing to clear.');
       return;
     }
-
-    Alert.alert(
-      "Clear Credit Balance",
-      `Are you sure you want to clear the credit balance of ₹${stats.creditBalance.toFixed(2)} for ${customerName}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Clear Credit",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setLoading(true);
-              
-              // Process due payment to clear credit
-              await dueService.processCustomerDuePayment({
-                customerId,
-                amount: stats.creditBalance,
-                paymentMode: 'Cash',
-                remarks: 'Credit balance clearance'
-              });
-
-              Alert.alert("Success", "Credit balance cleared successfully!");
-              loadCustomerData(); // Refresh data
-            } catch (error: any) {
-              console.error("Error clearing credit:", error);
-              Alert.alert("Error", error.message || "Failed to clear credit balance");
-              setLoading(false);
-            }
-          }
-        }
-      ]
-    );
+    // Reuse the payment screen in clearance mode; allow partial via split
+    router.push({ pathname: '/(modals)/payment', params: { billId: 'nil', customerId, customerName, totalAmount: String(stats.creditBalance), clearance: '1' } });
   };
 
   const handleCreateOrder = () => {
@@ -207,15 +92,7 @@ export default function CustomerDetailsScreen() {
     });
   };
 
-  const handleOrderPress = (order: CustomerOrder) => {
-    router.push({
-      pathname: "/(modals)/order-details",
-      params: {
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-      }
-    });
-  };
+  const handleOrderPress = (_: any) => { };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -266,124 +143,51 @@ export default function CustomerDetailsScreen() {
       .slice(0, 2);
   };
 
-  const renderOrderItem = ({ item }: { item: CustomerOrder }) => {
-    const statusStyle = getStatusColor(item.paymentStatus);
+  const renderBillRow = (bill: any) => {
+    const status = bill.status;
+    const colorMap: any = { Paid: ['#dcfce7', '#16a34a'], Partial: ['#fef3c7', '#d97706'], Credit: ['#fee2e2', '#dc2626'] };
+    const [bg, textColor] = colorMap[status] || ['#f3f4f6', '#374151'];
     return (
-      <TouchableOpacity
-        onPress={() => handleOrderPress(item)}
-        style={{
-          backgroundColor: theme.colors.background,
-          marginHorizontal: 16,
-          marginVertical: 6,
-          borderRadius: 12,
-          padding: 16,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          ...theme.shadows.sm,
-        }}
-      >
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                fontSize: 16,
-                fontWeight: "600",
-                color: theme.colors.text,
-                marginBottom: 4,
-              }}
-            >
-              {item.orderNumber}
-            </Text>
-
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
-              <Calendar size={14} color={theme.colors.textSecondary} />
-              <Text
-                style={{
-                  fontSize: 14,
-                  color: theme.colors.textSecondary,
-                  marginLeft: 4,
-                }}
-              >
-                {formatDate(item.createdAt)}
-              </Text>
-            </View>
-
-            <Text
-              style={{
-                fontSize: 14,
-                color: theme.colors.textSecondary,
-                marginBottom: 8,
-              }}
-            >
-              {item.items.length} item(s)
-            </Text>
-
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <Text
-                style={{
-                  fontSize: 18,
-                  fontWeight: "bold",
-                  color: theme.colors.primary,
-                }}
-              >
-                {formatCurrency(item.totalAmount)}
-              </Text>
-
-              <View
-                style={{
-                  backgroundColor: statusStyle.bg,
-                  paddingHorizontal: 12,
-                  paddingVertical: 4,
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: statusStyle.border,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 12,
-                    fontWeight: "600",
-                    color: statusStyle.text,
-                  }}
-                >
-                  {getStatusText(item.paymentStatus)}
-                </Text>
-              </View>
-            </View>
+      <View key={bill.id} style={{ backgroundColor: 'white', borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#f3f4f6' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+          <Text style={{ fontWeight: '600', color: theme.colors.text }}>Bill #{bill.billNumber}</Text>
+          <View style={{ backgroundColor: bg, paddingHorizontal: 10, paddingVertical: 2, borderRadius: 12 }}>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: textColor }}>{status}</Text>
           </View>
         </View>
-      </TouchableOpacity>
+        <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 4 }}>{formatDate(bill.createdAt)}</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+          {bill.payments.map((p: any) => (
+            <View key={p.id} style={{ backgroundColor: p.mode === 'Credit' ? '#fef3c7' : '#dcfce7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: p.mode === 'Credit' ? '#b45309' : '#166534' }}>{p.mode} ₹{p.amount}</Text>
+            </View>
+          ))}
+        </View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text }}>Total: {formatCurrency(bill.total)}</Text>
+          {bill.creditPortion > 0 && <Text style={{ fontSize: 12, color: '#d97706' }}>Credit: {formatCurrency(bill.creditPortion)}</Text>}
+        </View>
+      </View>
     );
   };
 
-  const FilterButton = ({ filter, label, icon: Icon }: { filter: typeof selectedFilter, label: string, icon: any }) => (
-    <TouchableOpacity
-      onPress={() => setSelectedFilter(filter)}
-      style={{
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        backgroundColor: selectedFilter === filter ? theme.colors.primary : "#f3f4f6",
-        borderWidth: 1,
-        borderColor: selectedFilter === filter ? theme.colors.primary : "#e5e7eb",
-        flexDirection: "row",
-        alignItems: "center",
-        marginRight: 8,
-      }}
-    >
-      <Icon size={14} color={selectedFilter === filter ? "white" : theme.colors.text} />
-      <Text
-        style={{
-          fontSize: 14,
-          fontWeight: selectedFilter === filter ? "600" : "400",
-          color: selectedFilter === filter ? "white" : theme.colors.text,
-          marginLeft: 4,
-        }}
-      >
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
+  const renderPaymentRow = (p: any) => {
+    const isCreditAccrual = p.mode === 'Credit' && p.subType === 'Accrual';
+    const isCreditClear = p.subType === 'Clearance';
+    const bg = isCreditAccrual ? '#fef3c7' : (isCreditClear ? '#dcfce7' : '#dcfce7');
+    const color = isCreditAccrual ? '#b45309' : (isCreditClear ? '#166534' : '#166534');
+    return (
+      <View key={p.id} style={{ backgroundColor: 'white', borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#f3f4f6' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text style={{ fontWeight: '600', color: theme.colors.text }}>{p.mode} ₹{p.amount}</Text>
+          {p.subType && <Text style={{ fontSize: 11, fontWeight: '600', color: color }}>{p.subType}</Text>}
+        </View>
+        <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 }}>{formatDate(p.createdAt)} {p.billId ? `• Bill` : ''}</Text>
+      </View>
+    );
+  };
+
+  // Filter buttons removed
 
   if (loading && !refreshing) {
     return (
@@ -445,7 +249,7 @@ export default function CustomerDetailsScreen() {
                   marginTop: 2,
                 }}
               >
-                {filteredOrders.length} order(s) {selectedFilter !== 'all' ? `(${selectedFilter})` : ''}
+                {stats?.billCount || 0} bill(s)
               </Text>
             </View>
           </View>
@@ -561,110 +365,36 @@ export default function CustomerDetailsScreen() {
             elevation: 4,
           }}>
             <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 16, color: theme.colors.text }}>
-              Overview
+              Summary
             </Text>
 
             <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 16 }}>
               <View style={{ alignItems: "center" }}>
                 <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginBottom: 4 }}>
-                  Total Orders
+                  Bills
                 </Text>
                 <Text style={{ fontSize: 20, fontWeight: "bold", color: theme.colors.text }}>
-                  {stats?.totalOrders || 0}
+                  {stats?.billCount || 0}
                 </Text>
               </View>
               <View style={{ alignItems: "center" }}>
                 <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginBottom: 4 }}>
-                  Total Value
+                  Total Billed
                 </Text>
                 <Text style={{ fontSize: 20, fontWeight: "bold", color: theme.colors.text }}>
-                  {formatCurrency(stats?.totalAmount || 0)}
+                  {formatCurrency(stats?.totalBilled || 0)}
                 </Text>
               </View>
             </View>
 
-            {/* Payment Breakdown */}
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              <View style={{
-                flex: 1,
-                backgroundColor: "#dcfce7",
-                padding: 12,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: "#bbf7d0",
-              }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                  <TrendingUp size={16} color="#16a34a" />
-                  <Text style={{ color: "#16a34a", fontSize: 12, fontWeight: "600" }}>
-                    Paid
-                  </Text>
-                </View>
-                <Text style={{ color: "#15803d", fontSize: 16, fontWeight: "bold" }}>
-                  {stats?.paidOrders || 0} orders
-                </Text>
-                <Text style={{ color: "#16a34a", fontSize: 14, fontWeight: "600" }}>
-                  {formatCurrency(stats?.paidAmount || 0)}
-                </Text>
-              </View>
-
-              <View style={{
-                flex: 1,
-                backgroundColor: "#fef3c7",
-                padding: 12,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: "#fde68a",
-              }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                  <CreditCard size={16} color="#d97706" />
-                  <Text style={{ color: "#d97706", fontSize: 12, fontWeight: "600" }}>
-                    Credit
-                  </Text>
-                </View>
-                <Text style={{ color: "#b45309", fontSize: 16, fontWeight: "bold" }}>
-                  {stats?.creditOrders || 0} orders
-                </Text>
-                <Text style={{ color: "#d97706", fontSize: 14, fontWeight: "600" }}>
-                  {formatCurrency(stats?.creditAmount || 0)}
-                </Text>
-              </View>
-
-              {stats && stats.pendingOrders > 0 && (
-                <View style={{
-                  flex: 1,
-                  backgroundColor: "#fee2e2",
-                  padding: 12,
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: "#fecaca",
-                }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                    <TrendingDown size={16} color="#dc2626" />
-                    <Text style={{ color: "#dc2626", fontSize: 12, fontWeight: "600" }}>
-                      Pending
-                    </Text>
-                  </View>
-                  <Text style={{ color: "#b91c1c", fontSize: 16, fontWeight: "bold" }}>
-                    {stats.pendingOrders} orders
-                  </Text>
-                  <Text style={{ color: "#dc2626", fontSize: 14, fontWeight: "600" }}>
-                    {formatCurrency(stats.pendingAmount)}
-                  </Text>
-                </View>
-              )}
-            </View>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 8 }}>
+              Last Bill: {stats?.lastBillAt ? formatDate(stats.lastBillAt) : '—'}
+            </Text>
           </View>
 
-          {/* Filter Buttons */}
-          <View style={{ marginBottom: 8 }}>
-            <View style={{ flexDirection: "row" }}>
-              <FilterButton filter="all" label="All Orders" icon={Receipt} />
-              <FilterButton filter="paid" label="Paid" icon={DollarSign} />
-              <FilterButton filter="credit" label="Credit" icon={CreditCard} />
-            </View>
-          </View>
+          {/* Filters removed */}
 
-          {/* Order History */}
+          {/* Bill History */}
           <View style={{
             backgroundColor: "white",
             borderRadius: 16,
@@ -679,41 +409,37 @@ export default function CustomerDetailsScreen() {
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}>
               <History size={20} color={theme.colors.text} />
               <Text style={{ fontSize: 18, fontWeight: "bold", color: theme.colors.text }}>
-                Order History
+                Bill History
               </Text>
             </View>
-
-            {filteredOrders.length === 0 ? (
+            {billHistory.length === 0 ? (
               <View style={{ alignItems: "center", paddingVertical: 32 }}>
                 <Receipt size={48} color={theme.colors.textSecondary} />
                 <Text style={{ color: theme.colors.textSecondary, textAlign: "center", marginTop: 12 }}>
-                  {selectedFilter === 'all' ? "No orders found for this customer" : `No ${selectedFilter} orders found`}
+                  No bills for this customer
                 </Text>
               </View>
             ) : (
-              <FlatList
-                data={filteredOrders.slice(0, 10)}
-                keyExtractor={(item) => item.id}
-                renderItem={renderOrderItem}
-                showsVerticalScrollIndicator={false}
-                scrollEnabled={false}
-              />
+              <View>
+                {billHistory.slice(0, 10).map(renderBillRow)}
+              </View>
             )}
+          </View>
 
-            {filteredOrders.length > 10 && (
-              <TouchableOpacity
-                style={{
-                  alignItems: "center",
-                  paddingVertical: 12,
-                  marginTop: 8,
-                  borderTopWidth: 1,
-                  borderTopColor: "#e2e8f0",
-                }}
-              >
-                <Text style={{ color: theme.colors.primary, fontWeight: "600" }}>
-                  View All Orders ({filteredOrders.length})
-                </Text>
-              </TouchableOpacity>
+          {/* Payment History */}
+          <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 20, marginBottom: 40, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <DollarSign size={20} color={theme.colors.text} />
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.colors.text }}>Payment History</Text>
+            </View>
+            {paymentHistory.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingVertical: 24 }}>
+                <Text style={{ color: theme.colors.textSecondary }}>No payments yet</Text>
+              </View>
+            ) : (
+              <View>
+                {paymentHistory.slice(0, 15).map(renderPaymentRow)}
+              </View>
             )}
           </View>
         </View>

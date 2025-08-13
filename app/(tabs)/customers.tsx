@@ -1,4 +1,4 @@
-import { getAllCustomers, searchCustomers } from "@/services/customerService";
+import { getAllCustomers, getCustomersSummary, searchCustomers } from "@/services/customerService";
 import { orderService } from "@/services/orderService";
 import { paymentService } from "@/services/paymentService";
 import { authState } from "@/state/authState";
@@ -7,6 +7,7 @@ import { use$ } from "@legendapp/state/react";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
+import { Lock } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -80,6 +81,7 @@ export default function CustomersScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [dateGroups, setDateGroups] = useState<any>({});
   const [completedBills, setCompletedBills] = useState<any>({});
+  const [allSummaries, setAllSummaries] = useState<any[]>([]);
   const [isProcessingEOD, setIsProcessingEOD] = useState(false);
   const customerStateData = use$(customerState);
   const auth = use$(authState);
@@ -100,7 +102,7 @@ export default function CustomersScreen() {
     try {
       if (!auth.isDbReady) return;
 
-      const billsGrouped = await paymentService.getCompletedBillsGroupedByDate();
+      const billsGrouped = await paymentService.getBillsGroupedByDate();
       setCompletedBills(billsGrouped);
     } catch (error) {
       console.error("Error loading completed bills data:", error);
@@ -110,63 +112,15 @@ export default function CustomersScreen() {
   const loadCustomersWithStats = useCallback(async () => {
     try {
       if (!auth.isDbReady) return [];
-
-      const customers = searchQuery.trim()
-        ? await searchCustomers(searchQuery.trim())
-        : await getAllCustomers();
-
-      // Enhance each customer with payment statistics
-      const customersWithStats = await Promise.all(
-        customers.map(async (customer) => {
-          try {
-            const orders = await orderService.getOrdersByCustomerId(customer.id);
-
-            let totalOrders = orders.length;
-            let totalAmount = 0;
-            let paidAmount = 0;
-            let creditAmount = 0;
-            let paidOrders = 0;
-            let creditOrders = 0;
-
-            orders.forEach(order => {
-              totalAmount += order.totalAmount;
-
-              if (order.paymentStatus === 'paid') {
-                paidAmount += order.totalAmount;
-                paidOrders++;
-              } else if (order.paymentStatus === 'credit') {
-                creditAmount += order.totalAmount;
-                creditOrders++;
-              }
-            });
-
-            return {
-              ...customer,
-              totalOrders,
-              totalAmount,
-              paidAmount,
-              creditAmount,
-              paidOrders,
-              creditOrders,
-            };
-          } catch (error) {
-            console.error(`Error loading stats for customer ${customer.id}:`, error);
-            return {
-              ...customer,
-              totalOrders: 0,
-              totalAmount: 0,
-              paidAmount: 0,
-              creditAmount: 0,
-              paidOrders: 0,
-              creditOrders: 0,
-            };
-          }
-        })
-      );
-
-      return customersWithStats;
-    } catch (error) {
-      console.error("Error loading customers with stats:", error);
+      // Minimal summary: bills & credit only (orders detail removed for performance)
+      const summaries = await getCustomersSummary();
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        return summaries.filter(c => c.name.toLowerCase().includes(q) || (c.contact && c.contact.includes(q)));
+      }
+      return summaries;
+    } catch (e) {
+      console.error('Error loading customer summaries:', e);
       return [];
     }
   }, [searchQuery, auth.isDbReady]);
@@ -186,7 +140,7 @@ export default function CustomersScreen() {
       // For "All" tab, load customers with payment statistics
       if (activeTab === "all") {
         const customersWithStats = await loadCustomersWithStats();
-        customerState.customers.set(customersWithStats);
+        setAllSummaries(customersWithStats);
       } else {
         // Load customers and orders data in parallel for other tabs
         const [customers] = await Promise.all([
@@ -320,7 +274,7 @@ export default function CustomersScreen() {
       const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000)); // Convert to IST
       const hours = istTime.getHours();
       const minutes = istTime.getMinutes();
-      
+
       // Only run the actual check if we're close to 11:30 PM
       if (hours === 23 && minutes >= 25 && minutes <= 35) {
         await checkAutoEOD();
@@ -736,7 +690,7 @@ export default function CustomersScreen() {
 
   const renderCompletedBillDateSection = (date: string, group: any) => {
     const bills = group.bills || [];
-    const totalAmount = bills.reduce((sum: number, bill: any) => sum + bill.amount, 0);
+    const totalAmount = bills.reduce((sum: number, bill: any) => sum + (bill.total || bill.amount), 0);
 
     return (
       <View
@@ -755,90 +709,102 @@ export default function CustomersScreen() {
           <View className="flex-row items-center">
             <View className="bg-white px-3 py-1.5 rounded-full mr-2 shadow-sm">
               <Text className="text-gray-700 text-xs font-medium">
-                {bills.length} payment{bills.length !== 1 ? "s" : ""}
+                {bills.length} bill{bills.length !== 1 ? "s" : ""}
               </Text>
             </View>
             <View className="bg-white px-3 py-1.5 rounded-full shadow-sm">
               <Text className="text-gray-700 text-xs font-medium">
-                {formatCurrency(totalAmount)}
+                {formatCurrency(totalAmount)} total
               </Text>
             </View>
           </View>
         </View>
 
         {/* Bills for this date */}
-        <View className="pb-40 w-full">
-          {bills.map((bill: any, index: number) =>
-            <TouchableOpacity
-              key={`bill-${bill.id}-${index}`}
-              onPress={() => {
-                // Navigate to receipt details
-                router.push({
-                  pathname: "/(modals)/receipt-details",
-                  params: {
-                    receiptId: bill.id,
-                  },
-                });
-              }}
-              className="flex-row items-center justify-between px-4 py-4 bg-white border-b border-gray-50 active:bg-gray-50"
-              activeOpacity={0.7}
-            >
-              {/* Customer Avatar and Info */}
-              <View className="flex-row items-center flex-1">
-                <View
-                  className={`w-14 h-14 rounded-full ${getAvatarColor(bill.customerName)} items-center justify-center mr-4 shadow-sm`}
-                >
-                  <Text className="text-white font-bold text-base">{getCustomerInitials(bill.customerName)}</Text>
+        <View className="w-full pb-6">
+          {bills
+            .slice()
+            .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .map((bill: any, index: number) => {
+              const isPureCredit = bill.status === 'Credit' && (bill.paidTotal === 0 || bill.paidTotal == null);
+              const isClearance = bill.status === 'Clearance';
+              const handlePress = () => {
+                if (isPureCredit) return; // no navigation
+                router.push({ pathname: '/(modals)/receipt-details', params: { receiptId: bill.receiptId || bill.id } });
+              };
+              return <TouchableOpacity
+                key={`bill-${bill.id}-${index}`}
+                onPress={handlePress}
+                disabled={isPureCredit}
+                className={`flex-row items-center justify-between px-4 py-4 bg-white border border-gray-100 rounded-xl mb-3 ${isPureCredit ? '' : 'active:bg-gray-50'}`}
+                activeOpacity={0.65}
+              >
+                {/* Customer Avatar and Info */}
+                <View className="flex-row items-center flex-1">
+                  <View
+                    className={`w-14 h-14 rounded-full ${getAvatarColor(bill.customerName)} items-center justify-center mr-4 shadow-sm`}
+                  >
+                    <Text className="text-white font-bold text-base">{getCustomerInitials(bill.customerName)}</Text>
+                  </View>
+                  <View className="flex-1">
+                    <View className="flex-row items-center mb-1">
+                      {isPureCredit && (
+                        <Lock size={14} color="#b45309" style={{ marginRight: 4 }} />
+                      )}
+                      <Text className="text-gray-900 font-semibold text-base">
+                        {bill.customerName}
+                      </Text>
+                    </View>
+                    {bill.customerContact && (
+                      <Text className="text-gray-500 text-sm">{bill.customerContact}</Text>
+                    )}
+                    <Text className="text-gray-400 text-xs mt-1">
+                      {isClearance ? `Credit Clearance • ${bill.mode || ''}` : `Bill #${bill.billNumber || '—'} ${bill.status ? `• ${bill.status}` : ''}`}
+                    </Text>
+                    {bill.status === 'Partial' && (
+                      <View className="flex-row mt-2 items-center">
+                        {bill.paidTotal > 0 && <View className="mr-2 px-2 py-0.5 rounded-full bg-green-100"><Text className="text-[10px] text-green-700 font-semibold">Paid ₹{bill.paidTotal}</Text></View>}
+                        {bill.creditPortion > 0 && <View className="px-2 py-0.5 rounded-full bg-orange-100"><Text className="text-[10px] text-orange-700 font-semibold">Cr ₹{bill.creditPortion}</Text></View>}
+                      </View>
+                    )}
+                  </View>
                 </View>
-                <View className="flex-1">
-                  <Text className="text-gray-900 font-semibold text-base mb-1">
-                    {bill.customerName}
-                  </Text>
-                  {bill.customerContact && (
-                    <Text className="text-gray-500 text-sm">{bill.customerContact}</Text>
+
+                {/* Amount and Status */}
+                <View className="items-end">
+                  <Text className="text-gray-900 font-bold text-lg mb-1">{formatCurrency((bill.total ?? bill.amount) || 0)}</Text>
+                  {isClearance ? (
+                    <View className="px-2 py-1 rounded-full bg-blue-100"><Text className="text-xs font-medium text-blue-700">Credit Clearance</Text></View>
+                  ) : bill.status === 'Paid' && (
+                    <View className="px-2 py-1 rounded-full bg-green-100"><Text className="text-xs font-medium text-green-700">Paid</Text></View>
                   )}
-                  <Text className="text-gray-400 text-xs mt-1">
-                    Receipt #{bill.receiptNo} • {bill.mode}
-                  </Text>
+                  {bill.status === 'Partial' && (
+                    <View className="px-2 py-1 rounded-full bg-orange-100"><Text className="text-xs font-medium text-orange-700">Partial</Text></View>
+                  )}
+                  {bill.status === 'Credit' && (
+                    <View className="px-2 py-1 rounded-full bg-orange-100"><Text className="text-xs font-medium text-orange-700">Credit</Text></View>
+                  )}
                 </View>
-              </View>
+              </TouchableOpacity>;
+            })}
 
-              {/* Amount and Status */}
-              <View className="items-end">
-                <Text className="text-gray-900 font-bold text-lg mb-1">
-                  {formatCurrency(bill.amount)}
-                </Text>
-                <View className={`px-2 py-1 rounded-full ${bill.mode === 'Credit' ? 'bg-orange-100' : 'bg-green-100'}`}>
-                  <Text className={`text-xs font-medium ${bill.mode === 'Credit' ? 'text-orange-700' : 'text-green-700'}`}>
-                    {bill.mode === 'Credit' ? 'Pending' : 'Paid'}
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          )}
-
+          {/* Spacer to ensure end-of-day separation visually */}
+          <View className="mt-2" />
         </View>
       </View>
     );
   };
-  
+
   const filteredData = getFilteredData();
   const isAllTab = activeTab === "all";
   const isCompletedTab = activeTab === "completed";
   const filteredDateGroups = isAllTab || isCompletedTab
     ? {}
     : (filteredData as any);
-  const allCustomers = isAllTab ? (filteredData as any[]) : [];
+  const allCustomers = isAllTab ? allSummaries : [];
   const completedBillGroups = isCompletedTab ? (filteredData as any) : {};
-  const sortedDates = isAllTab
-    ? []
-    : isCompletedTab
-      ? Object.keys(completedBillGroups).sort(
-        (a, b) => new Date(b).getTime() - new Date(a).getTime()
-      )
-      : Object.keys(filteredDateGroups).sort(
-        (a, b) => new Date(b).getTime() - new Date(a).getTime()
-      );
+  const sortedDates = isAllTab ? [] : Object.keys(isCompletedTab ? completedBillGroups : filteredDateGroups)
+    .sort((a, b) => new Date(b.split('-')[0]).getTime() - new Date(a.split('-')[0]).getTime());
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
@@ -918,16 +884,9 @@ export default function CustomersScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Add Customer Button - Only show in "all" tab */}
           {activeTab === "all" && (
-            <TouchableOpacity
-              onPress={handleAddCustomer}
-              className="flex-row items-center justify-center py-3 mt-2 bg-indigo-50 rounded-xl border border-indigo-200"
-            >
-              <Text className="text-indigo-600 text-lg mr-2">👤</Text>
-              <Text className="text-indigo-600 font-semibold">
-                Add New Customer
-              </Text>
+            <TouchableOpacity onPress={handleAddCustomer} className="flex-row items-center justify-center py-3 mt-2 bg-indigo-50 rounded-xl border border-indigo-200">
+              <Text className="text-indigo-600 font-semibold">Add Customer</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -981,99 +940,27 @@ export default function CustomersScreen() {
                 colors={["#2563eb"]}
               />
             }
+            contentContainerStyle={{ paddingBottom: 96 }}
           >
             {isAllTab ? (
-              // Render enhanced customer list for "All" tab with payment statistics
               <View className="px-4 pt-4">
-                {allCustomers.map((customer, index) =>
-                  <TouchableOpacity
-                    key={`enhanced-${customer.id}-${index}`}
-                    className="mb-4 bg-white rounded-lg overflow-hidden shadow-sm"
-                    activeOpacity={0.7}
-                    onPress={() => {
-                      router.push({
-                        pathname: "/customer-details",
-                        params: {
-                          customerId: customer.id,
-                          customerName: customer.name,
-                        }
-                      });
-                    }}
-                  >
-                    {/* Customer Header */}
-                    <View className="flex-row items-center px-4 py-4 border-b border-gray-100">
-                      <View
-                        className={`w-12 h-12 rounded-full ${getAvatarColor(customer.name)} items-center justify-center mr-4 shadow-sm`}
-                      >
-                        <Text className="text-white font-bold text-base">{getCustomerInitials(customer.name)}</Text>
-                      </View>
-                      <View className="flex-1">
-                        <Text className="text-gray-900 font-semibold text-lg mb-1">
-                          {customer.name}
-                        </Text>
-                        {customer.contact && (
-                          <Text className="text-gray-500 text-sm">{customer.contact}</Text>
-                        )}
-                      </View>
-                      <Text className="text-gray-400 text-xs">
-                        Tap for details →
-                      </Text>
+                {allCustomers.map((customer: any, index: number) => (
+                  <TouchableOpacity key={`cust-${customer.id}-${index}`} onPress={() => router.push({ pathname: '/customer-details', params: { customerId: customer.id, customerName: customer.name } })} className="flex-row items-center bg-white mb-3 px-4 py-3 rounded-lg shadow-sm" activeOpacity={0.7}>
+                    <View className={`w-10 h-10 rounded-full ${getAvatarColor(customer.name)} items-center justify-center mr-3`}>
+                      <Text className="text-white font-bold text-sm">{getCustomerInitials(customer.name)}</Text>
                     </View>
-
-                    {/* Payment Statistics */}
-                    {customer.totalOrders && customer.totalOrders > 0 ? (
-                      <View className="px-4 py-3">
-                        {/* Total Orders and Amount */}
-                        <View className="flex-row items-center justify-between mb-3">
-                          <Text className="text-gray-600 font-medium">Total Orders</Text>
-                          <View className="flex-row items-center">
-                            <Text className="text-gray-900 font-semibold mr-2">
-                              {customer.totalOrders}
-                            </Text>
-                            <Text className="text-gray-900 font-bold">
-                              {formatCurrency(customer.totalAmount || 0)}
-                            </Text>
-                          </View>
-                        </View>
-
-                        {/* Paid vs Credit Breakdown */}
-                        <View className="flex-row justify-between">
-                          {/* Paid Orders */}
-                          <View className="flex-1 mr-2">
-                            <View className="bg-green-50 p-3 rounded-lg border border-green-200">
-                              <Text className="text-green-700 text-xs font-medium mb-1">Paid Orders</Text>
-                              <Text className="text-green-900 font-semibold text-sm">
-                                {customer.paidOrders} orders
-                              </Text>
-                              <Text className="text-green-900 font-bold">
-                                {formatCurrency(customer.paidAmount || 0)}
-                              </Text>
-                            </View>
-                          </View>
-
-                          {/* Credit Orders */}
-                          <View className="flex-1 ml-2">
-                            <View className="bg-orange-50 p-3 rounded-lg border border-orange-200">
-                              <Text className="text-orange-700 text-xs font-medium mb-1">Credit Orders</Text>
-                              <Text className="text-orange-900 font-semibold text-sm">
-                                {customer.creditOrders} orders
-                              </Text>
-                              <Text className="text-orange-900 font-bold">
-                                {formatCurrency(customer.creditAmount || 0)}
-                              </Text>
-                            </View>
-                          </View>
-                        </View>
-                      </View>
-                    ) : (
-                      <View className="px-4 py-3">
-                        <Text className="text-gray-500 text-center text-sm">
-                          No orders yet
-                        </Text>
+                    <View className="flex-1">
+                      <Text className="text-gray-900 font-semibold text-base">{customer.name}</Text>
+                      {customer.contact && <Text className="text-gray-500 text-xs">{customer.contact}</Text>}
+                      <Text className="text-gray-400 text-xs mt-1">{customer.billCount} bill{customer.billCount === 1 ? '' : 's'} • {formatCurrency(customer.totalBilled || 0)}</Text>
+                    </View>
+                    {customer.creditBalance > 0 && (
+                      <View className="items-end">
+                        <Text className="text-orange-600 font-semibold text-xs">CR {formatCurrency(customer.creditBalance)}</Text>
                       </View>
                     )}
                   </TouchableOpacity>
-                )}
+                ))}
               </View>
             ) : isCompletedTab ? (
               // Render completed bills grouped by date

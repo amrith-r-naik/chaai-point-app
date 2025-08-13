@@ -4,13 +4,13 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, CheckCircle, Receipt as ReceiptIcon } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -22,7 +22,8 @@ export default function ReceiptScreen() {
     customerName,
     totalAmount,
     paymentType,
-    splitPayments
+    splitPayments,
+    skipForm
   } = useLocalSearchParams<{
     billId: string;
     customerId: string;
@@ -30,6 +31,7 @@ export default function ReceiptScreen() {
     totalAmount: string;
     paymentType: string;
     splitPayments?: string;
+    skipForm?: string;
   }>();
 
   const [loading, setLoading] = useState(false);
@@ -72,15 +74,31 @@ export default function ReceiptScreen() {
   };
 
   useEffect(() => {
-    // Don't auto-process payment, let user add remarks first
-  }, []);
+    if (paymentType === 'Credit' && skipForm === '1') {
+      // process credit sale directly
+      (async () => {
+        try {
+          setProcessing(true);
+          await paymentService.processCreditSale(customerId, customerName, total);
+          // Navigate back after short delay
+          setTimeout(() => {
+            router.push('/(tabs)/customers');
+          }, 300);
+        } catch (e) {
+          setError('Failed to record credit sale');
+        } finally {
+          setProcessing(false);
+        }
+      })();
+    }
+  }, [paymentType, skipForm]);
 
   const handleDone = () => {
     if (!receipt) {
       Alert.alert("Error", "Payment not processed yet");
       return;
     }
-    
+
     // Navigate back to customers list
     router.push("/(tabs)/customers");
   };
@@ -93,6 +111,15 @@ export default function ReceiptScreen() {
   };
 
   // Show payment form with remarks before processing
+  if (paymentType === 'Credit' && skipForm === '1') {
+    return (
+      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb' }}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={{ marginTop: 16, color: theme.colors.textSecondary }}>Recording credit sale...</Text>
+      </SafeAreaView>
+    );
+  }
+
   if (showPaymentForm && !processing && !receipt) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: "#f9fafb" }}>

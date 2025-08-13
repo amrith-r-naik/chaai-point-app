@@ -1,16 +1,18 @@
 import { db } from "../lib/db";
-import { dueService } from "./dueService";
 
 export interface DashboardStats {
   totalOrders: number;
-  totalRevenue: number;
-  pendingDues: number;
+  totalRevenue: number; // Sum of paid portions (non-credit) from KOTs whose bills have any paid component
+  outstandingCredit: number; // SUM(customers.creditBalance)
   totalExpenses: number;
   profit: number;
   todayOrders: number;
   todayRevenue: number;
   todayExpenses: number;
   todayProfit: number;
+  creditAccrued?: number; // total credit granted in filter window
+  creditCleared?: number; // total credit cleared in filter window
+  netCreditChange?: number; // accrued - cleared
 }
 
 export interface DateFilterOptions {
@@ -45,24 +47,30 @@ class DashboardService {
     const [
       totalOrdersResult,
       totalRevenueResult,
-      pendingDuesResult,
+      outstandingCreditResult,
       totalExpensesResult,
       todayOrdersResult,
       todayRevenueResult,
-      todayExpensesResult
+      todayExpensesResult,
+      creditAccruedResult,
+      creditClearedResult
     ] = await Promise.all([
       this.getTotalOrders(filterStartDate, filterEndDate),
       this.getTotalRevenue(filterStartDate, filterEndDate),
-      this.getPendingDues(),
+      this.getOutstandingCredit(),
       this.getTotalExpenses(filterStartDate, filterEndDate),
       this.getTotalOrders(today, today),
       this.getTotalRevenue(today, today),
-      this.getTotalExpenses(today, today)
+      this.getTotalExpenses(today, today),
+      this.getCreditAccrued(filterStartDate, filterEndDate),
+      this.getCreditCleared(filterStartDate, filterEndDate)
     ]);
 
     const totalOrders = totalOrdersResult;
     const totalRevenue = totalRevenueResult;
-    const pendingDues = pendingDuesResult;
+  const outstandingCredit = outstandingCreditResult;
+  const creditAccrued = creditAccruedResult;
+  const creditCleared = creditClearedResult;
     const totalExpenses = totalExpensesResult;
     const profit = totalRevenue - totalExpenses;
 
@@ -74,13 +82,16 @@ class DashboardService {
     return {
       totalOrders,
       totalRevenue,
-      pendingDues,
+  outstandingCredit,
       totalExpenses,
       profit,
       todayOrders,
       todayRevenue,
       todayExpenses,
-      todayProfit
+  todayProfit,
+  creditAccrued,
+  creditCleared,
+  netCreditChange: (creditAccrued || 0) - (creditCleared || 0)
     };
   }
 
@@ -98,25 +109,39 @@ class DashboardService {
 
   private async getTotalRevenue(startDate: string, endDate: string): Promise<number> {
     if (!db) throw new Error("Database not initialized");
-    
-    // Use the new due service logic - only count revenue from paid orders (with billId)
+    // Revenue is sum of NON-credit payments (cash/upi/etc) in window.
     const result = await db.getFirstAsync(
-      `SELECT COALESCE(SUM(ki.quantity * ki.priceAtTime), 0) as revenue 
-       FROM kot_items ki
-       JOIN kot_orders ko ON ki.kotId = ko.id
-       WHERE ko.billId IS NOT NULL 
-         AND date(ko.createdAt) BETWEEN ? AND ?`,
+      `SELECT COALESCE(SUM(p.amount),0) as revenue
+       FROM payments p
+       WHERE p.subType IS NULL -- non credit accrual / clearance
+         AND date(p.createdAt) BETWEEN ? AND ?`,
       [startDate, endDate]
     ) as any;
-    
-    return result?.revenue || 0;
+    return result?.revenue || 0; 
   }
 
-  private async getPendingDues(): Promise<number> {
+  private async getOutstandingCredit(): Promise<number> {
     if (!db) throw new Error("Database not initialized");
-    
-    // Use the new due service to get actual pending dues
-    return await dueService.getTotalPendingDues();
+    const result = await db.getFirstAsync(`SELECT COALESCE(SUM(creditBalance),0) as total FROM customers`) as any;
+    return result?.total || 0;
+  }
+
+  private async getCreditAccrued(startDate: string, endDate: string): Promise<number> {
+    if (!db) throw new Error("Database not initialized");
+    const result = await db.getFirstAsync(`
+      SELECT COALESCE(SUM(amount),0) as total FROM payments 
+      WHERE subType = 'Accrual' AND date(createdAt) BETWEEN ? AND ?
+    `,[startDate,endDate]) as any;
+    return result?.total || 0;
+  }
+
+  private async getCreditCleared(startDate: string, endDate: string): Promise<number> {
+    if (!db) throw new Error("Database not initialized");
+    const result = await db.getFirstAsync(`
+      SELECT COALESCE(SUM(amount),0) as total FROM payments 
+      WHERE subType = 'Clearance' AND date(createdAt) BETWEEN ? AND ?
+    `,[startDate,endDate]) as any;
+    return result?.total || 0;
   }
 
   private async getTotalExpenses(startDate: string, endDate: string): Promise<number> {

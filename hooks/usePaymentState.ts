@@ -4,9 +4,10 @@ import { useState } from "react";
 
 interface UsePaymentStateProps {
   totalAmount: number;
+  isClearance?: boolean; // when true, reuse UI for credit clearance (no bill)
 }
 
-export const usePaymentState = ({ totalAmount }: UsePaymentStateProps) => {
+export const usePaymentState = ({ totalAmount, isClearance = false }: UsePaymentStateProps) => {
   const [selectedPaymentType, setSelectedPaymentType] = useState<PaymentType | null>(null);
   const [showSplitPayment, setShowSplitPayment] = useState(false);
   const [splitPayments, setSplitPayments] = useState<SplitPayment[]>([]);
@@ -59,6 +60,13 @@ export const usePaymentState = ({ totalAmount }: UsePaymentStateProps) => {
     if (!selectedPaymentType) return false;
 
     if (selectedPaymentType === "Split") {
+      // For clearance, allow partial paid via split but require at least one non-credit part
+      if (isClearance) {
+        const totalMatches = SplitPaymentManager.validateSplitTotal(splitPayments, totalAmount);
+        if (!totalMatches) return false;
+        const hasPaid = splitPayments.some(p => p.type !== "Credit" && p.amount > 0);
+        return hasPaid;
+      }
       return SplitPaymentManager.validateSplitTotal(splitPayments, totalAmount);
     }
 
@@ -74,6 +82,7 @@ export const usePaymentState = ({ totalAmount }: UsePaymentStateProps) => {
     newSplitAmount,
     splitModalScreen,
     creditAmount,
+  isClearance,
 
     // Actions
     setSelectedPaymentType,

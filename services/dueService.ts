@@ -1,4 +1,4 @@
-import { db } from "../lib/db";
+import { db, withTransaction } from "../lib/db";
 
 export interface CustomerDue {
   customerId: string;
@@ -108,11 +108,9 @@ class DueService {
 
   async processCustomerDuePayment(paymentData: DueUpdateData): Promise<void> {
     if (!db) throw new Error("Database not initialized");
+    await withTransaction(async () => {
 
-    try {
-      await db.runAsync("BEGIN TRANSACTION");
-
-      const unpaidKots = await db.getAllAsync(`
+      const unpaidKots = await db!.getAllAsync(`
         SELECT 
           ko.id,
           ko.kotNumber,
@@ -148,20 +146,20 @@ class DueService {
         const billId = `bill_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const billNumber = await this.getNextBillNumber();
 
-        await db.runAsync(`
+        await db!.runAsync(`
           INSERT INTO bills (id, billNumber, customerId, total, createdAt)
           VALUES (?, ?, ?, ?, ?)
         `, [billId, billNumber, paymentData.customerId, billAmount, new Date().toISOString()]);
 
         // Mark fully paid KOTs as billed
         for (const kotId of paidKotIds) {
-          await db.runAsync(`
+          await db!.runAsync(`
             UPDATE kot_orders SET billId = ? WHERE id = ?
           `, [billId, kotId]);
         }
 
         const paymentId = `payment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        await db.runAsync(`
+        await db!.runAsync(`
           INSERT INTO payments (id, billId, customerId, amount, mode, remarks, createdAt)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `, [paymentId, billId, paymentData.customerId, billAmount, paymentData.paymentMode, paymentData.remarks || null, new Date().toISOString()]);
@@ -169,7 +167,7 @@ class DueService {
         // Create receipt
         const receiptId = `receipt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const receiptNumber = await this.getNextReceiptNumber();
-        await db.runAsync(`
+        await db!.runAsync(`
           INSERT INTO receipts (id, receiptNo, customerId, amount, mode, remarks, createdAt)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `, [receiptId, receiptNumber, paymentData.customerId, billAmount, paymentData.paymentMode, paymentData.remarks || null, new Date().toISOString()]);
@@ -178,7 +176,7 @@ class DueService {
       // If there's remaining amount and no bills were created, treat as advance payment
       if (remainingAmount > 0 && billAmount === 0) {
         const paymentId = `payment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        await db.runAsync(`
+        await db!.runAsync(`
           INSERT INTO payments (id, billId, customerId, amount, mode, remarks, createdAt)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `, [paymentId, null, paymentData.customerId, remainingAmount, paymentData.paymentMode, 
@@ -186,18 +184,13 @@ class DueService {
 
         const receiptId = `receipt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const receiptNumber = await this.getNextReceiptNumber();
-        await db.runAsync(`
+        await db!.runAsync(`
           INSERT INTO receipts (id, receiptNo, customerId, amount, mode, remarks, createdAt)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `, [receiptId, receiptNumber, paymentData.customerId, remainingAmount, paymentData.paymentMode, 
             (paymentData.remarks || '') + ' (Advance payment)', new Date().toISOString()]);
       }
-
-      await db.runAsync("COMMIT");
-    } catch (error) {
-      await db.runAsync("ROLLBACK");
-      throw error;
-    }
+    });
   }
 
   private async getNextBillNumber(): Promise<number> {

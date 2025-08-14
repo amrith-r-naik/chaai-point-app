@@ -554,9 +554,13 @@ class PaymentService {
   async getCustomerBillsWithPayments(customerId: string): Promise<any[]> {
     if (!db) throw new Error("Database not initialized");
     const bills = await db.getAllAsync(`
-      SELECT b.*, c.name as customerName
+      SELECT 
+        b.*, 
+        c.name as customerName,
+        r.id as receiptId
       FROM bills b
       JOIN customers c ON b.customerId = c.id
+      LEFT JOIN receipts r ON r.billId = b.id
       WHERE b.customerId = ?
       ORDER BY b.createdAt DESC
     `, [customerId]) as any[];
@@ -574,6 +578,25 @@ class PaymentService {
       bill.status = creditPortion === 0 ? 'Paid' : (paidTotal === 0 ? 'Credit' : 'Partial');
     }
     return bills;
+  }
+
+  async getReceiptIdForBill(billId: string): Promise<string | null> {
+    if (!db) throw new Error("Database not initialized");
+    const row = await db.getFirstAsync(`
+      SELECT id FROM receipts WHERE billId = ? ORDER BY createdAt DESC LIMIT 1
+    `, [billId]) as { id: string } | null;
+    return row?.id || null;
+  }
+
+  async getNearestClearanceReceiptId(customerId: string, createdAt: string): Promise<string | null> {
+    if (!db) throw new Error("Database not initialized");
+    const row = await db.getFirstAsync(`
+      SELECT id FROM receipts 
+      WHERE customerId = ? AND billId IS NULL 
+      ORDER BY ABS(strftime('%s', createdAt) - strftime('%s', ?)) ASC
+      LIMIT 1
+    `, [customerId, createdAt]) as { id: string } | null;
+    return row?.id || null;
   }
 
   async getBillsGroupedByDate(): Promise<Record<string, { date:string; displayDate:string; bills:any[] }>> {

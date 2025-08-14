@@ -144,46 +144,62 @@ export default function CustomerDetailsScreen() {
   };
 
   const renderBillRow = (bill: any) => {
-    const status = bill.status;
+    const status = bill.status as 'Paid' | 'Partial' | 'Credit';
     const colorMap: any = { Paid: ['#dcfce7', '#16a34a'], Partial: ['#fef3c7', '#d97706'], Credit: ['#fee2e2', '#dc2626'] };
     const [bg, textColor] = colorMap[status] || ['#f3f4f6', '#374151'];
+    const canOpen = !!bill.receiptId && status !== 'Credit';
+    const onPress = async () => {
+      if (!canOpen) return;
+      router.push({ pathname: '/(modals)/receipt-details', params: { receiptId: bill.receiptId } });
+    };
     return (
-      <View key={bill.id} style={{ backgroundColor: 'white', borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#f3f4f6' }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-          <Text style={{ fontWeight: '600', color: theme.colors.text }}>Bill #{bill.billNumber}</Text>
-          <View style={{ backgroundColor: bg, paddingHorizontal: 10, paddingVertical: 2, borderRadius: 12 }}>
-            <Text style={{ fontSize: 12, fontWeight: '600', color: textColor }}>{status}</Text>
+      <TouchableOpacity key={bill.id} activeOpacity={canOpen ? 0.7 : 1} onPress={onPress} style={{ backgroundColor: 'white', borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#f3f4f6' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View>
+            <Text style={{ fontWeight: '700', color: theme.colors.text }}>Bill #{bill.billNumber}</Text>
+            <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 }}>{formatDate(bill.createdAt)}</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <View style={{ backgroundColor: bg, paddingHorizontal: 10, paddingVertical: 2, borderRadius: 12, marginBottom: 6 }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: textColor }}>{status}</Text>
+            </View>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.text }}>{formatCurrency(bill.total)}</Text>
           </View>
         </View>
-        <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 4 }}>{formatDate(bill.createdAt)}</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-          {bill.payments.map((p: any) => (
-            <View key={p.id} style={{ backgroundColor: p.mode === 'Credit' ? '#fef3c7' : '#dcfce7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
-              <Text style={{ fontSize: 11, fontWeight: '600', color: p.mode === 'Credit' ? '#b45309' : '#166534' }}>{p.mode} ₹{p.amount}</Text>
-            </View>
-          ))}
-        </View>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-          <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text }}>Total: {formatCurrency(bill.total)}</Text>
-          {bill.creditPortion > 0 && <Text style={{ fontSize: 12, color: '#d97706' }}>Credit: {formatCurrency(bill.creditPortion)}</Text>}
-        </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
   const renderPaymentRow = (p: any) => {
-    const isCreditAccrual = p.mode === 'Credit' && p.subType === 'Accrual';
-    const isCreditClear = p.subType === 'Clearance';
-    const bg = isCreditAccrual ? '#fef3c7' : (isCreditClear ? '#dcfce7' : '#dcfce7');
-    const color = isCreditAccrual ? '#b45309' : (isCreditClear ? '#166534' : '#166534');
+    const isCreditAccrual = p.mode === 'Credit' && p.subType === 'Accrual'; // pure credit sale
+    const isCreditClear = p.subType === 'Clearance'; // clearance receipt
+    const bg = isCreditAccrual ? '#fef3c7' : '#ecfeff';
+    const chipColor = isCreditAccrual ? '#b45309' : (isCreditClear ? '#166534' : '#2563eb');
+    const canOpen = !isCreditAccrual; // open for non pure-credit
+    const onPress = async () => {
+      if (!canOpen) return;
+      // For bill payments, open the bill's receipt
+      if (p.billId) {
+        const receiptId = await paymentService.getReceiptIdForBill(p.billId);
+        if (receiptId) router.push({ pathname: '/(modals)/receipt-details', params: { receiptId } });
+        return;
+      }
+      // For clearance (no billId), open nearest clearance receipt
+      const receiptId = await paymentService.getNearestClearanceReceiptId(p.customerId, p.createdAt);
+      if (receiptId) router.push({ pathname: '/(modals)/receipt-details', params: { receiptId } });
+    };
     return (
-      <View key={p.id} style={{ backgroundColor: 'white', borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#f3f4f6' }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ fontWeight: '600', color: theme.colors.text }}>{p.mode} ₹{p.amount}</Text>
-          {p.subType && <Text style={{ fontSize: 11, fontWeight: '600', color: color }}>{p.subType}</Text>}
+      <TouchableOpacity key={p.id} activeOpacity={canOpen ? 0.7 : 1} onPress={onPress} style={{ backgroundColor: 'white', borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#f3f4f6' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View>
+            <Text style={{ fontWeight: '700', color: theme.colors.text }}>{p.mode} ₹{p.amount}</Text>
+            <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 }}>{formatDate(p.createdAt)}</Text>
+          </View>
+          <View style={{ backgroundColor: bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: chipColor }}>{isCreditAccrual ? 'Accrual' : (isCreditClear ? 'Clearance' : 'Payment')}</Text>
+          </View>
         </View>
-        <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 }}>{formatDate(p.createdAt)} {p.billId ? `• Bill` : ''}</Text>
-      </View>
+      </TouchableOpacity>
     );
   };
 

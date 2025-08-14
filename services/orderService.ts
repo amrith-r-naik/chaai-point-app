@@ -1,5 +1,5 @@
 // services/orderService.ts
-import { db } from "../lib/db";
+import { db, withTransaction } from "../lib/db";
 import { menuService } from "./menuService";
 
 export interface MenuItem {
@@ -203,11 +203,9 @@ class OrderService {
     const kotNumber = await this.getNextKotNumber();
     const createdAt = new Date().toISOString();
 
-    try {
-      await db.runAsync("BEGIN TRANSACTION");
-
+    await withTransaction(async () => {
       // Create the KOT order
-      await db.runAsync(
+      await db!.runAsync(
         `
         INSERT INTO kot_orders (id, kotNumber, customerId, createdAt)
         VALUES (?, ?, ?, ?)
@@ -218,7 +216,7 @@ class OrderService {
       // Create the KOT items
       for (const item of orderData.items) {
         const itemId = `kotitem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        await db.runAsync(
+        await db!.runAsync(
           `
           INSERT INTO kot_items (id, kotId, itemId, quantity, priceAtTime)
           VALUES (?, ?, ?, ?, ?)
@@ -226,13 +224,8 @@ class OrderService {
           [itemId, orderId, item.itemId, item.quantity, item.price]
         );
       }
-
-      await db.runAsync("COMMIT");
-      return orderId;
-    } catch (error) {
-      await db.runAsync("ROLLBACK");
-      throw error;
-    }
+    });
+    return orderId;
   }
 
   private async getNextKotNumber(): Promise<number> {

@@ -75,6 +75,10 @@ export default function PaymentScreen() {
   const handleProceed = async () => {
     if (!validatePayment()) {
       Alert.alert("Invalid Payment", "Please select a valid payment method.");
+      // If clearance + split is invalid (e.g., 100% Credit), prompt user to edit split
+      if (isClearance && selectedPaymentType === 'Split') {
+        setShowSplitPayment(true);
+      }
       return;
     }
     if (isClearance) {
@@ -278,8 +282,8 @@ export default function PaymentScreen() {
           </View>
         )}
 
-        {/* Proceed Button */}
-        {selectedPaymentType && (
+        {/* Proceed Button (only when current selection is valid) */}
+        {selectedPaymentType && validatePayment() && (
           <TouchableOpacity
             onPress={handleProceed}
             style={{
@@ -308,6 +312,7 @@ export default function PaymentScreen() {
         screen={splitModalScreen}
         splitPayments={splitPayments}
         creditAmount={creditAmount}
+        canProceed={!isClearance || (selectedPaymentType === 'Split' && validatePayment())}
         newSplitType={newSplitType}
         newSplitAmount={newSplitAmount}
         onScreenChange={setSplitModalScreen}

@@ -11,6 +11,7 @@ interface SplitPaymentModalProps {
   creditAmount: number;
   newSplitType: "Cash" | "UPI" | "Credit";
   newSplitAmount: string;
+  canProceed: boolean;
   onScreenChange: (screen: SplitModalScreen) => void;
   onSplitTypeChange: (type: "Cash" | "UPI" | "Credit") => void;
   onAmountChange: (amount: string) => void;
@@ -27,6 +28,7 @@ export const SplitPaymentModal: React.FC<SplitPaymentModalProps> = ({
   creditAmount,
   newSplitType,
   newSplitAmount,
+  canProceed,
   onScreenChange,
   onSplitTypeChange,
   onAmountChange,
@@ -63,6 +65,7 @@ export const SplitPaymentModal: React.FC<SplitPaymentModalProps> = ({
               onAddSplit={onAddSplit}
               onRemoveSplit={onRemoveSplit}
               onProceed={onProceed}
+              canProceed={canProceed}
             />
           ) : (
             <AddSplitForm

@@ -9,6 +9,7 @@ interface SplitPaymentListProps {
   onAddSplit: () => void;
   onRemoveSplit: (id: string) => void;
   onProceed: () => void;
+  canProceed?: boolean;
 }
 
 export const SplitPaymentList: React.FC<SplitPaymentListProps> = ({
@@ -17,6 +18,7 @@ export const SplitPaymentList: React.FC<SplitPaymentListProps> = ({
   onAddSplit,
   onRemoveSplit,
   onProceed,
+  canProceed = true,
 }) => {
   return (
     <>
@@ -97,9 +99,10 @@ export const SplitPaymentList: React.FC<SplitPaymentListProps> = ({
       </ScrollView>
 
       <TouchableOpacity
-        onPress={onProceed}
+        onPress={canProceed ? onProceed : undefined}
+        disabled={!canProceed}
         style={{
-          backgroundColor: "black",
+          backgroundColor: canProceed ? "black" : "#9ca3af",
           paddingVertical: 16,
           borderRadius: 12,
           marginTop: 16,

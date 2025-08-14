@@ -147,10 +147,10 @@ export default function CustomerDetailsScreen() {
     const status = bill.status as 'Paid' | 'Partial' | 'Credit';
     const colorMap: any = { Paid: ['#dcfce7', '#16a34a'], Partial: ['#fef3c7', '#d97706'], Credit: ['#fee2e2', '#dc2626'] };
     const [bg, textColor] = colorMap[status] || ['#f3f4f6', '#374151'];
-    const canOpen = !!bill.receiptId && status !== 'Credit';
+    const canOpen = true; // Always open bill details modal
     const onPress = async () => {
-      if (!canOpen) return;
-      router.push({ pathname: '/(modals)/receipt-details', params: { receiptId: bill.receiptId } });
+      // Open bill details modal listing KOTs; from there user can open KOT description
+      router.push({ pathname: '/(modals)/bill-details', params: { billId: bill.id || bill.billId } as any });
     };
     return (
       <TouchableOpacity key={bill.id} activeOpacity={canOpen ? 0.7 : 1} onPress={onPress} style={{ backgroundColor: 'white', borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#f3f4f6' }}>

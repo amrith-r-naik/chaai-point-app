@@ -194,7 +194,7 @@ export default function ReceiptDetailsScreen() {
                 color: theme.colors.text,
                 marginBottom: 4,
               }}>
-                {billDetails.receipt.billId ? `Receipt #${billDetails.receipt.receiptNo}` : `Credit Clearance #${billDetails.receipt.receiptNo}`}
+                {`Receipt #${billDetails.receipt.receiptNo}`}
               </Text>
               <Text style={{
                 fontSize: 18,

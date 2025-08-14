@@ -456,7 +456,7 @@ export default function CustomersScreen() {
             return (
               bill.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
               (bill.customerContact && bill.customerContact.includes(searchQuery)) ||
-              bill.receiptNo.includes(searchQuery)
+              (bill.receiptNo && bill.receiptNo.toString().includes(searchQuery))
             );
           }
           return true;
@@ -759,7 +759,9 @@ export default function CustomersScreen() {
                       <Text className="text-gray-500 text-sm">{bill.customerContact}</Text>
                     )}
                     <Text className="text-gray-400 text-xs mt-1">
-                      {isClearance ? `Credit Clearance • ${bill.mode || ''}` : `Bill #${bill.billNumber || '—'} ${bill.status ? `• ${bill.status}` : ''}`}
+                      {isClearance
+                        ? `Receipt #${bill.receiptNo || '—'} • Credit Clearance`
+                        : `Bill #${bill.billNumber || '—'} ${bill.status ? `• ${bill.status}` : ''}`}
                     </Text>
                     {bill.status === 'Partial' && (
                       <View className="flex-row mt-2 items-center">

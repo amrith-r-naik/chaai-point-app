@@ -46,6 +46,76 @@ export interface CreateOrderData {
 }
 
 class OrderService {
+  async getBillById(billId: string): Promise<{ id: string; billNumber: number; customerId: string; customerName: string; total: number; createdAt: string; } | null> {
+    if (!db) throw new Error("Database not initialized");
+
+    const row = await db.getFirstAsync(
+      `
+      SELECT b.id, b.billNumber, b.customerId, b.total, b.createdAt,
+             c.name as customerName
+      FROM bills b
+      JOIN customers c ON b.customerId = c.id
+      WHERE b.id = ?
+    `,
+      [billId]
+    ) as any | null;
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      billNumber: row.billNumber,
+      customerId: row.customerId,
+      customerName: row.customerName,
+      total: row.total,
+      createdAt: row.createdAt,
+    };
+  }
+
+  async getKOTsForBill(billId: string): Promise<Array<{ id: string; kotNumber: number; createdAt: string; totalAmount: number; items: Array<{ id: string; menuItemName: string; quantity: number; price: number; total: number; }>; }>> {
+    if (!db) throw new Error("Database not initialized");
+
+    const kots = await db.getAllAsync(
+      `
+      SELECT ko.id, ko.kotNumber, ko.createdAt
+      FROM kot_orders ko
+      WHERE ko.billId = ?
+      ORDER BY ko.createdAt ASC
+    `,
+      [billId]
+    ) as any[];
+
+    const withItems = await Promise.all(
+      kots.map(async (kot: any) => {
+        const items = (await db!.getAllAsync(
+          `
+          SELECT 
+            ki.id,
+            mi.name as menuItemName,
+            ki.quantity,
+            ki.priceAtTime as price,
+            (ki.quantity * ki.priceAtTime) as total
+          FROM kot_items ki
+          LEFT JOIN menu_items mi ON ki.itemId = mi.id
+          WHERE ki.kotId = ?
+          ORDER BY mi.name
+        `,
+          [kot.id]
+        )) as any[];
+
+        const totalAmount = items.reduce((sum, it) => sum + (it.total || 0), 0);
+        return {
+          id: kot.id,
+          kotNumber: kot.kotNumber,
+          createdAt: kot.createdAt,
+          totalAmount,
+          items: items.map(it => ({ id: it.id, menuItemName: it.menuItemName, quantity: it.quantity, price: it.price, total: it.total })),
+        };
+      })
+    );
+
+    return withItems;
+  }
   async getAllOrders(): Promise<KotOrder[]> {
     if (!db) throw new Error("Database not initialized");
 

@@ -6,7 +6,7 @@
       "android": { "buildType": "apk" }
     },
     "production": {
-      "android": { "gradleCommand": ["assembleRelease"] }
+      "distribution": "store"
     }
   },
   "submit": {}

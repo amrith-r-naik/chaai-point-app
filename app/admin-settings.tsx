@@ -1,22 +1,23 @@
 import { theme } from "@/constants/theme";
+import { openDatabase, runIntegrityAudit } from "@/lib/db";
 import { adminService } from "@/services/adminService";
 import { CreateMenuItemData, MenuItem, menuService } from "@/services/menuService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import { router } from "expo-router";
-import { Database, Lock, Settings, Trash2, Users, X } from "lucide-react-native";
+import { Database, Lock, Settings, Trash2, X } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Modal,
-  SafeAreaView,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function AdminSettingsScreen() {
   const auth = use$(authState);
@@ -30,6 +31,12 @@ export default function AdminSettingsScreen() {
     category: "",
     price: "",
   });
+  const [auditRunning, setAuditRunning] = useState(false);
+  const [auditResult, setAuditResult] = useState<{
+    billIssues: any[];
+    creditIssues: any[];
+  } | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
 
   const categories = [
     "Tea",
@@ -230,20 +237,20 @@ export default function AdminSettingsScreen() {
 
   const handleAddDemoMenuItems = () => {
     Alert.alert(
-      "Add Demo Menu Items",
-      "This will add demo menu items to the database. Continue?",
+      "Seed Menu Items",
+      "This will insert the standard menu items into the database. Continue?",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Add",
+          text: "Seed",
           onPress: async () => {
             try {
               setLoading(true);
               await menuService.addDemoMenuItems();
               await loadTableCounts();
-              Alert.alert("Success", "Demo menu items added successfully");
+              Alert.alert("Success", "Menu items added successfully");
             } catch (error) {
-              Alert.alert("Error", `Failed to add demo menu items: ${error}`);
+              Alert.alert("Error", `Failed to seed menu items: ${error}`);
             } finally {
               setLoading(false);
             }
@@ -303,6 +310,20 @@ export default function AdminSettingsScreen() {
         },
       ]
     );
+  };
+
+  const handleRunAudit = async () => {
+    try {
+      setAuditRunning(true);
+      setAuditError(null);
+      await openDatabase();
+      const result = await runIntegrityAudit();
+      setAuditResult(result);
+    } catch (e: any) {
+      setAuditError(e?.message || String(e));
+    } finally {
+      setAuditRunning(false);
+    }
   };
 
   // Menu Management Functions
@@ -505,39 +526,41 @@ export default function AdminSettingsScreen() {
   );
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#f9fafb" }}>
-      {/* Header */}
-      <View
-        style={{
-          backgroundColor: theme.colors.primary,
-          paddingTop: 32,
-          paddingBottom: 24,
-          paddingHorizontal: 24,
-        }}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Settings size={28} color="white" />
-          <Text
-            style={{
-              color: "white",
-              fontSize: 24,
-              fontWeight: "bold",
-              marginLeft: 12,
-            }}
-          >
-            Admin Settings
-          </Text>
-        </View>
-        <Text
+    <View style={{ flex: 1 }}>
+      {/* Header inside Safe Area to avoid overlap with status bar/notch */}
+      <SafeAreaView edges={["top"]} style={{ backgroundColor: theme.colors.primary }}>
+        <View
           style={{
-            color: "rgba(255,255,255,0.8)",
-            fontSize: 14,
-            marginTop: 4,
+            backgroundColor: theme.colors.primary,
+            paddingTop: 32,
+            paddingBottom: 24,
+            paddingHorizontal: 24,
           }}
         >
-          Manage your application data and settings
-        </Text>
-      </View>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Settings size={28} color="white" />
+            <Text
+              style={{
+                color: "white",
+                fontSize: 24,
+                fontWeight: "bold",
+                marginLeft: 12,
+              }}
+            >
+              Admin Settings
+            </Text>
+          </View>
+          <Text
+            style={{
+              color: "rgba(255,255,255,0.8)",
+              fontSize: 14,
+              marginTop: 4,
+            }}
+          >
+            Manage your application data and settings
+          </Text>
+        </View>
+      </SafeAreaView>
 
       <ScrollView style={{ flex: 1, padding: 24 }}>
         {/* Database Statistics */}
@@ -596,26 +619,7 @@ export default function AdminSettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Customer Management */}
-        <View style={{ marginBottom: 32 }}>
-          <Text
-            style={{
-              fontSize: 18,
-              fontWeight: "bold",
-              color: theme.colors.text,
-              marginBottom: 16,
-            }}
-          >
-            Customer Management
-          </Text>
-
-          <AdminCard
-            title="Add Demo Customers"
-            description="Add sample customers to test order creation functionality"
-            icon={Users}
-            onPress={handleAddDemoCustomers}
-          />
-        </View>
+        {/* Customer Management removed */}
 
         {/* Database Management */}
         <View style={{ marginBottom: 32 }}>
@@ -631,10 +635,10 @@ export default function AdminSettingsScreen() {
           </Text>
 
           <AdminCard
-            title="Setup Demo Data"
-            description="Clear all business data (preserves users) and setup with demo menu items and customers"
+            title="Seed Menu Items"
+            description="Insert standard menu items into the database"
             icon={Database}
-            onPress={handleSetupDemoData}
+            onPress={handleAddDemoMenuItems}
           />
 
           <AdminCard
@@ -644,6 +648,135 @@ export default function AdminSettingsScreen() {
             onPress={handleClearAllTables}
             destructive
           />
+        </View>
+
+        {/* Integrity Audit */}
+        <View style={{ marginBottom: 32 }}>
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: "bold",
+              color: theme.colors.text,
+              marginBottom: 8,
+            }}
+          >
+            Integrity Audit
+          </Text>
+          <Text
+            style={{
+              fontSize: 14,
+              color: theme.colors.textSecondary,
+              marginBottom: 12,
+            }}
+          >
+            Check for mismatched bill totals and incorrect customer credit balances.
+          </Text>
+
+          <View style={{ flexDirection: "row", gap: 12, marginBottom: 8 }}>
+            <TouchableOpacity
+              onPress={handleRunAudit}
+              disabled={auditRunning}
+              style={{
+                backgroundColor: theme.colors.primary,
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                borderRadius: 8,
+                alignSelf: "flex-start",
+                opacity: auditRunning ? 0.6 : 1,
+                ...theme.shadows.sm,
+              }}
+            >
+              <Text style={{ color: "white", fontWeight: "600" }}>
+                {auditRunning ? "Running…" : "Run Audit"}
+              </Text>
+            </TouchableOpacity>
+
+            {auditResult && (
+              <TouchableOpacity
+                onPress={() => setAuditResult(null)}
+                style={{
+                  backgroundColor: theme.colors.background,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: theme.colors.border,
+                  alignSelf: "flex-start",
+                }}
+              >
+                <Text style={{ color: theme.colors.text, fontWeight: "600" }}>Clear</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {auditError && (
+            <Text style={{ color: "#dc2626", marginBottom: 8 }}>
+              {auditError}
+            </Text>
+          )}
+
+          {auditResult && (
+            <View
+              style={{
+                marginTop: 8,
+                backgroundColor: theme.colors.background,
+                padding: 16,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: theme.colors.border,
+                ...theme.shadows.sm,
+              }}
+            >
+              <Text style={{ fontSize: 16, fontWeight: "600", color: theme.colors.text, marginBottom: 8 }}>
+                Summary
+              </Text>
+              <Text style={{ color: theme.colors.textSecondary, marginBottom: 12 }}>
+                Bills with mismatched totals: {auditResult.billIssues.length} • Customers with incorrect credit: {auditResult.creditIssues.length}
+              </Text>
+
+              {auditResult.billIssues.length === 0 && auditResult.creditIssues.length === 0 ? (
+                <View style={{ paddingVertical: 4 }}>
+                  <Text style={{ color: "#16a34a", fontWeight: "600" }}>No issues found.</Text>
+                </View>
+              ) : (
+                <>
+                  {auditResult.billIssues.length > 0 && (
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={{ fontWeight: "600", color: theme.colors.text, marginBottom: 6 }}>Bill Issues</Text>
+                      {auditResult.billIssues.slice(0, 10).map((b: any, idx: number) => (
+                        <View key={idx} style={{ paddingVertical: 6, borderTopWidth: idx ? 1 : 0, borderTopColor: theme.colors.border }}>
+                          <Text style={{ color: theme.colors.textSecondary }}>Bill ID: {b.billId}</Text>
+                          <Text style={{ color: theme.colors.textSecondary }}>Stored: ₹{b.stored} • Recomputed: ₹{b.recomputed} • Paid: ₹{b.paid} • Credit: ₹{b.credit}</Text>
+                        </View>
+                      ))}
+                      {auditResult.billIssues.length > 10 && (
+                        <Text style={{ color: theme.colors.textSecondary, marginTop: 6 }}>
+                          +{auditResult.billIssues.length - 10} more…
+                        </Text>
+                      )}
+                    </View>
+                  )}
+
+                  {auditResult.creditIssues.length > 0 && (
+                    <View style={{ marginTop: 12 }}>
+                      <Text style={{ fontWeight: "600", color: theme.colors.text, marginBottom: 6 }}>Customer Credit Issues</Text>
+                      {auditResult.creditIssues.slice(0, 10).map((c: any, idx: number) => (
+                        <View key={idx} style={{ paddingVertical: 6, borderTopWidth: idx ? 1 : 0, borderTopColor: theme.colors.border }}>
+                          <Text style={{ color: theme.colors.textSecondary }}>Customer ID: {c.customerId}</Text>
+                          <Text style={{ color: theme.colors.textSecondary }}>Stored: ₹{c.stored} • Expected: ₹{c.expected}</Text>
+                        </View>
+                      ))}
+                      {auditResult.creditIssues.length > 10 && (
+                        <Text style={{ color: theme.colors.textSecondary, marginTop: 6 }}>
+                          +{auditResult.creditIssues.length - 10} more…
+                        </Text>
+                      )}
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+          )}
         </View>
 
         {loading && (
@@ -733,7 +866,7 @@ export default function AdminSettingsScreen() {
               </Text>
               <TextInput
                 value={menuForm.name}
-                onChangeText={(text) => setMenuForm({ ...menuForm, name: text })}
+                onChangeText={(text: string) => setMenuForm({ ...menuForm, name: text })}
                 placeholder="Enter item name"
                 style={{
                   borderWidth: 1,
@@ -808,7 +941,7 @@ export default function AdminSettingsScreen() {
               </Text>
               <TextInput
                 value={menuForm.price}
-                onChangeText={(text) => setMenuForm({ ...menuForm, price: text })}
+                onChangeText={(text: string) => setMenuForm({ ...menuForm, price: text })}
                 placeholder="Enter price"
                 keyboardType="numeric"
                 style={{
@@ -825,6 +958,6 @@ export default function AdminSettingsScreen() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }

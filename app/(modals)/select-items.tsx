@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack, useRouter } from 'expo-router';
 import { ArrowLeft, Minus, Plus, Search, X } from 'lucide-react-native';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, Platform, ScrollView, SectionList, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Keyboard, LayoutChangeEvent, Platform, ScrollView, SectionList, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { CATEGORIES, getCategoryEmoji } from '../../constants/appConstants';
 import { theme } from '../../constants/theme';
 import { MenuItem, orderService } from '../../services/orderService';
@@ -223,6 +223,32 @@ export default function SelectItemsModal() {
     }
   }, [category, sections]);
 
+  // ---- Typed handlers to satisfy strict TS ----
+  const handleSearchLayout = (e: LayoutChangeEvent) => {
+    const { y, height } = e.nativeEvent.layout;
+    const top = y + height + 4;
+    if (Math.abs(top - searchDropdownTop) > 1) setSearchDropdownTop(top);
+  };
+
+  const handleChangeSearchText = (text: string) => {
+    setSearch(text);
+    if (!showSearchDropdown) setShowSearchDropdown(true);
+  };
+
+  const keyExtractorFn = (item: MenuItem) => item.id;
+
+  const renderItemFn = ({ item }: { item: MenuItem }) => (
+    <ItemRow item={item} qty={getQty(item.id)} onChange={(q: number) => setQty(item, q)} />
+  );
+
+  const renderSectionHeaderFn = ({ section }: { section: Section }) => (
+    <View style={{ height: HEADER_HEIGHT, justifyContent: 'flex-end', paddingBottom: 2 }}>
+      <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.text }}>
+        {getCategoryEmoji(section.title)} {section.title}
+      </Text>
+    </View>
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
       <Stack.Screen options={{
@@ -235,18 +261,13 @@ export default function SelectItemsModal() {
         <View style={{ backgroundColor: '#fff', paddingHorizontal: 14, paddingTop: 10, paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: '#eef1f3' }}>
           <View
             style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 }}
-            onLayout={e => {
-              const { y, height } = e.nativeEvent.layout;
-              // Position dropdown just 4px below the search bar container
-              const top = y + height + 4;
-              if (Math.abs(top - searchDropdownTop) > 1) setSearchDropdownTop(top);
-            }}
+            onLayout={handleSearchLayout}
           >
             <Search size={20} color={theme.colors.textSecondary} />
             <TextInput
               placeholder='Search menu items...'
               value={search}
-              onChangeText={text => { setSearch(text); if (!showSearchDropdown) setShowSearchDropdown(true); }}
+              onChangeText={handleChangeSearchText}
               style={{ flex: 1, fontSize: 14.5, color: theme.colors.text, marginLeft: 10, paddingVertical: Platform.OS === 'android' ? 0 : 4 }}
               placeholderTextColor={theme.colors.textSecondary}
               returnKeyType='search'
@@ -314,31 +335,27 @@ export default function SelectItemsModal() {
               <Text style={{ fontSize: 13.5, color: theme.colors.textSecondary, textAlign: 'center', lineHeight: 20 }}>Try a different search term.</Text>
             </View>
           ) : (
-            <SectionList
+            <SectionList<MenuItem, Section>
               ref={listRef}
               sections={sections}
-              keyExtractor={item => item.id}
-              renderItem={({ item }) => <ItemRow item={item} qty={getQty(item.id)} onChange={(q) => setQty(item, q)} />}
-              renderSectionHeader={({ section: { title } }) => (
-                <View style={{ height: HEADER_HEIGHT, justifyContent: 'flex-end', paddingBottom: 2 }}>
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.text }}>{getCategoryEmoji(title)} {title}</Text>
-                </View>
-              )}
+              keyExtractor={keyExtractorFn}
+              renderItem={renderItemFn}
+              renderSectionHeader={renderSectionHeaderFn}
               stickySectionHeadersEnabled={category === 'All'}
               showsVerticalScrollIndicator={false}
               keyboardDismissMode='on-drag'
-              contentContainerStyle={{ paddingTop: 4, paddingHorizontal: 10, paddingBottom: 80 }}
+              contentContainerStyle={{ paddingTop: 4, paddingHorizontal: 10, paddingBottom: 120 }}
             />
           )}
         </View>
         {order$.selectedItems.length > 0 && (
-          <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: 'rgba(255,255,255,0.96)', borderTopWidth: 1, borderTopColor: '#e5e7eb', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: theme.colors.text }} numberOfLines={1}>{totalItems} item{totalItems !== 1 ? 's' : ''} • ₹{totalAmount}</Text>
-            <TouchableOpacity onPress={() => setShowSelectedSheet(true)} style={{ backgroundColor: '#f1f2f4', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18 }}>
-              <Text style={{ color: theme.colors.text, fontSize: 12.5, fontWeight: '600' }}>View</Text>
+          <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 14, paddingTop:8, paddingBottom: 20, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: '#e5e7eb', flexDirection: 'row', alignItems: 'center', gap: 10, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 8 }}>
+            <Text style={{ flex: 1, fontSize: 15, fontWeight: '700', color: theme.colors.text }} numberOfLines={1}>{totalItems} item{totalItems !== 1 ? 's' : ''} • ₹{totalAmount}</Text>
+            <TouchableOpacity onPress={() => setShowSelectedSheet(true)} style={{ backgroundColor: '#f1f2f4', paddingHorizontal: 18, paddingVertical: 12, borderRadius: 22 }}>
+              <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>View</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 18 }}>
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Done</Text>
+            <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 22 }}>
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Done</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -347,7 +364,7 @@ export default function SelectItemsModal() {
           <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'flex-end' }}>
             {/* Backdrop */}
             <TouchableOpacity activeOpacity={1} onPress={() => setShowSelectedSheet(false)} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
-            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: '70%', paddingBottom: (order$.selectedItems.length ? 70 : 20), paddingHorizontal: 14, paddingTop: 10 }}>
+            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: '70%', paddingBottom: (order$.selectedItems.length ? 90 : 24), paddingHorizontal: 14, paddingTop: 10 }}>
               <View style={{ alignItems: 'center', marginBottom: 8 }}>
                 <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: '#e1e3e6' }} />
               </View>
@@ -382,10 +399,10 @@ export default function SelectItemsModal() {
                   </View>
                 )}
               </ScrollView>
-              <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#edf0f2', backgroundColor: '#fff', borderBottomLeftRadius: 18, borderBottomRightRadius: 18 }}>
-                <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: theme.colors.text }}>{totalItems} item{totalItems !== 1 ? 's' : ''} • ₹{totalAmount}</Text>
-                <TouchableOpacity onPress={() => { setShowSelectedSheet(false); router.back(); }} style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 18 }}>
-                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Done</Text>
+              <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#edf0f2', backgroundColor: '#fff', borderBottomLeftRadius: 18, borderBottomRightRadius: 18 }}>
+                <Text style={{ flex: 1, fontSize: 15, fontWeight: '700', color: theme.colors.text }}>{totalItems} item{totalItems !== 1 ? 's' : ''} • ₹{totalAmount}</Text>
+                <TouchableOpacity onPress={() => { setShowSelectedSheet(false); router.back(); }} style={{ backgroundColor: theme.colors.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 22 }}>
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Done</Text>
                 </TouchableOpacity>
               </View>
             </View>

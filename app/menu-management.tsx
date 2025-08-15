@@ -69,7 +69,7 @@ export default function MenuManagementScreen() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("All");
-  const listRef = useRef<SectionList<MenuItem>>(null);
+  const listRef = useRef<SectionList<MenuItem, Section>>(null);
 
   // Modal state
   const [showMenuModal, setShowMenuModal] = useState(false);

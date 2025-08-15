@@ -73,7 +73,7 @@ export default function SelectItemsModal() {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 220);
   const [category, setCategory] = useState<string>('All');
-  const listRef = useRef<SectionList<MenuItem>>(null);
+  const listRef = useRef<SectionList<MenuItem, Section>>(null);
   const [showSelectedSheet, setShowSelectedSheet] = useState(false);
   const pendingJumpItemIdRef = useRef<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -349,7 +349,7 @@ export default function SelectItemsModal() {
           )}
         </View>
         {order$.selectedItems.length > 0 && (
-          <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 14, paddingTop:8, paddingBottom: 20, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: '#e5e7eb', flexDirection: 'row', alignItems: 'center', gap: 10, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 8 }}>
+          <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 20, backgroundColor: 'rgba(255,255,255,0.98)', borderTopWidth: 1, borderTopColor: '#e5e7eb', flexDirection: 'row', alignItems: 'center', gap: 10, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 8 }}>
             <Text style={{ flex: 1, fontSize: 15, fontWeight: '700', color: theme.colors.text }} numberOfLines={1}>{totalItems} item{totalItems !== 1 ? 's' : ''} • ₹{totalAmount}</Text>
             <TouchableOpacity onPress={() => setShowSelectedSheet(true)} style={{ backgroundColor: '#f1f2f4', paddingHorizontal: 18, paddingVertical: 12, borderRadius: 22 }}>
               <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: '700' }}>View</Text>

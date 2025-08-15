@@ -5,31 +5,29 @@ import { Stack, useRouter } from "expo-router";
 import { Plus, Search } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    FlatList,
-    Pressable,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  FlatList,
+  Pressable,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { theme } from "../../constants/theme";
-import { getAllCustomers } from "../../services/customerService";
+import { Customer, getAllCustomers } from "../../services/customerService";
 import { authState } from "../../state/authState";
 import { customerState } from "../../state/customerState";
 import { orderState } from "../../state/orderState";
 
-interface Customer {
-  id: string;
-  name: string;
-  contact: string | null | undefined;
-}
+// Using Customer type from service for consistency
 
 function CustomerItem({
   customer,
   onSelect,
+  isSelected,
 }: {
   customer: Customer;
   onSelect: (customer: Customer) => void;
+  isSelected: boolean;
 }) {
   const getAvatarColor = (name: string): string => {
     const colors = [
@@ -105,26 +103,28 @@ function CustomerItem({
           </Text>
         )}
       </View>
-      <View
-        style={{
-          width: 24,
-          height: 24,
-          borderRadius: 12,
-          backgroundColor: theme.colors.primary,
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <Text
+      {isSelected ? (
+        <View
           style={{
-            color: "white",
-            fontSize: 16,
-            fontWeight: "600",
+            width: 24,
+            height: 24,
+            borderRadius: 12,
+            backgroundColor: theme.colors.primary,
+            justifyContent: "center",
+            alignItems: "center",
           }}
         >
-          ✓
-        </Text>
-      </View>
+          <Text
+            style={{
+              color: "white",
+              fontSize: 16,
+              fontWeight: "600",
+            }}
+          >
+            ✓
+          </Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -133,6 +133,7 @@ export default function SelectCustomerScreen() {
   const router = useRouter();
   const customerStateData = use$(customerState);
   const auth = use$(authState);
+  const order$ = use$(orderState);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -357,13 +358,14 @@ export default function SelectCustomerScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <FlatList
+              <FlatList<Customer>
                 data={filteredCustomers}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
+                keyExtractor={(item: Customer) => item.id}
+                renderItem={({ item }: { item: Customer }) => (
                   <CustomerItem
-                    customer={item as Customer}
+                    customer={item}
                     onSelect={handleSelectCustomer}
+                    isSelected={order$.selectedCustomerId === item.id}
                   />
                 )}
                 showsVerticalScrollIndicator={false}

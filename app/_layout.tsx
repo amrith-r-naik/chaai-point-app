@@ -1,9 +1,9 @@
 import { use$ } from "@legendapp/state/react";
 import { Stack, useRouter, useSegments } from "expo-router";
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { Text, View } from "react-native";
 import { openDatabase } from "../lib/db";
-import { debugDatabase } from "../lib/dbDebug";
+import { debugDatabase, seedTestUser } from "../lib/dbDebug";
 import { initializeAuth } from "../services/authService";
 import { authState } from "../state/authState";
 import "./global.css";
@@ -20,7 +20,7 @@ export default function RootLayout() {
         await openDatabase();
         console.log("Database opened successfully");
         await debugDatabase();
-        // await seedTestUser();
+        await seedTestUser();
         // await seedTestCustomers();
         // await seedTestMenuItems();
         // await seedTestOrders();

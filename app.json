@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "chaai-point-app",
+    "name": "Chaai Point",
     "slug": "chaai-point-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "chaaipointapp",
     "userInterfaceStyle": "automatic",
-  "newArchEnabled": false,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true
     },

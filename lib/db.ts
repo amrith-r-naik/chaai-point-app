@@ -287,7 +287,9 @@ async function runMigrations() {
           AFTER UPDATE ON ${t}
           FOR EACH ROW
           BEGIN
-            UPDATE ${t} SET updatedAt = DATETIME('now') WHERE id = NEW.id;
+            UPDATE ${t}
+            SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now'))
+            WHERE id = NEW.id;
           END;
         `);
       }

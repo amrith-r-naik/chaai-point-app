@@ -6,6 +6,7 @@ import {
   MenuItem,
   menuService,
 } from "@/services/menuService";
+import { syncService } from "@/services/syncService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import { router } from "expo-router";
@@ -348,10 +349,10 @@ export default function AdminSettingsScreen() {
     try {
       setSyncRunning(true);
       await openDatabase();
-      // TODO: wire to SyncService in Phase 3
-      await new Promise((r) => setTimeout(r, 500));
-      setLastSyncAt(new Date().toISOString());
-      Alert.alert("Sync", "Sync completed (stub)");
+      await syncService.syncAll();
+      const now = new Date().toISOString();
+      setLastSyncAt(now);
+      Alert.alert("Sync", "Sync completed");
     } catch (e: any) {
       Alert.alert("Sync failed", e?.message || String(e));
     } finally {

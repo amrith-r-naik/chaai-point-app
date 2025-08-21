@@ -1,3 +1,20 @@
+## Cloud sync Phase 2 (Supabase setup)
+
+1. Create a Supabase project (free tier). Note the project URL and anon key.
+2. In the SQL editor, run files in `supabase/` in order:
+   - `01_schema.sql`
+   - `02_policies.sql`
+3. Create two auth users:
+   - Admin (read-only): will get role "admin" by updating `public.profiles.role` to 'admin'
+   - Staff (write): default role 'staff'
+4. In the Profiles table, ensure `shop_id = 'shop_1'` for both.
+5. In the app, configure Supabase client (Phase 3) to authenticate as staff on devices that write, admin for view-only.
+
+Notes:
+
+- RLS restricts all access to `shop_id = current_shop()` and role determines write permissions.
+- Business tables include `created_at`, `updated_at`, `deleted_at`, and `shop_id` for sync.
+
 # Welcome to your Expo app 👋
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).

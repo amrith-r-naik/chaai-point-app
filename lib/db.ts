@@ -273,7 +273,15 @@ async function runMigrations() {
         await db!.execAsync(
           `CREATE INDEX IF NOT EXISTS idx_${t}_shop_updated ON ${t}(shopId, updatedAt);`
         );
-        // Trigger to bump updatedAt on UPDATE
+        // Triggers: set updatedAt on INSERT and bump on UPDATE
+        await db!.execAsync(`
+          CREATE TRIGGER IF NOT EXISTS trg_${t}_updatedAt_insert
+          AFTER INSERT ON ${t}
+          FOR EACH ROW
+          BEGIN
+            UPDATE ${t} SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now')) WHERE id = NEW.id;
+          END;
+        `);
         await db!.execAsync(`
           CREATE TRIGGER IF NOT EXISTS trg_${t}_updatedAt
           AFTER UPDATE ON ${t}

@@ -1,12 +1,16 @@
 import { theme } from "@/constants/theme";
 import { openDatabase, runIntegrityAudit } from "@/lib/db";
 import { adminService } from "@/services/adminService";
-import { CreateMenuItemData, MenuItem, menuService } from "@/services/menuService";
+import {
+  CreateMenuItemData,
+  MenuItem,
+  menuService,
+} from "@/services/menuService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import { router } from "expo-router";
 import { Database, Lock, Settings, Trash2, X } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -15,7 +19,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -53,6 +57,10 @@ export default function AdminSettingsScreen() {
     "Momos",
     "Cigarettes",
   ];
+
+  // --- Phase 1: Sync UI state (stub) ---
+  const [syncRunning, setSyncRunning] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
 
   useEffect(() => {
     // Check if user is authenticated and has admin role
@@ -198,7 +206,10 @@ export default function AdminSettingsScreen() {
               setLoading(true);
               await adminService.clearAllTables();
               await loadTableCounts();
-              Alert.alert("Success", "All business data cleared successfully. User accounts preserved.");
+              Alert.alert(
+                "Success",
+                "All business data cleared successfully. User accounts preserved."
+              );
             } catch (error) {
               Alert.alert("Error", `Failed to clear data: ${error}`);
             } finally {
@@ -210,6 +221,7 @@ export default function AdminSettingsScreen() {
     );
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleSetupDemoData = () => {
     Alert.alert(
       "Setup Demo Data",
@@ -223,7 +235,10 @@ export default function AdminSettingsScreen() {
               setLoading(true);
               await adminService.setupDemoData();
               await loadTableCounts();
-              Alert.alert("Success", "Demo data setup completed. User accounts preserved.");
+              Alert.alert(
+                "Success",
+                "Demo data setup completed. User accounts preserved."
+              );
             } catch (error) {
               Alert.alert("Error", `Failed to setup demo data: ${error}`);
             } finally {
@@ -260,6 +275,7 @@ export default function AdminSettingsScreen() {
     );
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleAddDemoCustomers = () => {
     Alert.alert(
       "Add Demo Customers",
@@ -285,6 +301,7 @@ export default function AdminSettingsScreen() {
     );
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleClearMenuItems = () => {
     Alert.alert(
       "Clear Menu Items",
@@ -326,13 +343,41 @@ export default function AdminSettingsScreen() {
     }
   };
 
+  // --- Phase 1: Sync actions (stubs) ---
+  const handleSyncNow = async () => {
+    try {
+      setSyncRunning(true);
+      await openDatabase();
+      // TODO: wire to SyncService in Phase 3
+      await new Promise((r) => setTimeout(r, 500));
+      setLastSyncAt(new Date().toISOString());
+      Alert.alert("Sync", "Sync completed (stub)");
+    } catch (e: any) {
+      Alert.alert("Sync failed", e?.message || String(e));
+    } finally {
+      setSyncRunning(false);
+    }
+  };
+
+  const handleBackupDb = async () => {
+    try {
+      await openDatabase();
+      // TODO: implement upload to cloud storage in Phase 5
+      Alert.alert("Backup", "Backup started (stub)");
+    } catch (e: any) {
+      Alert.alert("Backup failed", e?.message || String(e));
+    }
+  };
+
   // Menu Management Functions
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleAddMenuItem = () => {
     setEditingItem(null);
     setMenuForm({ name: "", category: "", price: "" });
     setShowMenuModal(true);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleEditMenuItem = (item: MenuItem) => {
     setEditingItem(item);
     setMenuForm({
@@ -343,6 +388,7 @@ export default function AdminSettingsScreen() {
     setShowMenuModal(true);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleDeleteMenuItem = (item: MenuItem) => {
     Alert.alert(
       "Delete Menu Item",
@@ -360,7 +406,10 @@ export default function AdminSettingsScreen() {
               await loadTableCounts();
               Alert.alert("Success", "Menu item deleted successfully");
             } catch (error: any) {
-              Alert.alert("Error", error.message || "Failed to delete menu item");
+              Alert.alert(
+                "Error",
+                error.message || "Failed to delete menu item"
+              );
             } finally {
               setLoading(false);
             }
@@ -376,7 +425,8 @@ export default function AdminSettingsScreen() {
     if (!menuForm.price.trim()) return "Price is required";
 
     const price = parseFloat(menuForm.price);
-    if (isNaN(price) || price <= 0) return "Price must be a valid positive number";
+    if (isNaN(price) || price <= 0)
+      return "Price must be a valid positive number";
 
     return null;
   };
@@ -528,7 +578,10 @@ export default function AdminSettingsScreen() {
   return (
     <View style={{ flex: 1 }}>
       {/* Header inside Safe Area to avoid overlap with status bar/notch */}
-      <SafeAreaView edges={["top"]} style={{ backgroundColor: theme.colors.primary }}>
+      <SafeAreaView
+        edges={["top"]}
+        style={{ backgroundColor: theme.colors.primary }}
+      >
         <View
           style={{
             backgroundColor: theme.colors.primary,
@@ -563,6 +616,76 @@ export default function AdminSettingsScreen() {
       </SafeAreaView>
 
       <ScrollView style={{ flex: 1, padding: 24 }}>
+        {/* Sync & Backup Section (Phase 1) */}
+        <View
+          style={{
+            backgroundColor: "white",
+            borderRadius: 12,
+            padding: 16,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            marginBottom: 16,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 12,
+            }}
+          >
+            <Database size={20} color={theme.colors.primary} />
+            <Text style={{ marginLeft: 8, fontWeight: "700", fontSize: 16 }}>
+              Sync & Backup
+            </Text>
+          </View>
+          <Text style={{ color: theme.colors.textSecondary, marginBottom: 12 }}>
+            Sync your data to the cloud and create a manual backup of your local
+            database.
+          </Text>
+          <View style={{ flexDirection: "row", gap: 12 }}>
+            <TouchableOpacity
+              onPress={handleSyncNow}
+              disabled={syncRunning}
+              style={{
+                backgroundColor: syncRunning ? "#9CA3AF" : theme.colors.primary,
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                borderRadius: 8,
+                flexDirection: "row",
+                alignItems: "center",
+              }}
+            >
+              {syncRunning ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={{ color: "white", fontWeight: "600" }}>
+                  Sync now
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleBackupDb}
+              style={{
+                backgroundColor: theme.colors.background,
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: theme.colors.border,
+              }}
+            >
+              <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
+                Backup DB
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {lastSyncAt && (
+            <Text style={{ marginTop: 8, color: theme.colors.textSecondary }}>
+              Last sync: {new Date(lastSyncAt).toLocaleString()}
+            </Text>
+          )}
+        </View>
         {/* Database Statistics */}
         <View style={{ marginBottom: 32 }}>
           <Text
@@ -613,7 +736,14 @@ export default function AdminSettingsScreen() {
             }}
           >
             <Settings size={20} color="white" />
-            <Text style={{ color: "white", fontSize: 16, fontWeight: "600", marginLeft: 8 }}>
+            <Text
+              style={{
+                color: "white",
+                fontSize: 16,
+                fontWeight: "600",
+                marginLeft: 8,
+              }}
+            >
               Manage Menu Items
             </Text>
           </TouchableOpacity>
@@ -669,7 +799,8 @@ export default function AdminSettingsScreen() {
               marginBottom: 12,
             }}
           >
-            Check for mismatched bill totals and incorrect customer credit balances.
+            Check for mismatched bill totals and incorrect customer credit
+            balances.
           </Text>
 
           <View style={{ flexDirection: "row", gap: 12, marginBottom: 8 }}>
@@ -704,7 +835,9 @@ export default function AdminSettingsScreen() {
                   alignSelf: "flex-start",
                 }}
               >
-                <Text style={{ color: theme.colors.text, fontWeight: "600" }}>Clear</Text>
+                <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
+                  Clear
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -727,30 +860,71 @@ export default function AdminSettingsScreen() {
                 ...theme.shadows.sm,
               }}
             >
-              <Text style={{ fontSize: 16, fontWeight: "600", color: theme.colors.text, marginBottom: 8 }}>
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                  marginBottom: 8,
+                }}
+              >
                 Summary
               </Text>
-              <Text style={{ color: theme.colors.textSecondary, marginBottom: 12 }}>
-                Bills with mismatched totals: {auditResult.billIssues.length} • Customers with incorrect credit: {auditResult.creditIssues.length}
+              <Text
+                style={{ color: theme.colors.textSecondary, marginBottom: 12 }}
+              >
+                Bills with mismatched totals: {auditResult.billIssues.length} •
+                Customers with incorrect credit:{" "}
+                {auditResult.creditIssues.length}
               </Text>
 
-              {auditResult.billIssues.length === 0 && auditResult.creditIssues.length === 0 ? (
+              {auditResult.billIssues.length === 0 &&
+              auditResult.creditIssues.length === 0 ? (
                 <View style={{ paddingVertical: 4 }}>
-                  <Text style={{ color: "#16a34a", fontWeight: "600" }}>No issues found.</Text>
+                  <Text style={{ color: "#16a34a", fontWeight: "600" }}>
+                    No issues found.
+                  </Text>
                 </View>
               ) : (
                 <>
                   {auditResult.billIssues.length > 0 && (
                     <View style={{ marginTop: 8 }}>
-                      <Text style={{ fontWeight: "600", color: theme.colors.text, marginBottom: 6 }}>Bill Issues</Text>
-                      {auditResult.billIssues.slice(0, 10).map((b: any, idx: number) => (
-                        <View key={idx} style={{ paddingVertical: 6, borderTopWidth: idx ? 1 : 0, borderTopColor: theme.colors.border }}>
-                          <Text style={{ color: theme.colors.textSecondary }}>Bill ID: {b.billId}</Text>
-                          <Text style={{ color: theme.colors.textSecondary }}>Stored: ₹{b.stored} • Recomputed: ₹{b.recomputed} • Paid: ₹{b.paid} • Credit: ₹{b.credit}</Text>
-                        </View>
-                      ))}
+                      <Text
+                        style={{
+                          fontWeight: "600",
+                          color: theme.colors.text,
+                          marginBottom: 6,
+                        }}
+                      >
+                        Bill Issues
+                      </Text>
+                      {auditResult.billIssues
+                        .slice(0, 10)
+                        .map((b: any, idx: number) => (
+                          <View
+                            key={idx}
+                            style={{
+                              paddingVertical: 6,
+                              borderTopWidth: idx ? 1 : 0,
+                              borderTopColor: theme.colors.border,
+                            }}
+                          >
+                            <Text style={{ color: theme.colors.textSecondary }}>
+                              Bill ID: {b.billId}
+                            </Text>
+                            <Text style={{ color: theme.colors.textSecondary }}>
+                              Stored: ₹{b.stored} • Recomputed: ₹{b.recomputed}{" "}
+                              • Paid: ₹{b.paid} • Credit: ₹{b.credit}
+                            </Text>
+                          </View>
+                        ))}
                       {auditResult.billIssues.length > 10 && (
-                        <Text style={{ color: theme.colors.textSecondary, marginTop: 6 }}>
+                        <Text
+                          style={{
+                            color: theme.colors.textSecondary,
+                            marginTop: 6,
+                          }}
+                        >
                           +{auditResult.billIssues.length - 10} more…
                         </Text>
                       )}
@@ -759,15 +933,41 @@ export default function AdminSettingsScreen() {
 
                   {auditResult.creditIssues.length > 0 && (
                     <View style={{ marginTop: 12 }}>
-                      <Text style={{ fontWeight: "600", color: theme.colors.text, marginBottom: 6 }}>Customer Credit Issues</Text>
-                      {auditResult.creditIssues.slice(0, 10).map((c: any, idx: number) => (
-                        <View key={idx} style={{ paddingVertical: 6, borderTopWidth: idx ? 1 : 0, borderTopColor: theme.colors.border }}>
-                          <Text style={{ color: theme.colors.textSecondary }}>Customer ID: {c.customerId}</Text>
-                          <Text style={{ color: theme.colors.textSecondary }}>Stored: ₹{c.stored} • Expected: ₹{c.expected}</Text>
-                        </View>
-                      ))}
+                      <Text
+                        style={{
+                          fontWeight: "600",
+                          color: theme.colors.text,
+                          marginBottom: 6,
+                        }}
+                      >
+                        Customer Credit Issues
+                      </Text>
+                      {auditResult.creditIssues
+                        .slice(0, 10)
+                        .map((c: any, idx: number) => (
+                          <View
+                            key={idx}
+                            style={{
+                              paddingVertical: 6,
+                              borderTopWidth: idx ? 1 : 0,
+                              borderTopColor: theme.colors.border,
+                            }}
+                          >
+                            <Text style={{ color: theme.colors.textSecondary }}>
+                              Customer ID: {c.customerId}
+                            </Text>
+                            <Text style={{ color: theme.colors.textSecondary }}>
+                              Stored: ₹{c.stored} • Expected: ₹{c.expected}
+                            </Text>
+                          </View>
+                        ))}
                       {auditResult.creditIssues.length > 10 && (
-                        <Text style={{ color: theme.colors.textSecondary, marginTop: 6 }}>
+                        <Text
+                          style={{
+                            color: theme.colors.textSecondary,
+                            marginTop: 6,
+                          }}
+                        >
                           +{auditResult.creditIssues.length - 10} more…
                         </Text>
                       )}
@@ -827,7 +1027,13 @@ export default function AdminSettingsScreen() {
             <TouchableOpacity onPress={() => setShowMenuModal(false)}>
               <X size={24} color={theme.colors.text} />
             </TouchableOpacity>
-            <Text style={{ fontSize: 18, fontWeight: "600", color: theme.colors.text }}>
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "600",
+                color: theme.colors.text,
+              }}
+            >
               {editingItem ? "Edit Menu Item" : "Add Menu Item"}
             </Text>
             <TouchableOpacity
@@ -844,7 +1050,9 @@ export default function AdminSettingsScreen() {
               {loading ? (
                 <ActivityIndicator size="small" color="white" />
               ) : (
-                <Text style={{ color: "white", fontSize: 16, fontWeight: "600" }}>
+                <Text
+                  style={{ color: "white", fontSize: 16, fontWeight: "600" }}
+                >
                   {editingItem ? "Update" : "Add"}
                 </Text>
               )}
@@ -866,7 +1074,9 @@ export default function AdminSettingsScreen() {
               </Text>
               <TextInput
                 value={menuForm.name}
-                onChangeText={(text: string) => setMenuForm({ ...menuForm, name: text })}
+                onChangeText={(text: string) =>
+                  setMenuForm({ ...menuForm, name: text })
+                }
                 placeholder="Enter item name"
                 style={{
                   borderWidth: 1,
@@ -908,16 +1118,26 @@ export default function AdminSettingsScreen() {
                       paddingHorizontal: 12,
                       paddingVertical: 8,
                       borderRadius: 20,
-                      backgroundColor: menuForm.category === category ? theme.colors.primary : "#f3f4f6",
+                      backgroundColor:
+                        menuForm.category === category
+                          ? theme.colors.primary
+                          : "#f3f4f6",
                       borderWidth: 1,
-                      borderColor: menuForm.category === category ? theme.colors.primary : "#e5e7eb",
+                      borderColor:
+                        menuForm.category === category
+                          ? theme.colors.primary
+                          : "#e5e7eb",
                     }}
                   >
                     <Text
                       style={{
                         fontSize: 14,
-                        color: menuForm.category === category ? "white" : theme.colors.text,
-                        fontWeight: menuForm.category === category ? "600" : "400",
+                        color:
+                          menuForm.category === category
+                            ? "white"
+                            : theme.colors.text,
+                        fontWeight:
+                          menuForm.category === category ? "600" : "400",
                       }}
                     >
                       {category}
@@ -941,7 +1161,9 @@ export default function AdminSettingsScreen() {
               </Text>
               <TextInput
                 value={menuForm.price}
-                onChangeText={(text: string) => setMenuForm({ ...menuForm, price: text })}
+                onChangeText={(text: string) =>
+                  setMenuForm({ ...menuForm, price: text })
+                }
                 placeholder="Enter price"
                 keyboardType="numeric"
                 style={{

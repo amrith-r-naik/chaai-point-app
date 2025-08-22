@@ -1,6 +1,7 @@
 import { theme } from "@/constants/theme";
 import { openDatabase, runIntegrityAudit } from "@/lib/db";
 import { adminService } from "@/services/adminService";
+import { backupService } from "@/services/backupService";
 import {
   CreateMenuItemData,
   MenuItem,
@@ -62,6 +63,10 @@ export default function AdminSettingsScreen() {
   // --- Phase 1: Sync UI state (stub) ---
   const [syncRunning, setSyncRunning] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [latestBackup, setLatestBackup] = useState<{ name: string } | null>(
+    null
+  );
+  const [backupRunning, setBackupRunning] = useState(false);
 
   useEffect(() => {
     // Check if user is authenticated and has admin role
@@ -92,6 +97,8 @@ export default function AdminSettingsScreen() {
         await openDatabase();
         const ts = await syncService.getLastSyncAt();
         if (ts) setLastSyncAt(ts);
+        const latest = await backupService.getLatestBackup();
+        if (latest) setLatestBackup({ name: latest.name });
       } catch (e) {
         console.warn("[sync] failed to load last sync time", e);
       }
@@ -375,11 +382,18 @@ export default function AdminSettingsScreen() {
 
   const handleBackupDb = async () => {
     try {
+      setBackupRunning(true);
       await openDatabase();
-      // TODO: implement upload to cloud storage in Phase 5
-      Alert.alert("Backup", "Backup started (stub)");
+      const res = await backupService.backupNow();
+      setLatestBackup({
+        name: res.objectPath.split("/").pop() || res.objectPath,
+      });
+      Alert.alert("Backup", `Backup uploaded: ${res.objectPath}`);
     } catch (e: any) {
+      console.error("[backup] failed", e);
       Alert.alert("Backup failed", e?.message || String(e));
+    } finally {
+      setBackupRunning(false);
     }
   };
 
@@ -680,6 +694,7 @@ export default function AdminSettingsScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               onPress={handleBackupDb}
+              disabled={backupRunning}
               style={{
                 backgroundColor: theme.colors.background,
                 paddingVertical: 12,
@@ -687,16 +702,26 @@ export default function AdminSettingsScreen() {
                 borderRadius: 8,
                 borderWidth: 1,
                 borderColor: theme.colors.border,
+                opacity: backupRunning ? 0.6 : 1,
               }}
             >
-              <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
-                Backup DB
-              </Text>
+              {backupRunning ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
+                  Backup DB
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
           {lastSyncAt && (
             <Text style={{ marginTop: 8, color: theme.colors.textSecondary }}>
               Last sync: {new Date(lastSyncAt).toLocaleString()}
+            </Text>
+          )}
+          {latestBackup && (
+            <Text style={{ marginTop: 4, color: theme.colors.textSecondary }}>
+              Latest backup: {latestBackup.name}
             </Text>
           )}
         </View>

@@ -167,9 +167,46 @@ function toCloud(table: TableName, row: RowMap): RowMap {
   return base;
 }
 
+// Fetch server updated_at for a set of IDs to perform conflict-aware filtering
+async function fetchServerUpdatedMap(
+  table: TableName,
+  ids: string[]
+): Promise<Map<string, string | null>> {
+  if (!ids.length) return new Map();
+  // PostgREST 'in' filter; chunk if too many IDs
+  const chunkSize = 500;
+  const map = new Map<string, string | null>();
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const { data, error } = await supabase
+      .from(table)
+      .select("id, updated_at")
+      .in("id", chunk);
+    if (error) {
+      console.error(`[sync] fetchServerUpdatedMap failed for ${table}`, error);
+      throw error;
+    }
+    (data || []).forEach((row: any) => map.set(row.id, row.updated_at || null));
+  }
+  return map;
+}
+
 async function upsertCloud(table: TableName, rows: RowMap[]) {
   if (!rows.length) return { maxUpdatedAt: null as string | null };
-  const payload = rows.map((r) => toCloud(table, r));
+  // Conflict-aware filter: don't push if server has newer updated_at
+  const serverMap = await fetchServerUpdatedMap(
+    table,
+    rows.map((r) => r.id)
+  );
+  const toSend = rows.filter((r) => {
+    const localUpdated = (r.updatedAt || r.createdAt || "") as string;
+    const serverUpdated = serverMap.get(r.id) || null;
+    // if server has no row -> insert; else push only if local >= server
+    if (!serverUpdated) return true;
+    return localUpdated >= serverUpdated;
+  });
+  if (!toSend.length) return { maxUpdatedAt: null };
+  const payload = toSend.map((r) => toCloud(table, r));
   const { error } = await supabase
     .from(table)
     .upsert(payload, { onConflict: "id" });
@@ -248,6 +285,19 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
           delete (mapped as any)[k];
         }
       }
+
+      // Conflict-aware: only apply cloud if newer than local
+      const existing = (await db.getFirstAsync(
+        `SELECT updatedAt FROM ${table} WHERE id = ?`,
+        [mapped.id]
+      )) as any;
+      const localUpdated = (existing?.updatedAt || null) as string | null;
+      const cloudUpdated = (mapped.updatedAt || null) as string | null;
+      if (localUpdated && cloudUpdated && !(cloudUpdated > localUpdated)) {
+        // Local is newer or equal; skip applying this cloud row
+        continue;
+      }
+
       const cols = Object.keys(mapped);
       const placeholders = cols.map(() => "?").join(",");
       const updates = cols
@@ -273,19 +323,19 @@ export const syncService = {
   async syncAll() {
     for (const table of TABLES) {
       try {
-        // PUSH
-        const { lastPushAt } = await getSyncCheckpoint(table);
-        const toPush = await fetchLocalChanges(table, lastPushAt);
-        const pushed = await upsertCloud(table, toPush);
-        if (pushed.maxUpdatedAt)
-          await setSyncCheckpoint(table, { lastPushAt: pushed.maxUpdatedAt });
-
-        // PULL
+        // PULL first (conflict-aware apply will skip if local is newer)
         const { lastPullAt } = await getSyncCheckpoint(table);
         const pulled = await pullCloud(table, lastPullAt);
         await applyPulled(table, pulled.rows);
         if (pulled.maxUpdatedAt)
           await setSyncCheckpoint(table, { lastPullAt: pulled.maxUpdatedAt });
+
+        // PUSH (conflict-aware upsert will skip if server is newer)
+        const { lastPushAt } = await getSyncCheckpoint(table);
+        const toPush = await fetchLocalChanges(table, lastPushAt);
+        const pushed = await upsertCloud(table, toPush);
+        if (pushed.maxUpdatedAt)
+          await setSyncCheckpoint(table, { lastPushAt: pushed.maxUpdatedAt });
       } catch (e) {
         console.error(`[sync] table sync failed for ${table}`, e);
         throw e;

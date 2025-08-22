@@ -86,6 +86,16 @@ export default function AdminSettingsScreen() {
 
     loadTableCounts();
     loadMenuItems();
+    // Load last sync time from sync_state
+    (async () => {
+      try {
+        await openDatabase();
+        const ts = await syncService.getLastSyncAt();
+        if (ts) setLastSyncAt(ts);
+      } catch (e) {
+        console.warn("[sync] failed to load last sync time", e);
+      }
+    })();
   }, [auth.user]);
 
   const loadMenuItems = async () => {
@@ -348,12 +358,15 @@ export default function AdminSettingsScreen() {
   const handleSyncNow = async () => {
     try {
       setSyncRunning(true);
+      console.log("[sync] starting manual sync");
       await openDatabase();
       await syncService.syncAll();
-      const now = new Date().toISOString();
-      setLastSyncAt(now);
+      const ts = await syncService.getLastSyncAt();
+      if (ts) setLastSyncAt(ts);
+      console.log("[sync] completed at", ts);
       Alert.alert("Sync", "Sync completed");
     } catch (e: any) {
+      console.error("[sync] manual sync failed", e);
       Alert.alert("Sync failed", e?.message || String(e));
     } finally {
       setSyncRunning(false);

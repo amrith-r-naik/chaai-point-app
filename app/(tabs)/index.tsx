@@ -2,26 +2,34 @@ import AddExpenseModal from "@/app/(modals)/add-expense";
 import { Loading } from "@/components/ui";
 // UnbilledOrdersCard removed as unbilled KOT concept deprecated
 import { theme } from "@/constants/theme";
+import { openDatabase } from "@/lib/db";
 import { logoutUser } from "@/services/authService";
-import { dashboardService, DashboardStats, DateFilterOptions } from "@/services/dashboardService";
+import { backupService } from "@/services/backupService";
+import {
+  dashboardService,
+  DashboardStats,
+  DateFilterOptions,
+} from "@/services/dashboardService";
+import { syncService } from "@/services/syncService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
-import { LinearGradient } from 'expo-linear-gradient';
+import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import {
   AlertCircle,
   BarChart3,
   Calendar,
+  Database,
   DollarSign,
   LogOut,
-  Plus,
   Settings,
   ShoppingCart,
   TrendingDown,
-  TrendingUp
+  TrendingUp,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   RefreshControl,
@@ -34,16 +42,16 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const { width: screenWidth } = Dimensions.get('window');
+const { width: screenWidth } = Dimensions.get("window");
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc'
+    backgroundColor: "#f8fafc",
   },
   scrollContainer: {
     flexGrow: 1,
-    paddingBottom: 120
+    paddingBottom: 120,
   },
   headerGradient: {
     paddingBottom: 28,
@@ -72,14 +80,14 @@ const styles = StyleSheet.create({
   greeting: {
     color: "rgba(255,255,255,0.85)",
     fontSize: 15,
-    fontWeight: '500',
+    fontWeight: "500",
     marginBottom: 6,
     letterSpacing: 0.2,
   },
   headerTitle: {
     color: "white",
     fontSize: 28,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: -0.3,
     lineHeight: 30,
   },
@@ -97,7 +105,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)"
+    borderColor: "rgba(255,255,255,0.25)",
   },
   primaryActionButton: {
     backgroundColor: "rgba(255,255,255,0.95)",
@@ -119,7 +127,7 @@ const styles = StyleSheet.create({
   filterLabelText: {
     color: "rgba(255,255,255,0.9)",
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     letterSpacing: 0.3,
   },
   filterContainer: {
@@ -128,7 +136,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 4,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)"
+    borderColor: "rgba(255,255,255,0.2)",
   },
   filterButton: {
     flex: 1,
@@ -148,7 +156,7 @@ const styles = StyleSheet.create({
   },
   filterText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     textAlign: "center",
     letterSpacing: 0.2,
   },
@@ -164,8 +172,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
+    fontWeight: "700",
+    color: "#1e293b",
     marginBottom: 18,
     marginTop: 24,
     letterSpacing: -0.2,
@@ -179,7 +187,7 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 18,
     padding: 18,
     shadowColor: "#000",
@@ -188,10 +196,10 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 4,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
+    borderColor: "#f1f5f9",
     minHeight: 120,
     maxHeight: 120,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
   },
   metricCardFeatured: {
     borderWidth: 1.5,
@@ -208,9 +216,9 @@ const styles = StyleSheet.create({
   },
   metricTitle: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-    textTransform: 'uppercase',
+    fontWeight: "600",
+    color: "#64748b",
+    textTransform: "uppercase",
     letterSpacing: 0.6,
     flex: 1,
     lineHeight: 16,
@@ -226,21 +234,21 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     fontSize: 22,
-    fontWeight: '800',
-    color: '#1e293b',
+    fontWeight: "800",
+    color: "#1e293b",
     marginBottom: 6,
     lineHeight: 26,
     letterSpacing: -0.3,
   },
   metricSubtext: {
     fontSize: 11,
-    color: '#64748b',
-    fontWeight: '500',
+    color: "#64748b",
+    fontWeight: "500",
     lineHeight: 14,
     letterSpacing: 0.1,
   },
   performanceCard: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 18,
     padding: 20,
     marginTop: 28,
@@ -250,7 +258,7 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 6,
     borderWidth: 1,
-    borderColor: '#f1f5f9'
+    borderColor: "#f1f5f9",
   },
   performanceHeader: {
     flexDirection: "row",
@@ -260,8 +268,8 @@ const styles = StyleSheet.create({
   },
   performanceTitle: {
     fontSize: 17,
-    fontWeight: '700',
-    color: '#1e293b',
+    fontWeight: "700",
+    color: "#1e293b",
     letterSpacing: -0.2,
   },
   performanceBadge: {
@@ -272,36 +280,36 @@ const styles = StyleSheet.create({
   },
   performanceBadgeText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: "600",
     color: theme.colors.primary,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   performanceGrid: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 16
+    gap: 16,
   },
   performanceMetric: {
     flex: 1,
     alignItems: "center",
     paddingVertical: 14,
-    backgroundColor: '#f8fafc',
+    backgroundColor: "#f8fafc",
     borderRadius: 14,
   },
   performanceMetricTitle: {
     fontSize: 10,
-    color: '#64748b',
-    fontWeight: '600',
-    textTransform: 'uppercase',
+    color: "#64748b",
+    fontWeight: "600",
+    textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 8,
     textAlign: "center",
   },
   performanceMetricValue: {
     fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
+    fontWeight: "700",
+    textAlign: "center",
     lineHeight: 22,
     letterSpacing: -0.2,
   },
@@ -319,16 +327,16 @@ const styles = StyleSheet.create({
   adminContent: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between"
+    justifyContent: "space-between",
   },
   adminText: {
     flex: 1,
-    paddingRight: 16
+    paddingRight: 16,
   },
   adminTitle: {
     fontSize: 17,
-    fontWeight: '700',
-    color: 'white',
+    fontWeight: "700",
+    color: "white",
     marginBottom: 4,
     lineHeight: 20,
     letterSpacing: -0.1,
@@ -336,7 +344,7 @@ const styles = StyleSheet.create({
   adminSubtitle: {
     fontSize: 13,
     color: "rgba(255,255,255,0.85)",
-    fontWeight: '500',
+    fontWeight: "500",
     lineHeight: 18,
     letterSpacing: 0.1,
   },
@@ -345,23 +353,26 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)"
-  }
+    borderColor: "rgba(255,255,255,0.25)",
+  },
 });
 
 const formatCurrency = (amount: number): string => {
   const value = Math.abs(amount);
   if (value >= 10000000) {
-    return `${amount < 0 ? '-' : ''}₹${(value / 10000000).toFixed(1)}Cr`;
+    return `${amount < 0 ? "-" : ""}₹${(value / 10000000).toFixed(1)}Cr`;
   } else if (value >= 100000) {
-    return `${amount < 0 ? '-' : ''}₹${(value / 100000).toFixed(1)}L`;
+    return `${amount < 0 ? "-" : ""}₹${(value / 100000).toFixed(1)}L`;
   } else if (value >= 1000) {
-    return `${amount < 0 ? '-' : ''}₹${(value / 1000).toFixed(1)}K`;
+    return `${amount < 0 ? "-" : ""}₹${(value / 1000).toFixed(1)}K`;
   }
-  return `${amount < 0 ? '-' : ''}₹${value.toLocaleString('en-IN')}`;
+  return `${amount < 0 ? "-" : ""}₹${value.toLocaleString("en-IN")}`;
 };
 
-const getCurrencyFontSize = (amount: number, baseFontSize: number = 22): number => {
+const getCurrencyFontSize = (
+  amount: number,
+  baseFontSize: number = 22
+): number => {
   const formatted = formatCurrency(amount);
   const length = formatted.length;
 
@@ -387,64 +398,80 @@ const MetricCard: React.FC<MetricCardProps> = ({
   value,
   icon,
   iconBg,
-  valueColor = '#1e293b',
+  valueColor = "#1e293b",
   featured = false,
   subtitle,
-  onPress
+  onPress,
 }) => {
   const formatValue = () => {
-    if (typeof value === "number" && (
-      title.toLowerCase().includes("revenue") ||
-      title.toLowerCase().includes("expense") ||
-      title.toLowerCase().includes("profit") ||
-      title.toLowerCase().includes("due") ||
-      title.toLowerCase().includes("value")
-    )) {
+    if (
+      typeof value === "number" &&
+      (title.toLowerCase().includes("revenue") ||
+        title.toLowerCase().includes("expense") ||
+        title.toLowerCase().includes("profit") ||
+        title.toLowerCase().includes("due") ||
+        title.toLowerCase().includes("value"))
+    ) {
       return formatCurrency(value);
     }
     return value.toString();
   };
 
   const getFontSize = () => {
-    if (typeof value === "number" && (
-      title.toLowerCase().includes("revenue") ||
-      title.toLowerCase().includes("expense") ||
-      title.toLowerCase().includes("profit") ||
-      title.toLowerCase().includes("due") ||
-      title.toLowerCase().includes("value")
-    )) {
+    if (
+      typeof value === "number" &&
+      (title.toLowerCase().includes("revenue") ||
+        title.toLowerCase().includes("expense") ||
+        title.toLowerCase().includes("profit") ||
+        title.toLowerCase().includes("due") ||
+        title.toLowerCase().includes("value"))
+    ) {
       return getCurrencyFontSize(value, 22);
     }
     return 22;
   };
 
   const CardContent = () => (
-    <View style={[
-      styles.metricCard,
-      featured && styles.metricCardFeatured,
-      onPress && { flex: 1 }
-    ]}>
+    <View
+      style={[
+        styles.metricCard,
+        featured && styles.metricCardFeatured,
+        onPress && { flex: 1 },
+      ]}
+    >
       <View style={styles.metricHeader}>
-        <Text style={styles.metricTitle} numberOfLines={2}>{title}</Text>
+        <Text style={styles.metricTitle} numberOfLines={2}>
+          {title}
+        </Text>
         <View style={[styles.metricIcon, { backgroundColor: iconBg }]}>
           {icon}
         </View>
       </View>
-      <Text style={[
-        styles.metricValue,
-        { fontSize: getFontSize(), color: valueColor }
-      ]} numberOfLines={1} adjustsFontSizeToFit>
+      <Text
+        style={[
+          styles.metricValue,
+          { fontSize: getFontSize(), color: valueColor },
+        ]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
         {formatValue()}
       </Text>
       {subtitle && (
-        <Text style={styles.metricSubtext} numberOfLines={1}>{subtitle}</Text>
+        <Text style={styles.metricSubtext} numberOfLines={1}>
+          {subtitle}
+        </Text>
       )}
     </View>
   );
 
   if (onPress) {
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={{ flex: 1 }}>
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.7}
+        style={{ flex: 1 }}
+      >
         <CardContent />
       </TouchableOpacity>
     );
@@ -460,15 +487,14 @@ const FilterButton: React.FC<{
 }> = ({ active, onPress, children }) => (
   <TouchableOpacity
     onPress={onPress}
-    style={[
-      styles.filterButton,
-      active && styles.filterButtonActive
-    ]}
+    style={[styles.filterButton, active && styles.filterButtonActive]}
   >
-    <Text style={[
-      styles.filterText,
-      active ? styles.filterTextActive : styles.filterTextInactive
-    ]}>
+    <Text
+      style={[
+        styles.filterText,
+        active ? styles.filterTextActive : styles.filterTextInactive,
+      ]}
+    >
       {children}
     </Text>
   </TouchableOpacity>
@@ -481,12 +507,20 @@ export default function HomeScreen() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<"today" | "week" | "month">("today");
+  const [selectedFilter, setSelectedFilter] = useState<
+    "today" | "week" | "month"
+  >("today");
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [syncRunning, setSyncRunning] = useState(false);
+  const [backupRunning, setBackupRunning] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [latestBackup, setLatestBackup] = useState<{ name: string } | null>(
+    null
+  );
 
   const getDateFilter = (): DateFilterOptions => {
     const today = new Date();
-    const endDate = today.toISOString().split('T')[0];
+    const endDate = today.toISOString().split("T")[0];
 
     switch (selectedFilter) {
       case "today":
@@ -495,15 +529,15 @@ export default function HomeScreen() {
         const weekStart = new Date(today);
         weekStart.setDate(today.getDate() - 6);
         return {
-          startDate: weekStart.toISOString().split('T')[0],
-          endDate
+          startDate: weekStart.toISOString().split("T")[0],
+          endDate,
         };
       case "month":
         const monthStart = new Date(today);
         monthStart.setDate(1);
         return {
-          startDate: monthStart.toISOString().split('T')[0],
-          endDate
+          startDate: monthStart.toISOString().split("T")[0],
+          endDate,
         };
       default:
         return { startDate: endDate, endDate };
@@ -513,7 +547,8 @@ export default function HomeScreen() {
   const loadDashboardData = async () => {
     try {
       const dateFilter = getDateFilter();
-      const dashboardStats = await dashboardService.getDashboardStats(dateFilter);
+      const dashboardStats =
+        await dashboardService.getDashboardStats(dateFilter);
       setStats(dashboardStats);
     } catch (error) {
       console.error("Error loading dashboard data:", error);
@@ -564,6 +599,54 @@ export default function HomeScreen() {
     ]);
   };
 
+  const handleSyncNow = async () => {
+    try {
+      setSyncRunning(true);
+      await openDatabase();
+      await syncService.syncAll();
+      const ts = await syncService.getLastSyncAt();
+      if (ts) setLastSyncAt(ts);
+      Alert.alert("Sync", "Sync completed");
+    } catch (e: any) {
+      console.error("[sync] manual sync failed", e);
+      Alert.alert("Sync failed", e?.message || String(e));
+    } finally {
+      setSyncRunning(false);
+    }
+  };
+
+  const handleBackupDb = async () => {
+    try {
+      setBackupRunning(true);
+      await openDatabase();
+      const res = await backupService.backupNow();
+      setLatestBackup({
+        name: res.objectPath.split("/").pop() || res.objectPath,
+      });
+      Alert.alert("Backup", `Backup uploaded: ${res.objectPath}`);
+    } catch (e: any) {
+      console.error("[backup] failed", e);
+      Alert.alert("Backup failed", e?.message || String(e));
+    } finally {
+      setBackupRunning(false);
+    }
+  };
+
+  // Load last sync and latest backup on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        await openDatabase();
+        const ts = await syncService.getLastSyncAt();
+        if (ts) setLastSyncAt(ts);
+        const latest = await backupService.getLatestBackup();
+        if (latest) setLatestBackup({ name: latest.name });
+      } catch (e) {
+        console.warn("[sync] failed to load last sync time", e);
+      }
+    })();
+  }, []);
+
   const handleExpenseAdded = () => {
     loadDashboardData();
   };
@@ -602,7 +685,7 @@ export default function HomeScreen() {
         }
       >
         <LinearGradient
-          colors={[theme.colors.primary, theme.colors.primaryDark || '#1e40af']}
+          colors={[theme.colors.primary, theme.colors.primaryDark || "#1e40af"]}
           style={[styles.headerGradient, { paddingTop: insets.top + 24 }]}
         >
           <View style={styles.headerContent}>
@@ -612,13 +695,6 @@ export default function HomeScreen() {
                 <Text style={styles.headerTitle}>Dashboard</Text>
               </View>
               <View style={styles.headerActions}>
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.primaryActionButton]}
-                  onPress={() => setShowAddExpense(true)}
-                >
-                  <Plus size={18} color={theme.colors.primary} />
-                  <Text style={{ color: theme.colors.primary, fontWeight: '600', fontSize: 13 }}>Add</Text>
-                </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.actionButton}
                   onPress={handleLogout}
@@ -674,9 +750,26 @@ export default function HomeScreen() {
               <MetricCard
                 title="Profit"
                 value={stats?.profit || 0}
-                icon={<TrendingUp size={20} color={stats && stats.profit >= 0 ? theme.colors.success : theme.colors.error} />}
-                iconBg={stats && stats.profit >= 0 ? theme.colors.successLight : "#fef2f2"}
-                valueColor={stats && stats.profit >= 0 ? theme.colors.success : theme.colors.error}
+                icon={
+                  <TrendingUp
+                    size={20}
+                    color={
+                      stats && stats.profit >= 0
+                        ? theme.colors.success
+                        : theme.colors.error
+                    }
+                  />
+                }
+                iconBg={
+                  stats && stats.profit >= 0
+                    ? theme.colors.successLight
+                    : "#fef2f2"
+                }
+                valueColor={
+                  stats && stats.profit >= 0
+                    ? theme.colors.success
+                    : theme.colors.error
+                }
                 featured={true}
                 subtitle="Net earnings"
               />
@@ -711,7 +804,11 @@ export default function HomeScreen() {
               />
               <MetricCard
                 title="Avg Order"
-                value={stats?.totalOrders && stats?.totalOrders > 0 ? Math.round(stats.totalRevenue / stats.totalOrders) : 0}
+                value={
+                  stats?.totalOrders && stats?.totalOrders > 0
+                    ? Math.round(stats.totalRevenue / stats.totalOrders)
+                    : 0
+                }
                 icon={<BarChart3 size={20} color={theme.colors.info} />}
                 iconBg="#eff6ff"
                 valueColor={theme.colors.info}
@@ -722,10 +819,96 @@ export default function HomeScreen() {
 
           {/* Unbilled Orders Card removed */}
 
+          {/* Sync & Backup */}
+          <View
+            style={{
+              backgroundColor: "white",
+              borderRadius: 12,
+              padding: 16,
+              borderWidth: 1,
+              borderColor: "#e5e7eb",
+              marginTop: 32,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginBottom: 12,
+              }}
+            >
+              <Database size={20} color={theme.colors.primary} />
+              <Text style={{ marginLeft: 8, fontWeight: "700", fontSize: 16 }}>
+                Sync & Backup
+              </Text>
+            </View>
+            <Text style={{ color: "#6b7280", marginBottom: 12 }}>
+              Sync your data to the cloud and create a manual backup of your
+              local database.
+            </Text>
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <TouchableOpacity
+                onPress={handleSyncNow}
+                disabled={syncRunning}
+                style={{
+                  backgroundColor: syncRunning
+                    ? "#9CA3AF"
+                    : theme.colors.primary,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 8,
+                  flexDirection: "row",
+                  alignItems: "center",
+                }}
+              >
+                {syncRunning ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ color: "white", fontWeight: "600" }}>
+                    Sync now
+                  </Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleBackupDb}
+                disabled={backupRunning}
+                style={{
+                  backgroundColor: "#fff",
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: "#e5e7eb",
+                  opacity: backupRunning ? 0.6 : 1,
+                }}
+              >
+                {backupRunning ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text style={{ color: "#111827", fontWeight: "600" }}>
+                    Backup DB
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+            {lastSyncAt && (
+              <Text style={{ marginTop: 8, color: "#6b7280" }}>
+                Last sync: {new Date(lastSyncAt).toLocaleString()}
+              </Text>
+            )}
+            {latestBackup && (
+              <Text style={{ marginTop: 4, color: "#6b7280" }}>
+                Latest backup: {latestBackup.name}
+              </Text>
+            )}
+          </View>
+
           {selectedFilter !== "today" && (
             <View style={styles.performanceCard}>
               <View style={styles.performanceHeader}>
-                <Text style={styles.performanceTitle}>Today&apos;s Performance</Text>
+                <Text style={styles.performanceTitle}>
+                  Today&apos;s Performance
+                </Text>
                 <View style={styles.performanceBadge}>
                   <Text style={styles.performanceBadgeText}>Live</Text>
                 </View>
@@ -733,31 +916,53 @@ export default function HomeScreen() {
               <View style={styles.performanceGrid}>
                 <View style={styles.performanceMetric}>
                   <Text style={styles.performanceMetricTitle}>Orders</Text>
-                  <Text style={[styles.performanceMetricValue, { color: '#1e293b' }]}>
+                  <Text
+                    style={[
+                      styles.performanceMetricValue,
+                      { color: "#1e293b" },
+                    ]}
+                  >
                     {stats?.todayOrders || 0}
                   </Text>
                 </View>
                 <View style={styles.performanceMetric}>
                   <Text style={styles.performanceMetricTitle}>Revenue</Text>
-                  <Text style={[
-                    styles.performanceMetricValue,
-                    {
-                      color: theme.colors.success,
-                      fontSize: getCurrencyFontSize(stats?.todayRevenue || 0, 18)
-                    }
-                  ]} numberOfLines={1} adjustsFontSizeToFit>
+                  <Text
+                    style={[
+                      styles.performanceMetricValue,
+                      {
+                        color: theme.colors.success,
+                        fontSize: getCurrencyFontSize(
+                          stats?.todayRevenue || 0,
+                          18
+                        ),
+                      },
+                    ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
                     {formatCurrency(stats?.todayRevenue || 0)}
                   </Text>
                 </View>
                 <View style={styles.performanceMetric}>
                   <Text style={styles.performanceMetricTitle}>Profit</Text>
-                  <Text style={[
-                    styles.performanceMetricValue,
-                    {
-                      color: stats && stats.todayProfit >= 0 ? theme.colors.success : theme.colors.error,
-                      fontSize: getCurrencyFontSize(stats?.todayProfit || 0, 18)
-                    }
-                  ]} numberOfLines={1} adjustsFontSizeToFit>
+                  <Text
+                    style={[
+                      styles.performanceMetricValue,
+                      {
+                        color:
+                          stats && stats.todayProfit >= 0
+                            ? theme.colors.success
+                            : theme.colors.error,
+                        fontSize: getCurrencyFontSize(
+                          stats?.todayProfit || 0,
+                          18
+                        ),
+                      },
+                    ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
                     {formatCurrency(stats?.todayProfit || 0)}
                   </Text>
                 </View>

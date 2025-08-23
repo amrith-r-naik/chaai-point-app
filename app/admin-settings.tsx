@@ -1,13 +1,11 @@
 import { theme } from "@/constants/theme";
 import { openDatabase, runIntegrityAudit } from "@/lib/db";
 import { adminService } from "@/services/adminService";
-import { backupService } from "@/services/backupService";
 import {
   CreateMenuItemData,
   MenuItem,
   menuService,
 } from "@/services/menuService";
-import { syncService } from "@/services/syncService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import { router } from "expo-router";
@@ -60,49 +58,18 @@ export default function AdminSettingsScreen() {
     "Cigarettes",
   ];
 
-  // --- Phase 1: Sync UI state (stub) ---
-  const [syncRunning, setSyncRunning] = useState(false);
-  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
-  const [latestBackup, setLatestBackup] = useState<{ name: string } | null>(
-    null
-  );
-  const [backupRunning, setBackupRunning] = useState(false);
+  // Sync & Backup controls moved to Dashboard
 
   useEffect(() => {
-    // Check if user is authenticated and has admin role
+    // Auth required
     if (!auth.user) {
       router.replace("/(auth)/login");
       return;
     }
 
-    if (auth.user.role !== "admin") {
-      Alert.alert(
-        "Access Denied",
-        "You don&apos;t have permission to access admin settings. Only admin users can access this area.",
-        [
-          {
-            text: "OK",
-            onPress: () => router.back(),
-          },
-        ]
-      );
-      return;
-    }
-
     loadTableCounts();
     loadMenuItems();
-    // Load last sync time from sync_state
-    (async () => {
-      try {
-        await openDatabase();
-        const ts = await syncService.getLastSyncAt();
-        if (ts) setLastSyncAt(ts);
-        const latest = await backupService.getLatestBackup();
-        if (latest) setLatestBackup({ name: latest.name });
-      } catch (e) {
-        console.warn("[sync] failed to load last sync time", e);
-      }
-    })();
+  // Sync & Backup state removed here; handled on Dashboard
   }, [auth.user]);
 
   const loadMenuItems = async () => {
@@ -114,8 +81,8 @@ export default function AdminSettingsScreen() {
     }
   };
 
-  // Show access denied screen for non-admin users
-  if (!auth.user || auth.user.role !== "admin") {
+  // Show access denied screen for unauthenticated users
+  if (!auth.user) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: "#f9fafb" }}>
         <View
@@ -361,41 +328,7 @@ export default function AdminSettingsScreen() {
     }
   };
 
-  // --- Phase 1: Sync actions (stubs) ---
-  const handleSyncNow = async () => {
-    try {
-      setSyncRunning(true);
-      console.log("[sync] starting manual sync");
-      await openDatabase();
-      await syncService.syncAll();
-      const ts = await syncService.getLastSyncAt();
-      if (ts) setLastSyncAt(ts);
-      console.log("[sync] completed at", ts);
-      Alert.alert("Sync", "Sync completed");
-    } catch (e: any) {
-      console.error("[sync] manual sync failed", e);
-      Alert.alert("Sync failed", e?.message || String(e));
-    } finally {
-      setSyncRunning(false);
-    }
-  };
-
-  const handleBackupDb = async () => {
-    try {
-      setBackupRunning(true);
-      await openDatabase();
-      const res = await backupService.backupNow();
-      setLatestBackup({
-        name: res.objectPath.split("/").pop() || res.objectPath,
-      });
-      Alert.alert("Backup", `Backup uploaded: ${res.objectPath}`);
-    } catch (e: any) {
-      console.error("[backup] failed", e);
-      Alert.alert("Backup failed", e?.message || String(e));
-    } finally {
-      setBackupRunning(false);
-    }
-  };
+  // Sync & Backup actions removed from Admin Settings
 
   // Menu Management Functions
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -644,87 +577,7 @@ export default function AdminSettingsScreen() {
       </SafeAreaView>
 
       <ScrollView style={{ flex: 1, padding: 24 }}>
-        {/* Sync & Backup Section (Phase 1) */}
-        <View
-          style={{
-            backgroundColor: "white",
-            borderRadius: 12,
-            padding: 16,
-            borderWidth: 1,
-            borderColor: theme.colors.border,
-            marginBottom: 16,
-          }}
-        >
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginBottom: 12,
-            }}
-          >
-            <Database size={20} color={theme.colors.primary} />
-            <Text style={{ marginLeft: 8, fontWeight: "700", fontSize: 16 }}>
-              Sync & Backup
-            </Text>
-          </View>
-          <Text style={{ color: theme.colors.textSecondary, marginBottom: 12 }}>
-            Sync your data to the cloud and create a manual backup of your local
-            database.
-          </Text>
-          <View style={{ flexDirection: "row", gap: 12 }}>
-            <TouchableOpacity
-              onPress={handleSyncNow}
-              disabled={syncRunning}
-              style={{
-                backgroundColor: syncRunning ? "#9CA3AF" : theme.colors.primary,
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                borderRadius: 8,
-                flexDirection: "row",
-                alignItems: "center",
-              }}
-            >
-              {syncRunning ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={{ color: "white", fontWeight: "600" }}>
-                  Sync now
-                </Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleBackupDb}
-              disabled={backupRunning}
-              style={{
-                backgroundColor: theme.colors.background,
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: theme.colors.border,
-                opacity: backupRunning ? 0.6 : 1,
-              }}
-            >
-              {backupRunning ? (
-                <ActivityIndicator />
-              ) : (
-                <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
-                  Backup DB
-                </Text>
-              )}
-            </TouchableOpacity>
-          </View>
-          {lastSyncAt && (
-            <Text style={{ marginTop: 8, color: theme.colors.textSecondary }}>
-              Last sync: {new Date(lastSyncAt).toLocaleString()}
-            </Text>
-          )}
-          {latestBackup && (
-            <Text style={{ marginTop: 4, color: theme.colors.textSecondary }}>
-              Latest backup: {latestBackup.name}
-            </Text>
-          )}
-        </View>
+  {/* Sync & Backup controls removed from Admin Settings; use Dashboard */}
         {/* Diagnostics entry removed for production */}
         {/* Database Statistics */}
         <View style={{ marginBottom: 32 }}>
@@ -804,20 +657,24 @@ export default function AdminSettingsScreen() {
             Database Management
           </Text>
 
-          <AdminCard
-            title="Seed Menu Items"
-            description="Insert standard menu items into the database"
-            icon={Database}
-            onPress={handleAddDemoMenuItems}
-          />
+          {__DEV__ && (
+            <>
+              <AdminCard
+                title="Seed Menu Items"
+                description="Insert standard menu items into the database"
+                icon={Database}
+                onPress={handleAddDemoMenuItems}
+              />
 
-          <AdminCard
-            title="Clear All Business Data"
-            description="⚠️ Permanently delete ALL business data (orders, customers, menu, payments). User accounts are preserved."
-            icon={Trash2}
-            onPress={handleClearAllTables}
-            destructive
-          />
+              <AdminCard
+                title="Clear All Business Data"
+                description="⚠️ Permanently delete ALL business data (orders, customers, menu, payments). User accounts are preserved."
+                icon={Trash2}
+                onPress={handleClearAllTables}
+                destructive
+              />
+            </>
+          )}
         </View>
 
         {/* Integrity Audit */}

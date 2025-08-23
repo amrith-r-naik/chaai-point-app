@@ -334,6 +334,158 @@ async function runMigrations() {
       throw e;
     }
   }
+
+  // v3 -> v4: relax billNumber constraints on bills (allow NULL) and drop any UNIQUE index on billNumber
+  if (v < 4) {
+    // Temporarily disable FK checks for table rebuild
+    await db!.execAsync("PRAGMA foreign_keys = OFF;");
+    await db!.execAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      // Drop any legacy triggers that reference bills (e.g., trg_restrict_delete_customer_bill)
+      const billTriggers = (await db!.getAllAsync(
+        `SELECT name FROM sqlite_master WHERE type='trigger' AND sql LIKE '%bills%'`
+      )) as { name: string }[];
+      for (const t of billTriggers || []) {
+        try {
+          await db!.execAsync(`DROP TRIGGER IF EXISTS ${t.name};`);
+        } catch {}
+      }
+      // 1) Drop any unique indexes on bills that include billNumber
+      const idxList = (await db!.getAllAsync(`PRAGMA index_list(bills)`)) as {
+        name: string;
+        unique: number;
+      }[];
+      for (const idx of idxList || []) {
+        try {
+          const cols = (await db!.getAllAsync(
+            `PRAGMA index_info(${idx.name})`
+          )) as { name: string }[];
+          const hasBillNumber = cols?.some((c) => c.name === "billNumber");
+          if (idx.unique && hasBillNumber) {
+            await db!.execAsync(`DROP INDEX IF EXISTS ${idx.name};`);
+          }
+        } catch {}
+      }
+
+      // 2) Check current NOT NULL status of billNumber
+      const cols = (await db!.getAllAsync(`PRAGMA table_info(bills)`)) as any[];
+      const billNumberCol = cols.find((c) => c.name === "billNumber");
+      const isNotNull = !!billNumberCol && Number(billNumberCol.notnull) === 1;
+
+      if (isNotNull) {
+        // Rebuild the bills table making billNumber nullable
+        await db!.execAsync(`
+          CREATE TABLE IF NOT EXISTS bills_new (
+            id TEXT PRIMARY KEY,
+            billNumber INTEGER,
+            customerId TEXT NOT NULL,
+            total INTEGER NOT NULL,
+            createdAt TEXT NOT NULL,
+            shopId TEXT,
+            deletedAt TEXT,
+            updatedAt TEXT,
+            FOREIGN KEY (customerId) REFERENCES customers(id)
+          );
+        `);
+        // Copy data, converting placeholder 0 to NULL to avoid accidental uniqueness collisions
+        await db!.execAsync(`
+          INSERT INTO bills_new (id, billNumber, customerId, total, createdAt, shopId, deletedAt, updatedAt)
+          SELECT id, NULLIF(billNumber, 0), customerId, total, createdAt, shopId, deletedAt, updatedAt FROM bills;
+        `);
+        // Drop old table and rename
+        await db!.execAsync(`DROP TABLE bills;`);
+        await db!.execAsync(`ALTER TABLE bills_new RENAME TO bills;`);
+
+        // Recreate indices lost during rebuild
+        await db!.execAsync(
+          `CREATE INDEX IF NOT EXISTS idx_bills_customer ON bills(customerId);`
+        );
+        await db!.execAsync(
+          `CREATE INDEX IF NOT EXISTS idx_bills_createdAt ON bills(createdAt);`
+        );
+        await db!.execAsync(
+          `CREATE INDEX IF NOT EXISTS idx_bills_shop_updated ON bills(shopId, updatedAt);`
+        );
+        // Recreate updatedAt triggers for bills (these were created in v3 for all tables originally)
+        await db!.execAsync(`
+          CREATE TRIGGER IF NOT EXISTS trg_bills_updatedAt_insert
+          AFTER INSERT ON bills
+          FOR EACH ROW
+          BEGIN
+            UPDATE bills SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now')) WHERE id = NEW.id;
+          END;
+        `);
+        await db!.execAsync(`
+          CREATE TRIGGER IF NOT EXISTS trg_bills_updatedAt
+          AFTER UPDATE ON bills
+          FOR EACH ROW
+          BEGIN
+            UPDATE bills
+            SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now'))
+            WHERE id = NEW.id;
+          END;
+        `);
+      }
+
+      await setUserVersion(4);
+      await db!.execAsync("COMMIT");
+      await db!.execAsync("PRAGMA foreign_keys = ON;");
+      v = 4;
+    } catch (e) {
+      await db!.execAsync("ROLLBACK");
+      await db!.execAsync("PRAGMA foreign_keys = ON;");
+      throw e;
+    }
+  }
+
+  // v4 -> v5: add local counters table for provisional numbers (KOT/day, bills/year, receipts/year, expenses/year)
+  if (v < 5) {
+    await db!.execAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      await db!.execAsync(`
+        CREATE TABLE IF NOT EXISTS local_counters (
+          scope TEXT NOT NULL,
+          periodKey TEXT NOT NULL,
+          name TEXT NOT NULL,
+          value INTEGER NOT NULL,
+          PRIMARY KEY (scope, periodKey, name)
+        );
+      `);
+      await setUserVersion(5);
+      await db!.execAsync("COMMIT");
+      v = 5;
+    } catch (e) {
+      await db!.execAsync("ROLLBACK");
+      throw e;
+    }
+  }
+
+  // v5 -> v6: drop any UNIQUE indexes on receipts(receiptNo)
+  if (v < 6) {
+    await db!.execAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      const idxList = (await db!.getAllAsync(
+        `PRAGMA index_list(receipts)`
+      )) as { name: string; unique: number }[];
+      for (const idx of idxList || []) {
+        try {
+          const cols = (await db!.getAllAsync(
+            `PRAGMA index_info(${idx.name})`
+          )) as { name: string }[];
+          const hasReceiptNo = cols?.some((c) => c.name === "receiptNo");
+          if (idx.unique && hasReceiptNo) {
+            await db!.execAsync(`DROP INDEX IF EXISTS ${idx.name};`);
+          }
+        } catch {}
+      }
+      await setUserVersion(6);
+      await db!.execAsync("COMMIT");
+      v = 6;
+    } catch (e) {
+      await db!.execAsync("ROLLBACK");
+      throw e;
+    }
+  }
 }
 
 // Integrity audit: verify bill totals and customer credit consistency
@@ -415,4 +567,68 @@ export async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
       throw e;
     }
   }
+}
+
+// Local counters helper: call from within withTransaction
+export async function nextLocalNumber(
+  name: "kot" | "bill" | "receipt" | "expense",
+  date: Date
+): Promise<number> {
+  if (!db) throw new Error("Database not initialized");
+  const shop = "shop_1"; // single-shop local scope
+  const periodKey =
+    name === "kot"
+      ? date.toISOString().slice(0, 10) // YYYY-MM-DD
+      : String(date.getUTCFullYear()); // YYYY
+  const scope = shop;
+  // Read
+  let row = (await db.getFirstAsync(
+    `SELECT value FROM local_counters WHERE scope=? AND periodKey=? AND name=?`,
+    [scope, periodKey, name]
+  )) as { value: number } | null;
+  if (!row) {
+    // seed from maxima in existing tables
+    let seed = 0;
+    if (name === "kot") {
+      const r = (await db.getFirstAsync(
+        `SELECT COALESCE(MAX(kotNumber),0) as m FROM kot_orders WHERE DATE(createdAt)=DATE(?)`,
+        [date.toISOString()]
+      )) as any;
+      seed = r?.m || 0;
+    } else if (name === "bill") {
+      const year = String(date.getUTCFullYear());
+      const r = (await db.getFirstAsync(
+        `SELECT COALESCE(MAX(billNumber),0) as m FROM bills WHERE strftime('%Y', createdAt)=?`,
+        [year]
+      )) as any;
+      seed = r?.m || 0;
+    } else if (name === "receipt") {
+      const year = String(date.getUTCFullYear());
+      const r = (await db.getFirstAsync(
+        `SELECT COALESCE(MAX(receiptNo),0) as m FROM receipts WHERE strftime('%Y', createdAt)=?`,
+        [year]
+      )) as any;
+      seed = r?.m || 0;
+    } else if (name === "expense") {
+      const year = String(date.getUTCFullYear());
+      const r = (await db.getFirstAsync(
+        `SELECT COALESCE(MAX(voucherNo),0) as m FROM expenses WHERE strftime('%Y', createdAt)=?`,
+        [year]
+      )) as any;
+      seed = r?.m || 0;
+    }
+    await db.runAsync(
+      `INSERT INTO local_counters(scope, periodKey, name, value) VALUES(?,?,?,?)`,
+      [scope, periodKey, name, seed]
+    );
+    row = { value: seed } as any;
+  }
+  const next = (row?.value ?? 0) + 1;
+  // Upsert
+  await db.runAsync(
+    `INSERT INTO local_counters(scope, periodKey, name, value) VALUES(?,?,?,?)
+     ON CONFLICT(scope, periodKey, name) DO UPDATE SET value=excluded.value`,
+    [scope, periodKey, name, next]
+  );
+  return next;
 }

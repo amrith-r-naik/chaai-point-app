@@ -1,8 +1,8 @@
 // app/(modals)/create-order.tsx
 import { use$ } from "@legendapp/state/react";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Pencil, Plus, ShoppingBag, User } from "lucide-react-native";
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { theme } from "../../constants/theme";
 import { orderService } from "../../services/orderService";
@@ -13,12 +13,20 @@ export default function CreateOrderScreen() {
   const router = useRouter();
   const orderStateData = use$(orderState);
   const customerStateData = use$(customerState);
+  const { customerId: presetCustomerId } = useLocalSearchParams<{
+    customerId?: string;
+  }>();
 
   // Always start with a clean slate when opening the create order flow
   useEffect(() => {
     orderState.selectedItems.set([]);
-    orderState.selectedCustomerId.set(null);
-  }, []);
+    // If a customerId is provided via route (e.g., from Customer Details), pre-select it
+    if (presetCustomerId) {
+      orderState.selectedCustomerId.set(String(presetCustomerId));
+    } else {
+      orderState.selectedCustomerId.set(null);
+    }
+  }, [presetCustomerId]);
 
   const handleSelectCustomer = () => {
     router.push("/(modals)/select-customer");
@@ -55,29 +63,42 @@ export default function CreateOrderScreen() {
       orderState.orders.set(orders);
 
       // Show success message
-      Alert.alert("Order Created", "KOT created successfully! Amount added to customer dues.", [
-        {
-          text: "OK",
-          onPress: () => {
-            // Reset state and navigate back
-            orderState.selectedCustomerId.set(null);
-            orderState.selectedItems.set([]);
-            router.back();
+      Alert.alert(
+        "Order Created",
+        "KOT created successfully! Amount added to customer dues.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              // Reset state and navigate back
+              orderState.selectedCustomerId.set(null);
+              orderState.selectedItems.set([]);
+              router.back();
+            },
           },
-        },
-      ]);
+        ]
+      );
     } catch (error) {
       console.error("Error creating order:", error);
       orderState.error.set("Failed to create order");
 
       let errorMessage = "Failed to create order. Please try again.";
       if (error instanceof Error) {
-        if (error.message.includes("Customer") && error.message.includes("does not exist")) {
-          errorMessage = "Selected customer no longer exists. Please select a different customer.";
-        } else if (error.message.includes("Menu item") && error.message.includes("does not exist")) {
-          errorMessage = "One or more selected items are no longer available. Please update your selection.";
+        if (
+          error.message.includes("Customer") &&
+          error.message.includes("does not exist")
+        ) {
+          errorMessage =
+            "Selected customer no longer exists. Please select a different customer.";
+        } else if (
+          error.message.includes("Menu item") &&
+          error.message.includes("does not exist")
+        ) {
+          errorMessage =
+            "One or more selected items are no longer available. Please update your selection.";
         } else if (error.message.includes("FOREIGN KEY constraint failed")) {
-          errorMessage = "Data integrity error. Please ensure you have selected a valid customer and menu items.";
+          errorMessage =
+            "Data integrity error. Please ensure you have selected a valid customer and menu items.";
         }
       }
 
@@ -453,8 +474,8 @@ export default function CreateOrderScreen() {
             style={{
               backgroundColor:
                 selectedCustomer &&
-                  orderStateData.selectedItems.length > 0 &&
-                  !orderStateData.isCreatingOrder
+                orderStateData.selectedItems.length > 0 &&
+                !orderStateData.isCreatingOrder
                   ? theme.colors.primary
                   : "#d1d5db",
               paddingVertical: 16,
@@ -464,8 +485,8 @@ export default function CreateOrderScreen() {
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity:
                 selectedCustomer &&
-                  orderStateData.selectedItems.length > 0 &&
-                  !orderStateData.isCreatingOrder
+                orderStateData.selectedItems.length > 0 &&
+                !orderStateData.isCreatingOrder
                   ? 0.3
                   : 0,
               shadowRadius: 8,
@@ -476,8 +497,8 @@ export default function CreateOrderScreen() {
               style={{
                 color:
                   selectedCustomer &&
-                    orderStateData.selectedItems.length > 0 &&
-                    !orderStateData.isCreatingOrder
+                  orderStateData.selectedItems.length > 0 &&
+                  !orderStateData.isCreatingOrder
                     ? "white"
                     : "#9ca3af",
                 fontWeight: "600",

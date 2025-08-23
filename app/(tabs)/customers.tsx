@@ -1,14 +1,18 @@
-import { getAllCustomers, getCustomersSummary, searchCustomers } from "@/services/customerService";
+import {
+  getAllCustomers,
+  getCustomersSummary,
+  searchCustomers,
+} from "@/services/customerService";
 import { orderService } from "@/services/orderService";
 import { paymentService } from "@/services/paymentService";
 import { authState } from "@/state/authState";
 import { customerState } from "@/state/customerState";
 import { use$ } from "@legendapp/state/react";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { Lock } from 'lucide-react-native';
-import React, { useCallback, useEffect, useState } from "react";
+import { Lock } from "lucide-react-native";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -21,56 +25,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-interface Customer {
-  id: string;
-  name: string;
-  contact?: string;
-  createdAt: string;
-  updatedAt: string;
-  // Enhanced fields for payment tracking
-  totalOrders?: number;
-  totalAmount?: number;
-  paidAmount?: number;
-  creditAmount?: number;
-  paidOrders?: number;
-  creditOrders?: number;
-}
+// (type removed) unused Customer interface
 
-interface CustomerData {
-  customer: Customer;
-  totalAmount: number;
-  orderCount: number;
-  hasCompletedBilling: boolean;
-  hasActiveOrders: boolean;
-  isPaidCustomer: boolean; // New field to track if customer has paid (non-credit)
-  activeAmount: number;
-  completedAmount: number;
-  activeOrderCount: number;
-  completedOrderCount: number;
-}
+// (type removed) unused CustomerData interface
 
-interface DateGroup {
-  date: string;
-  displayDate: string;
-  customers: Record<string, CustomerData>;
-}
-
-interface CompletedBillGroup {
-  date: string;
-  displayDate: string;
-  bills: Array<{
-    id: string;
-    billNumber: string;
-    receiptNo: string;
-    customerId: string;
-    customerName: string;
-    customerContact?: string;
-    amount: number;
-    mode: string;
-    remarks?: string;
-    createdAt: string;
-  }>;
-}
+// (types removed) Unused interfaces DateGroup and CompletedBillGroup
 
 type TabType = "active" | "completed" | "all";
 
@@ -116,11 +75,15 @@ export default function CustomersScreen() {
       const summaries = await getCustomersSummary();
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
-        return summaries.filter(c => c.name.toLowerCase().includes(q) || (c.contact && c.contact.includes(q)));
+        return summaries.filter(
+          (c) =>
+            c.name.toLowerCase().includes(q) ||
+            (c.contact && c.contact.includes(q))
+        );
       }
       return summaries;
     } catch (e) {
-      console.error('Error loading customer summaries:', e);
+      console.error("Error loading customer summaries:", e);
       return [];
     }
   }, [searchQuery, auth.isDbReady]);
@@ -159,7 +122,14 @@ export default function CustomersScreen() {
       customerState.loading.set(false);
       setIsSearching(false);
     }
-  }, [searchQuery, auth.isDbReady, activeTab, loadOrdersData, loadCompletedBillsData, loadCustomersWithStats]);
+  }, [
+    searchQuery,
+    auth.isDbReady,
+    activeTab,
+    loadOrdersData,
+    loadCompletedBillsData,
+    loadCustomersWithStats,
+  ]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -167,7 +137,11 @@ export default function CustomersScreen() {
       if (activeTab === "all") {
         await loadCustomers();
       } else {
-        await Promise.all([loadCustomers(), loadOrdersData(), loadCompletedBillsData()]);
+        await Promise.all([
+          loadCustomers(),
+          loadOrdersData(),
+          loadCompletedBillsData(),
+        ]);
       }
     } catch (error) {
       console.error("Error refreshing data:", error);
@@ -176,68 +150,78 @@ export default function CustomersScreen() {
     }
   }, [loadCustomers, loadOrdersData, loadCompletedBillsData, activeTab]);
 
-  const handleEOD = useCallback(async (dateString: string) => {
-    try {
-      setIsProcessingEOD(true);
+  const handleEOD = useCallback(
+    async (dateString: string) => {
+      try {
+        setIsProcessingEOD(true);
 
-      // Show confirmation dialog
-      Alert.alert(
-        "End of Day Process",
-        `Are you sure you want to process EOD for ${dateString}? This will convert all active KOTs to credit payments.`,
-        [
-          {
-            text: "Cancel",
-            style: "cancel",
-            onPress: () => setIsProcessingEOD(false)
-          },
-          {
-            text: "Confirm",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                // Process EOD
-                const result = await orderService.processEndOfDay(dateString);
+        // Show confirmation dialog
+        Alert.alert(
+          "End of Day Process",
+          `Are you sure you want to process EOD for ${dateString}? This will convert all active KOTs to credit payments.`,
+          [
+            {
+              text: "Cancel",
+              style: "cancel",
+              onPress: () => setIsProcessingEOD(false),
+            },
+            {
+              text: "Confirm",
+              style: "destructive",
+              onPress: async () => {
+                try {
+                  // Process EOD
+                  const result = await orderService.processEndOfDay(dateString);
 
-                if (result.processedKOTs > 0) {
+                  if (result.processedKOTs > 0) {
+                    Alert.alert(
+                      "EOD Completed",
+                      `Successfully processed ${result.processedKOTs} KOTs as credit payments.\nTotal Amount: ₹${result.totalAmount.toFixed(2)}`,
+                      [{ text: "OK" }]
+                    );
+
+                    // Refresh data to reflect changes
+                    await handleRefresh();
+                  } else {
+                    Alert.alert(
+                      "No Active KOTs",
+                      "No active KOTs found for EOD processing.",
+                      [{ text: "OK" }]
+                    );
+                  }
+                } catch (error) {
+                  console.error("Error processing EOD:", error);
                   Alert.alert(
-                    "EOD Completed",
-                    `Successfully processed ${result.processedKOTs} KOTs as credit payments.\nTotal Amount: ₹${result.totalAmount.toFixed(2)}`,
+                    "Error",
+                    "Failed to process EOD. Please try again.",
                     [{ text: "OK" }]
                   );
-
-                  // Refresh data to reflect changes
-                  await handleRefresh();
-                } else {
-                  Alert.alert("No Active KOTs", "No active KOTs found for EOD processing.", [{ text: "OK" }]);
+                } finally {
+                  setIsProcessingEOD(false);
                 }
-              } catch (error) {
-                console.error('Error processing EOD:', error);
-                Alert.alert("Error", "Failed to process EOD. Please try again.", [{ text: "OK" }]);
-              } finally {
-                setIsProcessingEOD(false);
-              }
-            }
-          }
-        ]
-      );
-
-    } catch (error) {
-      console.error('Error in handleEOD:', error);
-      setIsProcessingEOD(false);
-    }
-  }, [handleRefresh]);
+              },
+            },
+          ]
+        );
+      } catch (error) {
+        console.error("Error in handleEOD:", error);
+        setIsProcessingEOD(false);
+      }
+    },
+    [handleRefresh]
+  );
 
   // Check if it's time for automatic EOD (11:30 PM IST)
   const checkAutoEOD = useCallback(async () => {
     try {
       const now = new Date();
-      const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000)); // Convert to IST
+      const istTime = new Date(now.getTime() + 5.5 * 60 * 60 * 1000); // Convert to IST
       const hours = istTime.getHours();
       const minutes = istTime.getMinutes();
 
       // Check if it's 11:30 PM IST
       if (hours === 23 && minutes === 30) {
-        const today = istTime.toISOString().split('T')[0];
+        const today = istTime.toISOString().split("T")[0];
 
         // Check if EOD was already processed today
         const eodKey = `eod_processed_${today}`;
@@ -248,7 +232,7 @@ export default function CustomersScreen() {
           const result = await orderService.processEndOfDay(today);
 
           if (result.processedKOTs > 0) {
-            await AsyncStorage.setItem(eodKey, 'true');
+            await AsyncStorage.setItem(eodKey, "true");
 
             // Show notification that auto-EOD was processed
             Alert.alert(
@@ -263,7 +247,7 @@ export default function CustomersScreen() {
         }
       }
     } catch (error) {
-      console.error('Error in auto EOD check:', error);
+      console.error("Error in auto EOD check:", error);
     }
   }, [handleRefresh]);
 
@@ -271,7 +255,7 @@ export default function CustomersScreen() {
   useEffect(() => {
     const checkAutoEODOptimized = async () => {
       const now = new Date();
-      const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000)); // Convert to IST
+      const istTime = new Date(now.getTime() + 5.5 * 60 * 60 * 1000); // Convert to IST
       const hours = istTime.getHours();
       const minutes = istTime.getMinutes();
 
@@ -359,72 +343,7 @@ export default function CustomersScreen() {
     return `₹${amount.toLocaleString("en-IN")}`;
   };
 
-  // Enhanced tab statistics function
-  const getTabStats = (data: any) => {
-    const activeCustomers = new Set<string>();
-    const completedCustomers = new Set<string>();
-    const allCustomers = new Set<string>();
-
-    let activeOrders = 0;
-    let completedOrders = 0;
-    let activeAmount = 0;
-    let completedAmount = 0;
-
-    Object.values(data).forEach((group: any) => {
-      Object.values(group.customers || {}).forEach((customerData: any) => {
-        allCustomers.add(customerData.customer.id);
-
-        if (customerData.hasActiveOrders) {
-          activeCustomers.add(customerData.customer.id);
-          activeOrders += customerData.activeOrderCount;
-          activeAmount += customerData.activeAmount;
-        }
-
-        if (customerData.hasCompletedBilling) {
-          completedCustomers.add(customerData.customer.id);
-          completedOrders += customerData.completedOrderCount;
-          completedAmount += customerData.completedAmount;
-        }
-      });
-    });
-
-    // Also count completed bills for more accurate completed stats
-    Object.values(completedBills).forEach((group: any) => {
-      (group.bills || []).forEach((bill: any) => {
-        completedCustomers.add(bill.customerId);
-      });
-    });
-
-    // Get actual completed amounts and counts from bills data
-    const completedBillStats = Object.values(completedBills).reduce(
-      (acc: { count: number; amount: number }, group: any) => {
-        acc.count += (group.bills || []).length;
-        acc.amount += (group.bills || []).reduce((sum: number, bill: any) => sum + bill.amount, 0);
-        return acc;
-      },
-      { count: 0, amount: 0 }
-    );
-
-    return {
-      active: {
-        customers: activeCustomers.size,
-        orders: activeOrders,
-        amount: activeAmount,
-      },
-      completed: {
-        customers: completedCustomers.size,
-        orders: completedBillStats.count, // Use bill count instead of order count
-        amount: completedBillStats.amount, // Use actual bill amounts
-      },
-      all: {
-        customers: allCustomers.size,
-        orders: activeOrders + completedBillStats.count,
-        amount: activeAmount + completedBillStats.amount,
-      },
-    };
-  };
-
-  const tabStats = getTabStats(dateGroups);
+  // const tabStats = getTabStats(dateGroups); // currently unused
 
   // Check if EOD button should be shown for a specific date
   const shouldShowEOD = (dateString: string) => {
@@ -454,9 +373,13 @@ export default function CustomersScreen() {
         const filteredBills = (group.bills || []).filter((bill: any) => {
           if (searchQuery.trim()) {
             return (
-              bill.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              (bill.customerContact && bill.customerContact.includes(searchQuery)) ||
-              (bill.receiptNo && bill.receiptNo.toString().includes(searchQuery))
+              bill.customerName
+                .toLowerCase()
+                .includes(searchQuery.toLowerCase()) ||
+              (bill.customerContact &&
+                bill.customerContact.includes(searchQuery)) ||
+              (bill.receiptNo &&
+                bill.receiptNo.toString().includes(searchQuery))
             );
           }
           return true;
@@ -526,23 +449,23 @@ export default function CustomersScreen() {
   const renderDateSection = (date: string, group: any) => {
     const customers = Object.values(group.customers || {});
     const totalAmount = customers.reduce(
-      (sum: number, customerData: any) => sum + (
-        activeTab === "active"
+      (sum: number, customerData: any) =>
+        sum +
+        (activeTab === "active"
           ? customerData.activeAmount
           : activeTab === "completed"
             ? customerData.completedAmount
-            : customerData.totalAmount
-      ),
+            : customerData.totalAmount),
       0
     );
     const totalOrders = customers.reduce(
-      (sum: number, customerData: any) => sum + (
-        activeTab === "active"
+      (sum: number, customerData: any) =>
+        sum +
+        (activeTab === "active"
           ? customerData.activeOrderCount
           : activeTab === "completed"
             ? customerData.completedOrderCount
-            : customerData.orderCount
-      ),
+            : customerData.orderCount),
       0
     );
 
@@ -560,18 +483,18 @@ export default function CustomersScreen() {
             <View className="flex-row items-center">
               {shouldShowEOD(group.date) && (
                 <TouchableOpacity
-                  className={`px-4 py-2 rounded-full shadow-sm mr-2 ${isProcessingEOD ? 'bg-gray-400' : 'bg-red-500'}`}
+                  className={`px-4 py-2 rounded-full shadow-sm mr-2 ${isProcessingEOD ? "bg-gray-400" : "bg-red-500"}`}
                   onPress={() => handleEOD(group.date)}
                   disabled={isProcessingEOD}
                 >
                   <Text className="text-white font-semibold text-sm">
-                    {isProcessingEOD ? 'Processing...' : 'EOD'}
+                    {isProcessingEOD ? "Processing..." : "EOD"}
                   </Text>
                 </TouchableOpacity>
               )}
 
               {/* Show auto-EOD indicator for today */}
-              {group.date === new Date().toISOString().split('T')[0] && (
+              {group.date === new Date().toISOString().split("T")[0] && (
                 <View className="px-3 py-1 rounded-full bg-blue-100 border border-blue-300">
                   <Text className="text-blue-700 text-xs font-medium">
                     Auto-EOD: 11:30 PM
@@ -603,7 +526,7 @@ export default function CustomersScreen() {
 
         {/* Customers for this date */}
         <View>
-          {customers.map((customerData: any, index) =>
+          {customers.map((customerData: any, index) => (
             <TouchableOpacity
               key={`customer-${customerData.customer.id}-${index}`}
               onPress={() => {
@@ -621,26 +544,33 @@ export default function CustomersScreen() {
                 <View
                   className={`w-14 h-14 rounded-full ${getAvatarColor(customerData.customer.name)} items-center justify-center mr-4 shadow-sm`}
                 >
-                  <Text className="text-white font-bold text-base">{getCustomerInitials(customerData.customer.name)}</Text>
+                  <Text className="text-white font-bold text-base">
+                    {getCustomerInitials(customerData.customer.name)}
+                  </Text>
                 </View>
                 <View className="flex-1">
                   <Text className="text-gray-900 font-semibold text-base mb-1">
                     {customerData.customer.name}
                   </Text>
                   {customerData.customer.contact && (
-                    <Text className="text-gray-500 text-sm">{customerData.customer.contact}</Text>
+                    <Text className="text-gray-500 text-sm">
+                      {customerData.customer.contact}
+                    </Text>
                   )}
                   <Text className="text-gray-400 text-xs mt-1">
                     {activeTab === "active"
                       ? customerData.activeOrderCount
                       : activeTab === "completed"
                         ? customerData.completedOrderCount
-                        : customerData.orderCount} order
+                        : customerData.orderCount}{" "}
+                    order
                     {(activeTab === "active"
                       ? customerData.activeOrderCount
                       : activeTab === "completed"
                         ? customerData.completedOrderCount
-                        : customerData.orderCount) !== 1 ? "s" : ""}
+                        : customerData.orderCount) !== 1
+                      ? "s"
+                      : ""}
                   </Text>
                 </View>
               </View>
@@ -657,32 +587,39 @@ export default function CustomersScreen() {
                   )}
                 </Text>
                 <View
-                  className={`px-2 py-1 rounded-full ${activeTab === "active"
-                    ? "bg-orange-100"  // Always orange for active tab
-                    : customerData.hasCompletedBilling
-                      ? (customerData.isPaidCustomer ? "bg-green-100" : "bg-orange-100")
-                      : "bg-orange-100"
-                    }`}
+                  className={`px-2 py-1 rounded-full ${
+                    activeTab === "active"
+                      ? "bg-orange-100" // Always orange for active tab
+                      : customerData.hasCompletedBilling
+                        ? customerData.isPaidCustomer
+                          ? "bg-green-100"
+                          : "bg-orange-100"
+                        : "bg-orange-100"
+                  }`}
                 >
                   <Text
-                    className={`text-xs font-medium ${activeTab === "active"
-                      ? "text-orange-700"  // Always orange text for active tab
-                      : customerData.hasCompletedBilling
-                        ? (customerData.isPaidCustomer ? "text-green-700" : "text-orange-700")
-                        : "text-orange-700"
-                      }`}
+                    className={`text-xs font-medium ${
+                      activeTab === "active"
+                        ? "text-orange-700" // Always orange text for active tab
+                        : customerData.hasCompletedBilling
+                          ? customerData.isPaidCustomer
+                            ? "text-green-700"
+                            : "text-orange-700"
+                          : "text-orange-700"
+                    }`}
                   >
                     {activeTab === "active"
                       ? "Pending"
                       : customerData.hasCompletedBilling
-                        ? (customerData.isPaidCustomer ? "Paid" : "Pending")
-                        : "Pending"
-                    }
+                        ? customerData.isPaidCustomer
+                          ? "Paid"
+                          : "Pending"
+                        : "Pending"}
                   </Text>
                 </View>
               </View>
             </TouchableOpacity>
-          )}
+          ))}
         </View>
       </View>
     );
@@ -690,7 +627,19 @@ export default function CustomersScreen() {
 
   const renderCompletedBillDateSection = (date: string, group: any) => {
     const bills = group.bills || [];
-    const totalAmount = bills.reduce((sum: number, bill: any) => sum + (bill.total || bill.amount), 0);
+    // Revenue-style total for the day: exclude pure credit (accrual) amounts
+    // - Clearance: add receipt amount
+    // - Paid: add full bill total
+    // - Partial: add only paid portion
+    // - Credit (pure accrual): add 0
+    const totalAmount = bills.reduce((sum: number, bill: any) => {
+      if (bill.status === "Clearance")
+        return sum + (bill.amount || bill.total || 0);
+      if (bill.status === "Paid") return sum + (bill.total || 0);
+      if (bill.status === "Partial") return sum + (bill.paidTotal || 0);
+      // 'Credit' or unknown
+      return sum;
+    }, 0);
 
     return (
       <View
@@ -724,70 +673,121 @@ export default function CustomersScreen() {
         <View className="w-full pb-6">
           {bills
             .slice()
-            .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .sort(
+              (a: any, b: any) =>
+                new Date(b.createdAt).getTime() -
+                new Date(a.createdAt).getTime()
+            )
             .map((bill: any, index: number) => {
-              const isPureCredit = bill.status === 'Credit' && (bill.paidTotal === 0 || bill.paidTotal == null);
-              const isClearance = bill.status === 'Clearance';
+              const isPureCredit =
+                bill.status === "Credit" &&
+                (bill.paidTotal === 0 || bill.paidTotal == null);
+              const isClearance = bill.status === "Clearance";
               const handlePress = () => {
                 if (isPureCredit) return; // no navigation
-                router.push({ pathname: '/(modals)/receipt-details', params: { receiptId: bill.receiptId || bill.id } });
+                router.push({
+                  pathname: "/(modals)/receipt-details",
+                  params: { receiptId: bill.receiptId || bill.id },
+                });
               };
-              return <TouchableOpacity
-                key={`bill-${bill.id}-${index}`}
-                onPress={handlePress}
-                disabled={isPureCredit}
-                className={`flex-row items-center justify-between px-4 py-4 bg-white border border-gray-100 rounded-xl mb-3 ${isPureCredit ? '' : 'active:bg-gray-50'}`}
-                activeOpacity={0.65}
-              >
-                {/* Customer Avatar and Info */}
-                <View className="flex-row items-center flex-1">
-                  <View
-                    className={`w-14 h-14 rounded-full ${getAvatarColor(bill.customerName)} items-center justify-center mr-4 shadow-sm`}
-                  >
-                    <Text className="text-white font-bold text-base">{getCustomerInitials(bill.customerName)}</Text>
-                  </View>
-                  <View className="flex-1">
-                    <View className="flex-row items-center mb-1">
-                      {isPureCredit && (
-                        <Lock size={14} color="#b45309" style={{ marginRight: 4 }} />
-                      )}
-                      <Text className="text-gray-900 font-semibold text-base">
-                        {bill.customerName}
+              return (
+                <TouchableOpacity
+                  key={`bill-${bill.id}-${index}`}
+                  onPress={handlePress}
+                  disabled={isPureCredit}
+                  className={`flex-row items-center justify-between px-4 py-4 bg-white border border-gray-100 rounded-xl mb-3 ${isPureCredit ? "" : "active:bg-gray-50"}`}
+                  activeOpacity={0.65}
+                >
+                  {/* Customer Avatar and Info */}
+                  <View className="flex-row items-center flex-1">
+                    <View
+                      className={`w-14 h-14 rounded-full ${getAvatarColor(bill.customerName)} items-center justify-center mr-4 shadow-sm`}
+                    >
+                      <Text className="text-white font-bold text-base">
+                        {getCustomerInitials(bill.customerName)}
                       </Text>
                     </View>
-                    {bill.customerContact && (
-                      <Text className="text-gray-500 text-sm">{bill.customerContact}</Text>
-                    )}
-                    <Text className="text-gray-400 text-xs mt-1">
-                      {isClearance
-                        ? `Receipt #${bill.receiptNo || '—'} • Credit Clearance`
-                        : `Bill #${bill.billNumber || '—'} ${bill.status ? `• ${bill.status}` : ''}`}
+                    <View className="flex-1">
+                      <View className="flex-row items-center mb-1">
+                        {isPureCredit && (
+                          <Lock
+                            size={14}
+                            color="#b45309"
+                            style={{ marginRight: 4 }}
+                          />
+                        )}
+                        <Text className="text-gray-900 font-semibold text-base">
+                          {bill.customerName}
+                        </Text>
+                      </View>
+                      {bill.customerContact && (
+                        <Text className="text-gray-500 text-sm">
+                          {bill.customerContact}
+                        </Text>
+                      )}
+                      <Text className="text-gray-400 text-xs mt-1">
+                        {isClearance
+                          ? `Receipt #${bill.receiptNo || "—"} • Credit Clearance`
+                          : `Bill #${bill.billNumber || "—"} ${bill.status ? `• ${bill.status}` : ""}`}
+                      </Text>
+                      {bill.status === "Partial" && (
+                        <View className="flex-row mt-2 items-center">
+                          {bill.paidTotal > 0 && (
+                            <View className="mr-2 px-2 py-0.5 rounded-full bg-green-100">
+                              <Text className="text-[10px] text-green-700 font-semibold">
+                                Paid ₹{bill.paidTotal}
+                              </Text>
+                            </View>
+                          )}
+                          {bill.creditPortion > 0 && (
+                            <View className="px-2 py-0.5 rounded-full bg-orange-100">
+                              <Text className="text-[10px] text-orange-700 font-semibold">
+                                Cr ₹{bill.creditPortion}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Amount and Status */}
+                  <View className="items-end">
+                    <Text className="text-gray-900 font-bold text-lg mb-1">
+                      {formatCurrency((bill.total ?? bill.amount) || 0)}
                     </Text>
-                    {bill.status === 'Partial' && (
-                      <View className="flex-row mt-2 items-center">
-                        {bill.paidTotal > 0 && <View className="mr-2 px-2 py-0.5 rounded-full bg-green-100"><Text className="text-[10px] text-green-700 font-semibold">Paid ₹{bill.paidTotal}</Text></View>}
-                        {bill.creditPortion > 0 && <View className="px-2 py-0.5 rounded-full bg-orange-100"><Text className="text-[10px] text-orange-700 font-semibold">Cr ₹{bill.creditPortion}</Text></View>}
+                    {isClearance ? (
+                      <View className="px-2 py-1 rounded-full bg-blue-100">
+                        <Text className="text-xs font-medium text-blue-700">
+                          Credit Clearance
+                        </Text>
+                      </View>
+                    ) : (
+                      bill.status === "Paid" && (
+                        <View className="px-2 py-1 rounded-full bg-green-100">
+                          <Text className="text-xs font-medium text-green-700">
+                            Paid
+                          </Text>
+                        </View>
+                      )
+                    )}
+                    {bill.status === "Partial" && (
+                      <View className="px-2 py-1 rounded-full bg-orange-100">
+                        <Text className="text-xs font-medium text-orange-700">
+                          Partial
+                        </Text>
+                      </View>
+                    )}
+                    {bill.status === "Credit" && (
+                      <View className="px-2 py-1 rounded-full bg-orange-100">
+                        <Text className="text-xs font-medium text-orange-700">
+                          Credit
+                        </Text>
                       </View>
                     )}
                   </View>
-                </View>
-
-                {/* Amount and Status */}
-                <View className="items-end">
-                  <Text className="text-gray-900 font-bold text-lg mb-1">{formatCurrency((bill.total ?? bill.amount) || 0)}</Text>
-                  {isClearance ? (
-                    <View className="px-2 py-1 rounded-full bg-blue-100"><Text className="text-xs font-medium text-blue-700">Credit Clearance</Text></View>
-                  ) : bill.status === 'Paid' && (
-                    <View className="px-2 py-1 rounded-full bg-green-100"><Text className="text-xs font-medium text-green-700">Paid</Text></View>
-                  )}
-                  {bill.status === 'Partial' && (
-                    <View className="px-2 py-1 rounded-full bg-orange-100"><Text className="text-xs font-medium text-orange-700">Partial</Text></View>
-                  )}
-                  {bill.status === 'Credit' && (
-                    <View className="px-2 py-1 rounded-full bg-orange-100"><Text className="text-xs font-medium text-orange-700">Credit</Text></View>
-                  )}
-                </View>
-              </TouchableOpacity>;
+                </TouchableOpacity>
+              );
             })}
 
           {/* Spacer to ensure end-of-day separation visually */}
@@ -800,13 +800,19 @@ export default function CustomersScreen() {
   const filteredData = getFilteredData();
   const isAllTab = activeTab === "all";
   const isCompletedTab = activeTab === "completed";
-  const filteredDateGroups = isAllTab || isCompletedTab
-    ? {}
-    : (filteredData as any);
+  const filteredDateGroups =
+    isAllTab || isCompletedTab ? {} : (filteredData as any);
   const allCustomers = isAllTab ? allSummaries : [];
   const completedBillGroups = isCompletedTab ? (filteredData as any) : {};
-  const sortedDates = isAllTab ? [] : Object.keys(isCompletedTab ? completedBillGroups : filteredDateGroups)
-    .sort((a, b) => new Date(b.split('-')[0]).getTime() - new Date(a.split('-')[0]).getTime());
+  const sortedDates = isAllTab
+    ? []
+    : Object.keys(
+        isCompletedTab ? completedBillGroups : filteredDateGroups
+      ).sort(
+        (a, b) =>
+          new Date(b.split("-")[0]).getTime() -
+          new Date(a.split("-")[0]).getTime()
+      );
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
@@ -848,12 +854,14 @@ export default function CustomersScreen() {
           <View className="flex-row mb-2">
             <TouchableOpacity
               onPress={() => setActiveTab("active")}
-              className={`px-4 py-2 mr-2 rounded-full ${activeTab === "active" ? "bg-green-600" : "bg-gray-200"
-                }`}
+              className={`px-4 py-2 mr-2 rounded-full ${
+                activeTab === "active" ? "bg-green-600" : "bg-gray-200"
+              }`}
             >
               <Text
-                className={`font-medium ${activeTab === "active" ? "text-white" : "text-gray-700"
-                  }`}
+                className={`font-medium ${
+                  activeTab === "active" ? "text-white" : "text-gray-700"
+                }`}
               >
                 Active
               </Text>
@@ -861,12 +869,14 @@ export default function CustomersScreen() {
 
             <TouchableOpacity
               onPress={() => setActiveTab("completed")}
-              className={`px-4 py-2 mr-2 rounded-full ${activeTab === "completed" ? "bg-blue-600" : "bg-gray-200"
-                }`}
+              className={`px-4 py-2 mr-2 rounded-full ${
+                activeTab === "completed" ? "bg-blue-600" : "bg-gray-200"
+              }`}
             >
               <Text
-                className={`font-medium ${activeTab === "completed" ? "text-white" : "text-gray-700"
-                  }`}
+                className={`font-medium ${
+                  activeTab === "completed" ? "text-white" : "text-gray-700"
+                }`}
               >
                 Completed
               </Text>
@@ -874,12 +884,14 @@ export default function CustomersScreen() {
 
             <TouchableOpacity
               onPress={() => setActiveTab("all")}
-              className={`px-4 py-2 mr-2 rounded-full ${activeTab === "all" ? "bg-gray-600" : "bg-gray-200"
-                }`}
+              className={`px-4 py-2 mr-2 rounded-full ${
+                activeTab === "all" ? "bg-gray-600" : "bg-gray-200"
+              }`}
             >
               <Text
-                className={`font-medium ${activeTab === "all" ? "text-white" : "text-gray-700"
-                  }`}
+                className={`font-medium ${
+                  activeTab === "all" ? "text-white" : "text-gray-700"
+                }`}
               >
                 All
               </Text>
@@ -887,8 +899,13 @@ export default function CustomersScreen() {
           </View>
 
           {activeTab === "all" && (
-            <TouchableOpacity onPress={handleAddCustomer} className="flex-row items-center justify-center py-3 mt-2 bg-indigo-50 rounded-xl border border-indigo-200">
-              <Text className="text-indigo-600 font-semibold">Add Customer</Text>
+            <TouchableOpacity
+              onPress={handleAddCustomer}
+              className="flex-row items-center justify-center py-3 mt-2 bg-indigo-50 rounded-xl border border-indigo-200"
+            >
+              <Text className="text-indigo-600 font-semibold">
+                Add Customer
+              </Text>
             </TouchableOpacity>
           )}
         </View>
@@ -947,18 +964,47 @@ export default function CustomersScreen() {
             {isAllTab ? (
               <View className="px-4 pt-4">
                 {allCustomers.map((customer: any, index: number) => (
-                  <TouchableOpacity key={`cust-${customer.id}-${index}`} onPress={() => router.push({ pathname: '/customer-details', params: { customerId: customer.id, customerName: customer.name } })} className="flex-row items-center bg-white mb-3 px-4 py-3 rounded-lg shadow-sm" activeOpacity={0.7}>
-                    <View className={`w-10 h-10 rounded-full ${getAvatarColor(customer.name)} items-center justify-center mr-3`}>
-                      <Text className="text-white font-bold text-sm">{getCustomerInitials(customer.name)}</Text>
+                  <TouchableOpacity
+                    key={`cust-${customer.id}-${index}`}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/customer-details",
+                        params: {
+                          customerId: customer.id,
+                          customerName: customer.name,
+                        },
+                      })
+                    }
+                    className="flex-row items-center bg-white mb-3 px-4 py-3 rounded-lg shadow-sm"
+                    activeOpacity={0.7}
+                  >
+                    <View
+                      className={`w-10 h-10 rounded-full ${getAvatarColor(customer.name)} items-center justify-center mr-3`}
+                    >
+                      <Text className="text-white font-bold text-sm">
+                        {getCustomerInitials(customer.name)}
+                      </Text>
                     </View>
                     <View className="flex-1">
-                      <Text className="text-gray-900 font-semibold text-base">{customer.name}</Text>
-                      {customer.contact && <Text className="text-gray-500 text-xs">{customer.contact}</Text>}
-                      <Text className="text-gray-400 text-xs mt-1">{customer.billCount} bill{customer.billCount === 1 ? '' : 's'} • {formatCurrency(customer.totalBilled || 0)}</Text>
+                      <Text className="text-gray-900 font-semibold text-base">
+                        {customer.name}
+                      </Text>
+                      {customer.contact && (
+                        <Text className="text-gray-500 text-xs">
+                          {customer.contact}
+                        </Text>
+                      )}
+                      <Text className="text-gray-400 text-xs mt-1">
+                        {customer.billCount} bill
+                        {customer.billCount === 1 ? "" : "s"} •{" "}
+                        {formatCurrency(customer.totalBilled || 0)}
+                      </Text>
                     </View>
                     {customer.creditBalance > 0 && (
                       <View className="items-end">
-                        <Text className="text-orange-600 font-semibold text-xs">CR {formatCurrency(customer.creditBalance)}</Text>
+                        <Text className="text-orange-600 font-semibold text-xs">
+                          CR {formatCurrency(customer.creditBalance)}
+                        </Text>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -968,14 +1014,20 @@ export default function CustomersScreen() {
               // Render completed bills grouped by date
               <View className="px-4 pt-4">
                 {sortedDates.map((date, index) =>
-                  renderCompletedBillDateSection(`${date}-${index}`, completedBillGroups[date])
+                  renderCompletedBillDateSection(
+                    `${date}-${index}`,
+                    completedBillGroups[date]
+                  )
                 )}
               </View>
             ) : (
               // Render active customers grouped by date
               <View className="px-4 pt-4">
                 {sortedDates.map((date, index) =>
-                  renderDateSection(`${date}-${index}`, filteredDateGroups[date])
+                  renderDateSection(
+                    `${date}-${index}`,
+                    filteredDateGroups[date]
+                  )
                 )}
               </View>
             )}

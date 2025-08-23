@@ -201,9 +201,9 @@ The foundation is solid and ready for these enhancements! 🎉
 
 ### Pending work :
 
-1. Cloud sync/backup
-2. Reset KOT ID everyday, Reset other IDs every year(receipt, bill) - check this
-3. Remove New order button in Customer details page
+1. DONE - Cloud sync/backup
+2. DONE - Reset KOT ID everyday, Reset other IDs every year(receipt, bill) - check this
+3. DONE(Made it functional instead of removing) - Remove New order button in Customer details page
 4. Menu Category heading position bug
 5. Accrued credit is being considered for total amount of that day
 6. Improve speed of modal change

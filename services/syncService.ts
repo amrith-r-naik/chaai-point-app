@@ -131,9 +131,7 @@ function toCloud(table: TableName, row: RowMap): RowMap {
       customer_id: row.customerId,
       total: row.total,
     };
-    if (row.billNumber && Number(row.billNumber) > 0) {
-      payload.bill_number = row.billNumber;
-    }
+    // Do not push local provisional bill numbers; server will assign
     return payload;
   }
   if (table === "kot_orders") {
@@ -142,9 +140,7 @@ function toCloud(table: TableName, row: RowMap): RowMap {
       customer_id: row.customerId,
       bill_id: row.billId ?? null,
     };
-    if (row.kotNumber && Number(row.kotNumber) > 0) {
-      payload.kot_number = row.kotNumber;
-    }
+    // Do not push local provisional kot numbers; server will assign
     return payload;
   }
   if (table === "kot_items") {
@@ -176,9 +172,7 @@ function toCloud(table: TableName, row: RowMap): RowMap {
       mode: row.mode,
       remarks: row.remarks ?? null,
     };
-    if (row.receiptNo && Number(row.receiptNo) > 0) {
-      payload.receipt_no = row.receiptNo;
-    }
+    // Do not push local provisional receipt numbers; server will assign
     return payload;
   }
   if (table === "expenses") {
@@ -189,9 +183,7 @@ function toCloud(table: TableName, row: RowMap): RowMap {
       mode: row.mode,
       remarks: row.remarks ?? null,
     };
-    if (row.voucherNo && Number(row.voucherNo) > 0) {
-      payload.voucher_no = row.voucherNo;
-    }
+    // Do not push local provisional voucher numbers; server will assign
     return payload;
   }
   if (table === "split_payments") {

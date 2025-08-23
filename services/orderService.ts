@@ -46,9 +46,7 @@ export interface CreateOrderData {
 }
 
 class OrderService {
-  async getBillById(
-    billId: string
-  ): Promise<{
+  async getBillById(billId: string): Promise<{
     id: string;
     billNumber: number;
     customerId: string;
@@ -81,9 +79,7 @@ class OrderService {
     };
   }
 
-  async getKOTsForBill(
-    billId: string
-  ): Promise<
+  async getKOTsForBill(billId: string): Promise<
     {
       id: string;
       kotNumber: number;
@@ -304,13 +300,21 @@ class OrderService {
       }
     }
 
-    const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    // Server will assign KOT number; store 0 locally until sync
-    const kotNumber = 0;
-    const createdAt = new Date().toISOString();
+    const orderId = `order_${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+    const now = new Date();
+    const createdAt = now.toISOString();
 
     await withTransaction(async () => {
       // Create the KOT order
+      // Assign a local KOT number unique for the day
+      const kotNumber = await (async () => {
+        // Use nextLocalNumber inside the same transaction context
+        const { nextLocalNumber } = await import("@/lib/db");
+        return nextLocalNumber("kot", now);
+      })();
+
       await db!.runAsync(
         `
         INSERT INTO kot_orders (id, kotNumber, customerId, createdAt)

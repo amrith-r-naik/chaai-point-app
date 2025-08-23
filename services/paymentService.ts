@@ -72,15 +72,22 @@ class PaymentService {
   async createBill(customerId: string, totalAmount: number): Promise<Bill> {
     if (!db) throw new Error("Database not initialized");
 
+    const now = new Date();
+    // Assign a local provisional bill number unique for the year
+    const localBillNo = await (async () => {
+      const { nextLocalNumber } = await import("@/lib/db");
+      return nextLocalNumber("bill", now);
+    })();
+
     const bill: Bill = {
       id: uuid.v4() as string,
-      billNumber: "0",
+      billNumber: String(localBillNo),
       customerId,
       total: totalAmount, // Store in rupees (direct KOT total)
-      createdAt: new Date().toISOString(),
+      createdAt: now.toISOString(),
     };
 
-    await db.runAsync(
+    await db!.runAsync(
       `
       INSERT INTO bills (id, billNumber, customerId, total, createdAt)
       VALUES (?, ?, ?, ?, ?)
@@ -91,9 +98,7 @@ class PaymentService {
     return bill;
   }
 
-  async processPayment(
-    paymentData: PaymentProcessData
-  ): Promise<{
+  async processPayment(paymentData: PaymentProcessData): Promise<{
     receipt: Receipt;
     bill: Bill;
     paidPortion: number;
@@ -107,9 +112,13 @@ class PaymentService {
         paymentData.customerId,
         paymentData.totalAmount
       );
-      const now = new Date().toISOString();
-      // Placeholder; server assigns after sync
-      const receiptNo = "0";
+      const nowIso = new Date().toISOString();
+      // Assign a local provisional receipt number unique for the year
+      const localReceiptNo = await (async () => {
+        const { nextLocalNumber } = await import("@/lib/db");
+        return nextLocalNumber("receipt", new Date());
+      })();
+      const receiptNo = String(localReceiptNo);
 
       let paidPortion = 0;
       let creditPortion = 0;
@@ -136,7 +145,7 @@ class PaymentService {
         amount: paidPortion,
         mode: paymentData.paymentType,
         remarks: paymentData.remarks || null,
-        createdAt: now,
+        createdAt: nowIso,
       } as any;
 
       await db!.runAsync(
@@ -166,7 +175,7 @@ class PaymentService {
             amount: part.amount,
             mode: part.type,
             remarks: paymentData.remarks || null,
-            createdAt: now,
+            createdAt: nowIso,
           };
           await db!.runAsync(
             `
@@ -198,7 +207,7 @@ class PaymentService {
             INSERT INTO split_payments (id, receiptId, paymentType, amount, createdAt)
             VALUES (?, ?, ?, ?, ?)
           `,
-            [splitId, receipt.id, part.type, part.amount, now]
+            [splitId, receipt.id, part.type, part.amount, nowIso]
           );
         }
       } else {
@@ -210,7 +219,7 @@ class PaymentService {
           amount: paidPortion,
           mode: paymentData.paymentType,
           remarks: paymentData.remarks || null,
-          createdAt: now,
+          createdAt: nowIso,
         };
         await db!.runAsync(
           `
@@ -593,8 +602,12 @@ class PaymentService {
     if (paidTotal <= 0) throw new Error("Clearance amount must be > 0");
 
     const now = new Date().toISOString();
-    // Placeholder; server assigns after sync
-    const receiptNo = "0";
+    // Assign a local provisional receipt number unique for the year
+    const localReceiptNo = await (async () => {
+      const { nextLocalNumber } = await import("@/lib/db");
+      return nextLocalNumber("receipt", new Date());
+    })();
+    const receiptNo = String(localReceiptNo);
     const receipt: Receipt = {
       id: uuid.v4() as string,
       receiptNo,
@@ -778,7 +791,9 @@ class PaymentService {
     return row?.id || null;
   }
 
-  async getBillsGroupedByDate(daysWindow: number = 2): Promise<
+  async getBillsGroupedByDate(
+    daysWindow: number = 2
+  ): Promise<
     Record<string, { date: string; displayDate: string; bills: any[] }>
   > {
     if (!db) throw new Error("Database not initialized");

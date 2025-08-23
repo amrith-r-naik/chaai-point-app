@@ -11,17 +11,19 @@ class AdminService {
       // Temporarily disable foreign key constraints
       await db.runAsync(`PRAGMA foreign_keys = OFF`);
 
-  // Clear all tables in correct order to respect foreign key constraints
-  // NOTE: Users table is preserved to maintain authentication
-  await db.runAsync(`DELETE FROM kot_items`);
-  await db.runAsync(`DELETE FROM split_payments`);
-  await db.runAsync(`DELETE FROM payments`);
-  await db.runAsync(`DELETE FROM receipts`);
-  await db.runAsync(`DELETE FROM kot_orders`);
-  await db.runAsync(`DELETE FROM bills`);
-  await db.runAsync(`DELETE FROM expenses`);
-  await db.runAsync(`DELETE FROM menu_items`);
-  await db.runAsync(`DELETE FROM customers`);
+      // Clear all tables in correct order to respect foreign key constraints
+      // NOTE: Users table is preserved to maintain authentication
+      await db.runAsync(`DELETE FROM kot_items`);
+      await db.runAsync(`DELETE FROM split_payments`);
+      await db.runAsync(`DELETE FROM payments`);
+      await db.runAsync(`DELETE FROM receipts`);
+      await db.runAsync(`DELETE FROM kot_orders`);
+      await db.runAsync(`DELETE FROM bills`);
+      await db.runAsync(`DELETE FROM expenses`);
+      await db.runAsync(`DELETE FROM menu_items`);
+      await db.runAsync(`DELETE FROM customers`);
+      // Also clear sync checkpoints so next sync re-pulls everything
+      await db.runAsync(`DELETE FROM sync_state`);
 
       // Re-enable foreign key constraints
       await db.runAsync(`PRAGMA foreign_keys = ON`);
@@ -45,7 +47,7 @@ class AdminService {
 
     const allowedTables = [
       "kot_items",
-      "payments", 
+      "payments",
       "receipts",
       "bills",
       "kot_orders",
@@ -64,7 +66,7 @@ class AdminService {
       await db.runAsync(`PRAGMA foreign_keys = OFF`);
       await db.runAsync(`DELETE FROM ${tableName}`);
       await db.runAsync(`PRAGMA foreign_keys = ON`);
-      
+
       console.log(`Table ${tableName} cleared successfully`);
     } catch (error) {
       // Make sure to re-enable foreign keys even if there's an error

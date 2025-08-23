@@ -1,9 +1,10 @@
+import { ensureInitialUsersFromCloud } from "@/services/userBootstrap";
 import { use$ } from "@legendapp/state/react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useEffect } from "react";
 import { Text, View } from "react-native";
 import { openDatabase } from "../lib/db";
-import { debugDatabase, seedTestUser } from "../lib/dbDebug";
+import { debugDatabase } from "../lib/dbDebug";
 import { initializeAuth } from "../services/authService";
 import { authState } from "../state/authState";
 import "./global.css";
@@ -20,7 +21,8 @@ export default function RootLayout() {
         await openDatabase();
         console.log("Database opened successfully");
         await debugDatabase();
-        await seedTestUser();
+        // Production bootstrap: pull admin/staff users from cloud on first launch (if local users table is empty)
+        await ensureInitialUsersFromCloud("shop_1");
         // await seedTestCustomers();
         // await seedTestMenuItems();
         // await seedTestOrders();

@@ -4,7 +4,7 @@ import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -47,12 +47,7 @@ export default function CustomerBillScreen() {
   const [error, setError] = useState("");
   const auth = use$(authState);
 
-  const generateBillNumber = () => {
-    const now = new Date();
-    const dateStr = now.toISOString().split("T")[0].replace(/-/g, "");
-    const timeStr = now.getTime().toString().slice(-4);
-    return `${timeStr.slice(-2)}`;
-  };
+  // Server assigns bill number; do not generate locally
 
   const loadCustomerBill = useCallback(async () => {
     if (!customerId || !auth.isDbReady) return;
@@ -102,13 +97,13 @@ export default function CustomerBillScreen() {
       );
 
       // TODO: Calculate tax and discount (you can adjust these rates)
-      const taxRate = 0.00; // 5% tax
+      const taxRate = 0.0; // 5% tax
       const tax = subtotal * taxRate;
       const discount = 0; // No discount for now
       const totalAmount = subtotal + tax - discount;
 
       const generatedBill: Bill = {
-        billNumber: generateBillNumber(),
+        billNumber: "0",
         customerId,
         customerName: customerName || "Unknown Customer",
         items: consolidatedItems,
@@ -174,7 +169,9 @@ export default function CustomerBillScreen() {
             headerShadowVisible: true,
           }}
         />
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <View
+          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+        >
           <ActivityIndicator size="large" color="#2563eb" />
           <Text style={{ color: theme.colors.textSecondary, marginTop: 8 }}>
             Generating bill...
@@ -207,21 +204,32 @@ export default function CustomerBillScreen() {
             headerShadowVisible: true,
           }}
         />
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 16 }}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 16,
+          }}
+        >
           <Text style={{ fontSize: 48, marginBottom: 16 }}>⚠️</Text>
-          <Text style={{
-            fontSize: 20,
-            fontWeight: "600",
-            color: theme.colors.text,
-            marginBottom: 8,
-          }}>
+          <Text
+            style={{
+              fontSize: 20,
+              fontWeight: "600",
+              color: theme.colors.text,
+              marginBottom: 8,
+            }}
+          >
             Failed to generate bill
           </Text>
-          <Text style={{
-            color: theme.colors.textSecondary,
-            textAlign: "center",
-            marginBottom: 16,
-          }}>
+          <Text
+            style={{
+              color: theme.colors.textSecondary,
+              textAlign: "center",
+              marginBottom: 16,
+            }}
+          >
             {error || "Unable to generate bill"}
           </Text>
           <TouchableOpacity
@@ -265,29 +273,44 @@ export default function CustomerBillScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
         {/* Bill Header */}
-        <View style={{
-          backgroundColor: "white",
-          paddingHorizontal: 16,
-          paddingVertical: 16,
-          borderBottomWidth: 1,
-          borderBottomColor: "#f3f4f6",
-        }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <View
+          style={{
+            backgroundColor: "white",
+            paddingHorizontal: 16,
+            paddingVertical: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: "#f3f4f6",
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+            }}
+          >
             <View>
-              <Text style={{
-                fontSize: 24,
-                fontWeight: "700",
-                color: theme.colors.text,
-                marginBottom: 4,
-              }}>
-                Bill No: {bill.billNumber}
+              <Text
+                style={{
+                  fontSize: 24,
+                  fontWeight: "700",
+                  color: theme.colors.text,
+                  marginBottom: 4,
+                }}
+              >
+                Bill No:{" "}
+                {bill.billNumber && Number(bill.billNumber) > 0
+                  ? bill.billNumber
+                  : "—"}
               </Text>
             </View>
             <View style={{ alignItems: "flex-end" }}>
-              <Text style={{
-                color: theme.colors.textSecondary,
-                fontSize: 14,
-              }}>
+              <Text
+                style={{
+                  color: theme.colors.textSecondary,
+                  fontSize: 14,
+                }}
+              >
                 {bill.date} {bill.time}
               </Text>
             </View>
@@ -310,35 +333,43 @@ export default function CustomerBillScreen() {
               }}
             >
               <View style={{ flex: 1 }}>
-                <Text style={{
-                  fontSize: 18,
-                  fontWeight: "600",
-                  color: theme.colors.text,
-                  marginBottom: 4,
-                }}>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontWeight: "600",
+                    color: theme.colors.text,
+                    marginBottom: 4,
+                  }}
+                >
                   {item.menuItemName}
                 </Text>
-                <View style={{
-                  backgroundColor: "#f97316",
-                  paddingHorizontal: 8,
-                  paddingVertical: 2,
-                  borderRadius: 12,
-                  alignSelf: "flex-start",
-                }}>
-                  <Text style={{
-                    color: "white",
-                    fontSize: 12,
-                    fontWeight: "600",
-                  }}>
+                <View
+                  style={{
+                    backgroundColor: "#f97316",
+                    paddingHorizontal: 8,
+                    paddingVertical: 2,
+                    borderRadius: 12,
+                    alignSelf: "flex-start",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: "white",
+                      fontSize: 12,
+                      fontWeight: "600",
+                    }}
+                  >
                     × {item.quantity}
                   </Text>
                 </View>
               </View>
-              <Text style={{
-                fontSize: 20,
-                fontWeight: "700",
-                color: theme.colors.text,
-              }}>
+              <Text
+                style={{
+                  fontSize: 20,
+                  fontWeight: "700",
+                  color: theme.colors.text,
+                }}
+              >
                 ₹{item.totalPrice}
               </Text>
             </View>
@@ -350,14 +381,16 @@ export default function CustomerBillScreen() {
       </ScrollView>
 
       {/* Payment Button */}
-      <View style={{
-        backgroundColor: theme.colors.primary,
-        marginBottom: 16,
-        marginHorizontal: 16,
-        borderRadius: 16,
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-      }}>
+      <View
+        style={{
+          backgroundColor: theme.colors.primary,
+          marginBottom: 16,
+          marginHorizontal: 16,
+          borderRadius: 16,
+          paddingHorizontal: 16,
+          paddingVertical: 16,
+        }}
+      >
         <TouchableOpacity
           onPress={handlePayment}
           style={{
@@ -366,18 +399,22 @@ export default function CustomerBillScreen() {
             justifyContent: "space-between",
           }}
         >
-          <Text style={{
-            color: "white",
-            fontWeight: "600",
-            fontSize: 20,
-          }}>
+          <Text
+            style={{
+              color: "white",
+              fontWeight: "600",
+              fontSize: 20,
+            }}
+          >
             PAYMENT
           </Text>
-          <Text style={{
-            color: "white",
-            fontWeight: "700",
-            fontSize: 20,
-          }}>
+          <Text
+            style={{
+              color: "white",
+              fontWeight: "700",
+              fontSize: 20,
+            }}
+          >
             ₹{Math.round(bill.totalAmount)}
           </Text>
         </TouchableOpacity>

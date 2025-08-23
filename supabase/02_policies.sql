@@ -40,13 +40,13 @@ BEGIN
       t || '_select', t
     );
 
-    -- Staff write in same shop; admin read-only
+    -- Allow writes for both admin and staff within same shop
     EXECUTE format(
-      'create policy %I on public.%I for insert with check (shop_id = public.current_shop() and public.current_role() = ''staff'');',
+      'create policy %I on public.%I for insert with check (shop_id = public.current_shop() and public.current_role() in (''staff'',''admin''));',
       t || '_insert', t
     );
     EXECUTE format(
-      'create policy %I on public.%I for update using (shop_id = public.current_shop() and public.current_role() = ''staff'') with check (shop_id = public.current_shop() and public.current_role() = ''staff'');',
+      'create policy %I on public.%I for update using (shop_id = public.current_shop() and public.current_role() in (''staff'',''admin'')) with check (shop_id = public.current_shop() and public.current_role() in (''staff'',''admin''));',
       t || '_update', t
     );
   END LOOP;

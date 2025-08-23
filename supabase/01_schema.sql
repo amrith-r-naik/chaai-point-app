@@ -172,3 +172,227 @@ create index if not exists idx_payments_shop_updated on public.payments(shop_id,
 create index if not exists idx_receipts_shop_updated on public.receipts(shop_id, updated_at);
 create index if not exists idx_expenses_shop_updated on public.expenses(shop_id, updated_at);
 create index if not exists idx_split_payments_shop_updated on public.split_payments(shop_id, updated_at);
+
+-- =============================
+-- Phase 2: Server-assigned numbering
+-- KOT numbers reset daily per shop
+-- Bill and Receipt numbers reset yearly per shop
+-- =============================
+
+-- Counter tables
+create table if not exists public.counters_kot_daily (
+  shop_id text not null,
+  day date not null,
+  last_value integer not null default 0,
+  primary key (shop_id, day)
+);
+
+create table if not exists public.counters_bill_yearly (
+  shop_id text not null,
+  year int not null,
+  last_value integer not null default 0,
+  primary key (shop_id, year)
+);
+
+create table if not exists public.counters_receipt_yearly (
+  shop_id text not null,
+  year int not null,
+  last_value integer not null default 0,
+  primary key (shop_id, year)
+);
+
+create table if not exists public.counters_voucher_yearly (
+  shop_id text not null,
+  year int not null,
+  last_value integer not null default 0,
+  primary key (shop_id, year)
+);
+
+-- Helper: get next daily counter (KOT)
+create or replace function public.next_kot_number(p_shop_id text, p_ts timestamptz)
+returns integer
+language plpgsql
+as $$
+declare
+  v_day date := (p_ts at time zone 'UTC')::date; -- adjust TZ if needed
+  v_next integer;
+begin
+  -- Ensure row exists
+  insert into public.counters_kot_daily (shop_id, day, last_value)
+  values (p_shop_id, v_day, 0)
+  on conflict do nothing;
+
+  -- Increment atomically
+  update public.counters_kot_daily
+    set last_value = last_value + 1
+  where shop_id = p_shop_id and day = v_day
+  returning last_value into v_next;
+
+  return v_next;
+end;
+$$;
+
+-- Helper: get next yearly counter (Bills)
+create or replace function public.next_bill_number(p_shop_id text, p_ts timestamptz)
+returns integer
+language plpgsql
+as $$
+declare
+  v_year int := extract(year from (p_ts at time zone 'UTC'))::int;
+  v_next integer;
+begin
+  insert into public.counters_bill_yearly (shop_id, year, last_value)
+  values (p_shop_id, v_year, 0)
+  on conflict do nothing;
+
+  update public.counters_bill_yearly
+    set last_value = last_value + 1
+  where shop_id = p_shop_id and year = v_year
+  returning last_value into v_next;
+
+  return v_next;
+end;
+$$;
+
+-- Helper: get next yearly counter (Receipts)
+create or replace function public.next_receipt_number(p_shop_id text, p_ts timestamptz)
+returns integer
+language plpgsql
+as $$
+declare
+  v_year int := extract(year from (p_ts at time zone 'UTC'))::int;
+  v_next integer;
+begin
+  insert into public.counters_receipt_yearly (shop_id, year, last_value)
+  values (p_shop_id, v_year, 0)
+  on conflict do nothing;
+
+  update public.counters_receipt_yearly
+    set last_value = last_value + 1
+  where shop_id = p_shop_id and year = v_year
+  returning last_value into v_next;
+
+  return v_next;
+end;
+$$;
+
+-- Helper: get next yearly counter (Expenses voucher)
+create or replace function public.next_voucher_number(p_shop_id text, p_ts timestamptz)
+returns integer
+language plpgsql
+as $$
+declare
+  v_year int := extract(year from (p_ts at time zone 'UTC'))::int;
+  v_next integer;
+begin
+  insert into public.counters_voucher_yearly (shop_id, year, last_value)
+  values (p_shop_id, v_year, 0)
+  on conflict do nothing;
+
+  update public.counters_voucher_yearly
+    set last_value = last_value + 1
+  where shop_id = p_shop_id and year = v_year
+  returning last_value into v_next;
+
+  return v_next;
+end;
+$$;
+
+-- Triggers to assign numbers on insert (server-assigned)
+create or replace function public.assign_kot_number()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_ts timestamptz := coalesce(new.created_at, now());
+begin
+  if new.kot_number is null or new.kot_number <= 0 then
+    new.kot_number := public.next_kot_number(new.shop_id, v_ts);
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.assign_bill_number()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_ts timestamptz := coalesce(new.created_at, now());
+begin
+  if new.bill_number is null or new.bill_number <= 0 then
+    new.bill_number := public.next_bill_number(new.shop_id, v_ts);
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.assign_receipt_number()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_ts timestamptz := coalesce(new.created_at, now());
+begin
+  if new.receipt_no is null or new.receipt_no <= 0 then
+    new.receipt_no := public.next_receipt_number(new.shop_id, v_ts);
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.assign_voucher_number()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_ts timestamptz := coalesce(new.created_at, now());
+begin
+  if new.voucher_no is null or new.voucher_no <= 0 then
+    new.voucher_no := public.next_voucher_number(new.shop_id, v_ts);
+  end if;
+  return new;
+end;
+$$;
+
+-- Drop and create triggers
+drop trigger if exists trg_assign_kot_number on public.kot_orders;
+create trigger trg_assign_kot_number
+  before insert on public.kot_orders
+  for each row execute function public.assign_kot_number();
+
+drop trigger if exists trg_assign_bill_number on public.bills;
+create trigger trg_assign_bill_number
+  before insert on public.bills
+  for each row execute function public.assign_bill_number();
+
+drop trigger if exists trg_assign_receipt_number on public.receipts;
+create trigger trg_assign_receipt_number
+  before insert on public.receipts
+  for each row execute function public.assign_receipt_number();
+
+drop trigger if exists trg_assign_voucher_number on public.expenses;
+create trigger trg_assign_voucher_number
+  before insert on public.expenses
+  for each row execute function public.assign_voucher_number();
+
+-- Uniqueness per shop and period
+-- KOT: unique per day
+create unique index if not exists uniq_kot_shop_day_number
+  on public.kot_orders (shop_id, ((created_at at time zone 'UTC')::date), kot_number)
+  where deleted_at is null;
+
+-- Bills: unique per year
+create unique index if not exists uniq_bills_shop_year_number
+  on public.bills (shop_id, (date_trunc('year', (created_at at time zone 'UTC'))), bill_number)
+  where deleted_at is null;
+
+-- Receipts: unique per year
+create unique index if not exists uniq_receipts_shop_year_number
+  on public.receipts (shop_id, (date_trunc('year', (created_at at time zone 'UTC'))), receipt_no)
+  where deleted_at is null;
+
+-- Expenses vouchers: unique per year
+create unique index if not exists uniq_expenses_shop_year_voucher
+  on public.expenses (shop_id, (date_trunc('year', (created_at at time zone 'UTC'))), voucher_no)
+  where deleted_at is null;

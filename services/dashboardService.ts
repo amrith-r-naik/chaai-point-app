@@ -37,10 +37,12 @@ export interface RevenueByDay {
 }
 
 class DashboardService {
-  async getDashboardStats(dateFilter?: DateFilterOptions): Promise<DashboardStats> {
+  async getDashboardStats(
+    dateFilter?: DateFilterOptions
+  ): Promise<DashboardStats> {
     if (!db) throw new Error("Database not initialized");
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().split("T")[0];
     const filterStartDate = dateFilter?.startDate || today;
     const filterEndDate = dateFilter?.endDate || today;
 
@@ -53,7 +55,7 @@ class DashboardService {
       todayRevenueResult,
       todayExpensesResult,
       creditAccruedResult,
-      creditClearedResult
+      creditClearedResult,
     ] = await Promise.all([
       this.getTotalOrders(filterStartDate, filterEndDate),
       this.getTotalRevenue(filterStartDate, filterEndDate),
@@ -63,14 +65,14 @@ class DashboardService {
       this.getTotalRevenue(today, today),
       this.getTotalExpenses(today, today),
       this.getCreditAccrued(filterStartDate, filterEndDate),
-      this.getCreditCleared(filterStartDate, filterEndDate)
+      this.getCreditCleared(filterStartDate, filterEndDate),
     ]);
 
     const totalOrders = totalOrdersResult;
     const totalRevenue = totalRevenueResult;
-  const outstandingCredit = outstandingCreditResult;
-  const creditAccrued = creditAccruedResult;
-  const creditCleared = creditClearedResult;
+    const outstandingCredit = outstandingCreditResult;
+    const creditAccrued = creditAccruedResult;
+    const creditCleared = creditClearedResult;
     const totalExpenses = totalExpensesResult;
     const profit = totalRevenue - totalExpenses;
 
@@ -82,85 +84,108 @@ class DashboardService {
     return {
       totalOrders,
       totalRevenue,
-  outstandingCredit,
+      outstandingCredit,
       totalExpenses,
       profit,
       todayOrders,
       todayRevenue,
       todayExpenses,
-  todayProfit,
-  creditAccrued,
-  creditCleared,
-  netCreditChange: (creditAccrued || 0) - (creditCleared || 0)
+      todayProfit,
+      creditAccrued,
+      creditCleared,
+      netCreditChange: (creditAccrued || 0) - (creditCleared || 0),
     };
   }
 
-  private async getTotalOrders(startDate: string, endDate: string): Promise<number> {
+  private async getTotalOrders(
+    startDate: string,
+    endDate: string
+  ): Promise<number> {
     if (!db) throw new Error("Database not initialized");
-    
-    const result = await db.getFirstAsync(
+
+    const result = (await db.getFirstAsync(
       `SELECT COUNT(*) as count FROM kot_orders 
        WHERE date(createdAt) BETWEEN ? AND ?`,
       [startDate, endDate]
-    ) as any;
-    
+    )) as any;
+
     return result?.count || 0;
   }
 
-  private async getTotalRevenue(startDate: string, endDate: string): Promise<number> {
+  private async getTotalRevenue(
+    startDate: string,
+    endDate: string
+  ): Promise<number> {
     if (!db) throw new Error("Database not initialized");
-    // Revenue is sum of NON-credit payments (cash/upi/etc) in window.
-    const result = await db.getFirstAsync(
+    // Revenue is sum of cash/upi/etc plus credit clearances (exclude Accrual).
+    const result = (await db.getFirstAsync(
       `SELECT COALESCE(SUM(p.amount),0) as revenue
        FROM payments p
-       WHERE p.subType IS NULL -- non credit accrual / clearance
+       WHERE (p.subType IS NULL OR p.subType = 'Clearance')
          AND date(p.createdAt) BETWEEN ? AND ?`,
       [startDate, endDate]
-    ) as any;
-    return result?.revenue || 0; 
+    )) as any;
+    return result?.revenue || 0;
   }
 
   private async getOutstandingCredit(): Promise<number> {
     if (!db) throw new Error("Database not initialized");
-    const result = await db.getFirstAsync(`SELECT COALESCE(SUM(creditBalance),0) as total FROM customers`) as any;
+    const result = (await db.getFirstAsync(
+      `SELECT COALESCE(SUM(creditBalance),0) as total FROM customers`
+    )) as any;
     return result?.total || 0;
   }
 
-  private async getCreditAccrued(startDate: string, endDate: string): Promise<number> {
+  private async getCreditAccrued(
+    startDate: string,
+    endDate: string
+  ): Promise<number> {
     if (!db) throw new Error("Database not initialized");
-    const result = await db.getFirstAsync(`
+    const result = (await db.getFirstAsync(
+      `
       SELECT COALESCE(SUM(amount),0) as total FROM payments 
       WHERE subType = 'Accrual' AND date(createdAt) BETWEEN ? AND ?
-    `,[startDate,endDate]) as any;
+    `,
+      [startDate, endDate]
+    )) as any;
     return result?.total || 0;
   }
 
-  private async getCreditCleared(startDate: string, endDate: string): Promise<number> {
+  private async getCreditCleared(
+    startDate: string,
+    endDate: string
+  ): Promise<number> {
     if (!db) throw new Error("Database not initialized");
-    const result = await db.getFirstAsync(`
+    const result = (await db.getFirstAsync(
+      `
       SELECT COALESCE(SUM(amount),0) as total FROM payments 
       WHERE subType = 'Clearance' AND date(createdAt) BETWEEN ? AND ?
-    `,[startDate,endDate]) as any;
+    `,
+      [startDate, endDate]
+    )) as any;
     return result?.total || 0;
   }
 
-  private async getTotalExpenses(startDate: string, endDate: string): Promise<number> {
+  private async getTotalExpenses(
+    startDate: string,
+    endDate: string
+  ): Promise<number> {
     if (!db) throw new Error("Database not initialized");
-    
-    const result = await db.getFirstAsync(
+
+    const result = (await db.getFirstAsync(
       `SELECT COALESCE(SUM(amount), 0) as expenses 
        FROM expenses 
        WHERE date(createdAt) BETWEEN ? AND ?`,
       [startDate, endDate]
-    ) as any;
-    
+    )) as any;
+
     return result?.expenses || 0;
   }
 
   async getRevenueByDays(days: number = 7): Promise<RevenueByDay[]> {
     if (!db) throw new Error("Database not initialized");
-    
-    const result = await db.getAllAsync(
+
+    const result = (await db.getAllAsync(
       `SELECT 
          date(ko.createdAt) as date,
          COALESCE(SUM(ki.quantity * ki.priceAtTime), 0) as revenue,
@@ -171,12 +196,12 @@ class DashboardService {
          AND date(ko.createdAt) >= date('now', '-${days} days')
        GROUP BY date(ko.createdAt)
        ORDER BY date(ko.createdAt) DESC`
-    ) as any[];
-    
-    return result.map(row => ({
+    )) as any[];
+
+    return result.map((row) => ({
       date: row.date,
       revenue: row.revenue || 0,
-      orders: row.orders || 0
+      orders: row.orders || 0,
     }));
   }
 
@@ -189,7 +214,8 @@ class DashboardService {
     if (!db) throw new Error("Database not initialized");
 
     const expenseId = `expense_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const voucherNo = await this.getNextVoucherNumber();
+    // Server assigns voucher number; placeholder 0
+    const voucherNo = 0;
     const createdAt = new Date().toISOString();
 
     await db.runAsync(
@@ -202,7 +228,7 @@ class DashboardService {
         expenseData.towards,
         expenseData.mode,
         expenseData.remarks || null,
-        createdAt
+        createdAt,
       ]
     );
 
@@ -222,34 +248,31 @@ class DashboardService {
 
     query += ` ORDER BY createdAt DESC`;
 
-    const result = await db.getAllAsync(query, params) as any[];
-    
-    return result.map(row => ({
+    const result = (await db.getAllAsync(query, params)) as any[];
+
+    return result.map((row) => ({
       id: row.id,
       voucherNo: row.voucherNo,
       amount: row.amount,
       towards: row.towards,
       mode: row.mode,
       remarks: row.remarks,
-      createdAt: row.createdAt
+      createdAt: row.createdAt,
     }));
   }
 
-  private async getNextVoucherNumber(): Promise<number> {
-    if (!db) throw new Error("Database not initialized");
+  // Numbers assigned by server; no local voucher generator
 
-    const result = await db.getFirstAsync(
-      `SELECT MAX(voucherNo) as maxVoucher FROM expenses`
-    ) as any;
-
-    return (result?.maxVoucher || 0) + 1;
-  }
-
-  async getTopSellingItems(dateFilter?: DateFilterOptions, limit: number = 5): Promise<Array<{
-    itemName: string;
-    totalQuantity: number;
-    totalRevenue: number;
-  }>> {
+  async getTopSellingItems(
+    dateFilter?: DateFilterOptions,
+    limit: number = 5
+  ): Promise<
+    {
+      itemName: string;
+      totalQuantity: number;
+      totalRevenue: number;
+    }[]
+  > {
     if (!db) throw new Error("Database not initialized");
 
     let query = `
@@ -261,7 +284,7 @@ class DashboardService {
       JOIN menu_items mi ON ki.itemId = mi.id
       JOIN kot_orders ko ON ki.kotId = ko.id
     `;
-    
+
     let params: string[] = [];
 
     if (dateFilter) {
@@ -274,15 +297,15 @@ class DashboardService {
       ORDER BY totalQuantity DESC
       LIMIT ?
     `;
-    
+
     params.push(limit.toString());
 
-    const result = await db.getAllAsync(query, params) as any[];
-    
-    return result.map(row => ({
+    const result = (await db.getAllAsync(query, params)) as any[];
+
+    return result.map((row) => ({
       itemName: row.itemName,
       totalQuantity: row.totalQuantity || 0,
-      totalRevenue: row.totalRevenue || 0
+      totalRevenue: row.totalRevenue || 0,
     }));
   }
 }

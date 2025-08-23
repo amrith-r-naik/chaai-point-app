@@ -1,8 +1,12 @@
 import { theme } from "@/constants/theme";
 import { Bill, paymentService, Receipt } from "@/services/paymentService";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, CheckCircle, Receipt as ReceiptIcon } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import {
+  ArrowLeft,
+  CheckCircle,
+  Receipt as ReceiptIcon,
+} from "lucide-react-native";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -23,7 +27,7 @@ export default function ReceiptScreen() {
     totalAmount,
     paymentType,
     splitPayments,
-    skipForm
+    skipForm,
   } = useLocalSearchParams<{
     billId: string;
     customerId: string;
@@ -34,7 +38,6 @@ export default function ReceiptScreen() {
     skipForm?: string;
   }>();
 
-  const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [remarks, setRemarks] = useState("");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
@@ -57,7 +60,8 @@ export default function ReceiptScreen() {
         customerName,
         totalAmount: total,
         paymentType,
-        splitPayments: paymentType === "Split" ? parsedSplitPayments : undefined,
+        splitPayments:
+          paymentType === "Split" ? parsedSplitPayments : undefined,
         remarks: remarks.trim() || undefined,
       };
 
@@ -74,24 +78,28 @@ export default function ReceiptScreen() {
   };
 
   useEffect(() => {
-    if (paymentType === 'Credit' && skipForm === '1') {
+    if (paymentType === "Credit" && skipForm === "1") {
       // process credit sale directly
       (async () => {
         try {
           setProcessing(true);
-          await paymentService.processCreditSale(customerId, customerName, total);
+          await paymentService.processCreditSale(
+            customerId,
+            customerName,
+            total
+          );
           // Navigate back after short delay
           setTimeout(() => {
-            router.push('/(tabs)/customers');
+            router.push("/(tabs)/customers");
           }, 300);
-        } catch (e) {
-          setError('Failed to record credit sale');
+        } catch {
+          setError("Failed to record credit sale");
         } finally {
           setProcessing(false);
         }
       })();
     }
-  }, [paymentType, skipForm]);
+  }, [paymentType, skipForm, customerId, customerName, total, router]);
 
   const handleDone = () => {
     if (!receipt) {
@@ -111,11 +119,20 @@ export default function ReceiptScreen() {
   };
 
   // Show payment form with remarks before processing
-  if (paymentType === 'Credit' && skipForm === '1') {
+  if (paymentType === "Credit" && skipForm === "1") {
     return (
-      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb' }}>
+      <SafeAreaView
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: "#f9fafb",
+        }}
+      >
         <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={{ marginTop: 16, color: theme.colors.textSecondary }}>Recording credit sale...</Text>
+        <Text style={{ marginTop: 16, color: theme.colors.textSecondary }}>
+          Recording credit sale...
+        </Text>
       </SafeAreaView>
     );
   }
@@ -146,136 +163,171 @@ export default function ReceiptScreen() {
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
           {/* Payment Summary */}
-          <View style={{
-            backgroundColor: "white",
-            borderRadius: 16,
-            padding: 24,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 8,
-            elevation: 3,
-            marginBottom: 24,
-          }}>
-            <Text style={{
-              fontSize: 20,
-              fontWeight: "600",
-              color: theme.colors.text,
-              marginBottom: 16,
-              textAlign: "center",
-            }}>
+          <View
+            style={{
+              backgroundColor: "white",
+              borderRadius: 16,
+              padding: 24,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 8,
+              elevation: 3,
+              marginBottom: 24,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 20,
+                fontWeight: "600",
+                color: theme.colors.text,
+                marginBottom: 16,
+                textAlign: "center",
+              }}
+            >
               Payment Summary
             </Text>
 
-            <View style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              marginBottom: 12,
-            }}>
-              <Text style={{
-                fontSize: 14,
-                color: theme.colors.textSecondary,
-              }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                marginBottom: 12,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: theme.colors.textSecondary,
+                }}
+              >
                 Customer:
               </Text>
-              <Text style={{
-                fontSize: 14,
-                fontWeight: "500",
-                color: theme.colors.text,
-              }}>
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: "500",
+                  color: theme.colors.text,
+                }}
+              >
                 {customerName}
               </Text>
             </View>
 
-            <View style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              marginBottom: 12,
-            }}>
-              <Text style={{
-                fontSize: 14,
-                color: theme.colors.textSecondary,
-              }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                marginBottom: 12,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: theme.colors.textSecondary,
+                }}
+              >
                 Bill ID:
               </Text>
-              <Text style={{
-                fontSize: 14,
-                fontWeight: "500",
-                color: theme.colors.text,
-              }}>
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: "500",
+                  color: theme.colors.text,
+                }}
+              >
                 #{billId}
               </Text>
             </View>
 
-            <View style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              marginBottom: 16,
-              paddingTop: 12,
-              borderTopWidth: 1,
-              borderTopColor: "#f3f4f6",
-            }}>
-              <Text style={{
-                fontSize: 16,
-                fontWeight: "600",
-                color: theme.colors.text,
-              }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                marginBottom: 16,
+                paddingTop: 12,
+                borderTopWidth: 1,
+                borderTopColor: "#f3f4f6",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                }}
+              >
                 Total Amount:
               </Text>
-              <Text style={{
-                fontSize: 16,
-                fontWeight: "700",
-                color: theme.colors.text,
-              }}>
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "700",
+                  color: theme.colors.text,
+                }}
+              >
                 ₹{total.toFixed(2)}
               </Text>
             </View>
 
             {/* Payment Method Details */}
-            <View style={{
-              backgroundColor: "#f9fafb",
-              borderRadius: 8,
-              padding: 12,
-            }}>
-              <Text style={{
-                fontSize: 14,
-                fontWeight: "500",
-                color: theme.colors.text,
-                marginBottom: 8,
-              }}>
+            <View
+              style={{
+                backgroundColor: "#f9fafb",
+                borderRadius: 8,
+                padding: 12,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: "500",
+                  color: theme.colors.text,
+                  marginBottom: 8,
+                }}
+              >
                 Payment Method:
               </Text>
 
               {paymentType === "Split" ? (
                 <View>
                   {parsedSplitPayments.map((payment: any, index: number) => (
-                    <View key={index} style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      marginBottom: 4,
-                    }}>
-                      <Text style={{
-                        fontSize: 14,
-                        color: theme.colors.textSecondary,
-                      }}>
+                    <View
+                      key={index}
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        marginBottom: 4,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          color: theme.colors.textSecondary,
+                        }}
+                      >
                         {payment.type}:
                       </Text>
-                      <Text style={{
-                        fontSize: 14,
-                        fontWeight: "500",
-                        color: theme.colors.text,
-                      }}>
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: "500",
+                          color: theme.colors.text,
+                        }}
+                      >
                         ₹{payment.amount.toFixed(2)}
                       </Text>
                     </View>
                   ))}
                 </View>
               ) : (
-                <Text style={{
-                  fontSize: 14,
-                  fontWeight: "500",
-                  color: theme.colors.text,
-                }}>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "500",
+                    color: theme.colors.text,
+                  }}
+                >
                   {paymentType}
                 </Text>
               )}
@@ -283,23 +335,27 @@ export default function ReceiptScreen() {
           </View>
 
           {/* Remarks Section */}
-          <View style={{
-            backgroundColor: "white",
-            borderRadius: 16,
-            padding: 24,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 8,
-            elevation: 3,
-            marginBottom: 24,
-          }}>
-            <Text style={{
-              fontSize: 16,
-              fontWeight: "600",
-              color: theme.colors.text,
-              marginBottom: 12,
-            }}>
+          <View
+            style={{
+              backgroundColor: "white",
+              borderRadius: 16,
+              padding: 24,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 8,
+              elevation: 3,
+              marginBottom: 24,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 16,
+                fontWeight: "600",
+                color: theme.colors.text,
+                marginBottom: 12,
+              }}
+            >
               Payment Remarks (Optional)
             </Text>
             <TextInput
@@ -323,15 +379,17 @@ export default function ReceiptScreen() {
         </ScrollView>
 
         {/* Action Buttons */}
-        <View style={{
-          backgroundColor: "white",
-          borderTopWidth: 1,
-          borderTopColor: "#f3f4f6",
-          paddingHorizontal: 16,
-          paddingVertical: 16,
-          flexDirection: "row",
-          gap: 12,
-        }}>
+        <View
+          style={{
+            backgroundColor: "white",
+            borderTopWidth: 1,
+            borderTopColor: "#f3f4f6",
+            paddingHorizontal: 16,
+            paddingVertical: 16,
+            flexDirection: "row",
+            gap: 12,
+          }}
+        >
           <TouchableOpacity
             onPress={() => router.back()}
             style={{
@@ -344,11 +402,13 @@ export default function ReceiptScreen() {
               justifyContent: "center",
             }}
           >
-            <Text style={{
-              color: theme.colors.text,
-              fontWeight: "600",
-              fontSize: 16,
-            }}>
+            <Text
+              style={{
+                color: theme.colors.text,
+                fontWeight: "600",
+                fontSize: 16,
+              }}
+            >
               CANCEL
             </Text>
           </TouchableOpacity>
@@ -364,11 +424,13 @@ export default function ReceiptScreen() {
               justifyContent: "center",
             }}
           >
-            <Text style={{
-              color: "white",
-              fontWeight: "600",
-              fontSize: 16,
-            }}>
+            <Text
+              style={{
+                color: "white",
+                fontWeight: "600",
+                fontSize: 16,
+              }}
+            >
               PROCESS PAYMENT
             </Text>
           </TouchableOpacity>
@@ -401,22 +463,33 @@ export default function ReceiptScreen() {
           }}
         />
 
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 16 }}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 16,
+          }}
+        >
           <ActivityIndicator size="large" color="#2563eb" />
-          <Text style={{
-            fontSize: 18,
-            fontWeight: "600",
-            color: theme.colors.text,
-            marginTop: 16,
-            textAlign: "center",
-          }}>
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: "600",
+              color: theme.colors.text,
+              marginTop: 16,
+              textAlign: "center",
+            }}
+          >
             Processing Payment...
           </Text>
-          <Text style={{
-            color: theme.colors.textSecondary,
-            marginTop: 8,
-            textAlign: "center",
-          }}>
+          <Text
+            style={{
+              color: theme.colors.textSecondary,
+              marginTop: 8,
+              textAlign: "center",
+            }}
+          >
             Please wait while we process your payment
           </Text>
         </View>
@@ -448,22 +521,33 @@ export default function ReceiptScreen() {
           }}
         />
 
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 16 }}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 16,
+          }}
+        >
           <Text style={{ fontSize: 48, marginBottom: 16 }}>❌</Text>
-          <Text style={{
-            fontSize: 20,
-            fontWeight: "600",
-            color: theme.colors.text,
-            marginBottom: 8,
-            textAlign: "center",
-          }}>
+          <Text
+            style={{
+              fontSize: 20,
+              fontWeight: "600",
+              color: theme.colors.text,
+              marginBottom: 8,
+              textAlign: "center",
+            }}
+          >
             Payment Failed
           </Text>
-          <Text style={{
-            color: theme.colors.textSecondary,
-            textAlign: "center",
-            marginBottom: 24,
-          }}>
+          <Text
+            style={{
+              color: theme.colors.textSecondary,
+              textAlign: "center",
+              marginBottom: 24,
+            }}
+          >
             {error}
           </Text>
           <TouchableOpacity
@@ -518,13 +602,22 @@ export default function ReceiptScreen() {
           }}
         />
 
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 16 }}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 16,
+          }}
+        >
           <ActivityIndicator size="large" color="#2563eb" />
-          <Text style={{
-            color: theme.colors.textSecondary,
-            marginTop: 8,
-            textAlign: "center",
-          }}>
+          <Text
+            style={{
+              color: theme.colors.textSecondary,
+              marginTop: 8,
+              textAlign: "center",
+            }}
+          >
             Loading receipt...
           </Text>
         </View>
@@ -557,142 +650,189 @@ export default function ReceiptScreen() {
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
         {/* Success Icon */}
-        <View style={{
-          alignItems: "center",
-          marginTop: 32,
-          marginBottom: 32,
-        }}>
+        <View
+          style={{
+            alignItems: "center",
+            marginTop: 32,
+            marginBottom: 32,
+          }}
+        >
           <CheckCircle size={64} color="#059669" />
-          <Text style={{
-            fontSize: 24,
-            fontWeight: "700",
-            color: theme.colors.text,
-            marginTop: 16,
-            textAlign: "center",
-          }}>
+          <Text
+            style={{
+              fontSize: 24,
+              fontWeight: "700",
+              color: theme.colors.text,
+              marginTop: 16,
+              textAlign: "center",
+            }}
+          >
             Payment Successful!
           </Text>
-          <Text style={{
-            fontSize: 16,
-            color: theme.colors.textSecondary,
-            marginTop: 8,
-            textAlign: "center",
-          }}>
-            {paymentType === "Credit" ? "Amount added to customer dues" : "Due amount cleared and added to revenue"}
+          <Text
+            style={{
+              fontSize: 16,
+              color: theme.colors.textSecondary,
+              marginTop: 8,
+              textAlign: "center",
+            }}
+          >
+            {paymentType === "Credit"
+              ? "Amount added to customer dues"
+              : "Due amount cleared and added to revenue"}
           </Text>
         </View>
 
         {/* Receipt Details */}
-        <View style={{
-          backgroundColor: "white",
-          borderRadius: 16,
-          padding: 24,
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 8,
-          elevation: 3,
-          marginBottom: 24,
-        }}>
-          <View style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: 20,
-          }}>
+        <View
+          style={{
+            backgroundColor: "white",
+            borderRadius: 16,
+            padding: 24,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 8,
+            elevation: 3,
+            marginBottom: 24,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: 20,
+            }}
+          >
             <ReceiptIcon size={24} color="#2563eb" />
-            <Text style={{
-              fontSize: 20,
-              fontWeight: "600",
-              color: theme.colors.text,
-              marginLeft: 8,
-            }}>
+            <Text
+              style={{
+                fontSize: 20,
+                fontWeight: "600",
+                color: theme.colors.text,
+                marginLeft: 8,
+              }}
+            >
               Payment Receipt
             </Text>
           </View>
 
-          <View style={{
-            borderTopWidth: 1,
-            borderTopColor: "#f3f4f6",
-            paddingTop: 16,
-          }}>
-            <View style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              marginBottom: 12,
-            }}>
-              <Text style={{
-                fontSize: 14,
-                color: theme.colors.textSecondary,
-              }}>
+          <View
+            style={{
+              borderTopWidth: 1,
+              borderTopColor: "#f3f4f6",
+              paddingTop: 16,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                marginBottom: 12,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: theme.colors.textSecondary,
+                }}
+              >
                 Receipt No:
               </Text>
-              <Text style={{
-                fontSize: 14,
-                fontWeight: "600",
-                color: theme.colors.text,
-              }}>
-                #{receipt.receiptNo}
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                }}
+              >
+                #
+                {receipt?.receiptNo && Number(receipt.receiptNo) > 0
+                  ? receipt.receiptNo
+                  : "—"}
               </Text>
             </View>
 
-            <View style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              marginBottom: 12,
-            }}>
-              <Text style={{
-                fontSize: 14,
-                color: theme.colors.textSecondary,
-              }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                marginBottom: 12,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: theme.colors.textSecondary,
+                }}
+              >
                 Bill No:
               </Text>
-              <Text style={{
-                fontSize: 14,
-                fontWeight: "500",
-                color: theme.colors.text,
-              }}>
-                #{bill.billNumber}
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: "500",
+                  color: theme.colors.text,
+                }}
+              >
+                #
+                {bill?.billNumber && Number(bill.billNumber) > 0
+                  ? bill.billNumber
+                  : "—"}
               </Text>
             </View>
 
-            <View style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              marginBottom: 12,
-            }}>
-              <Text style={{
-                fontSize: 14,
-                color: theme.colors.textSecondary,
-              }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                marginBottom: 12,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: theme.colors.textSecondary,
+                }}
+              >
                 Customer:
               </Text>
-              <Text style={{
-                fontSize: 14,
-                fontWeight: "500",
-                color: theme.colors.text,
-              }}>
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: "500",
+                  color: theme.colors.text,
+                }}
+              >
                 {customerName}
               </Text>
             </View>
 
-            <View style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              marginBottom: 12,
-            }}>
-              <Text style={{
-                fontSize: 14,
-                color: theme.colors.textSecondary,
-              }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                marginBottom: 12,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: theme.colors.textSecondary,
+                }}
+              >
                 Date & Time:
               </Text>
-              <Text style={{
-                fontSize: 14,
-                fontWeight: "500",
-                color: theme.colors.text,
-              }}>
-                {new Date(receipt.createdAt).toLocaleDateString("en-IN")} {new Date(receipt.createdAt).toLocaleTimeString("en-IN", {
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: "500",
+                  color: theme.colors.text,
+                }}
+              >
+                {new Date(receipt.createdAt).toLocaleDateString("en-IN")}{" "}
+                {new Date(receipt.createdAt).toLocaleTimeString("en-IN", {
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
@@ -700,99 +840,124 @@ export default function ReceiptScreen() {
             </View>
 
             {receipt.remarks && (
-              <View style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                marginBottom: 12,
-              }}>
-                <Text style={{
-                  fontSize: 14,
-                  color: theme.colors.textSecondary,
-                }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  marginBottom: 12,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 14,
+                    color: theme.colors.textSecondary,
+                  }}
+                >
                   Remarks:
                 </Text>
-                <Text style={{
-                  fontSize: 14,
-                  fontWeight: "500",
-                  color: theme.colors.text,
-                  flex: 1,
-                  textAlign: "right",
-                  marginLeft: 8,
-                }}>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "500",
+                    color: theme.colors.text,
+                    flex: 1,
+                    textAlign: "right",
+                    marginLeft: 8,
+                  }}
+                >
                   {receipt.remarks}
                 </Text>
               </View>
             )}
 
-            <View style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              marginBottom: 16,
-              paddingTop: 12,
-              borderTopWidth: 1,
-              borderTopColor: "#f3f4f6",
-            }}>
-              <Text style={{
-                fontSize: 16,
-                fontWeight: "600",
-                color: theme.colors.text,
-              }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                marginBottom: 16,
+                paddingTop: 12,
+                borderTopWidth: 1,
+                borderTopColor: "#f3f4f6",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                }}
+              >
                 Total Amount:
               </Text>
-              <Text style={{
-                fontSize: 16,
-                fontWeight: "700",
-                color: theme.colors.text,
-              }}>
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "700",
+                  color: theme.colors.text,
+                }}
+              >
                 ₹{total.toFixed(2)}
               </Text>
             </View>
 
             {/* Payment Method Details */}
-            <View style={{
-              backgroundColor: "#f9fafb",
-              borderRadius: 8,
-              padding: 12,
-            }}>
-              <Text style={{
-                fontSize: 14,
-                fontWeight: "500",
-                color: theme.colors.text,
-                marginBottom: 8,
-              }}>
+            <View
+              style={{
+                backgroundColor: "#f9fafb",
+                borderRadius: 8,
+                padding: 12,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: "500",
+                  color: theme.colors.text,
+                  marginBottom: 8,
+                }}
+              >
                 Payment Method:
               </Text>
 
               {paymentType === "Split" ? (
                 <View>
                   {parsedSplitPayments.map((payment: any, index: number) => (
-                    <View key={index} style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      marginBottom: 4,
-                    }}>
-                      <Text style={{
-                        fontSize: 14,
-                        color: theme.colors.textSecondary,
-                      }}>
+                    <View
+                      key={index}
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        marginBottom: 4,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          color: theme.colors.textSecondary,
+                        }}
+                      >
                         {payment.type}:
                       </Text>
-                      <Text style={{
-                        fontSize: 14,
-                        fontWeight: "500",
-                        color: theme.colors.text,
-                      }}>
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: "500",
+                          color: theme.colors.text,
+                        }}
+                      >
                         ₹{payment.amount.toFixed(2)}
                       </Text>
                     </View>
                   ))}
                 </View>
               ) : (
-                <Text style={{
-                  fontSize: 14,
-                  fontWeight: "500",
-                  color: theme.colors.text,
-                }}>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "500",
+                    color: theme.colors.text,
+                  }}
+                >
                   {paymentType}
                 </Text>
               )}
@@ -801,41 +966,49 @@ export default function ReceiptScreen() {
         </View>
 
         {/* Thank You Message */}
-        <View style={{
-          backgroundColor: "#ecfdf5",
-          borderRadius: 12,
-          padding: 16,
-          borderWidth: 1,
-          borderColor: "#a7f3d0",
-          marginBottom: 32,
-        }}>
-          <Text style={{
-            fontSize: 16,
-            fontWeight: "500",
-            color: "#059669",
-            textAlign: "center",
-            marginBottom: 4,
-          }}>
+        <View
+          style={{
+            backgroundColor: "#ecfdf5",
+            borderRadius: 12,
+            padding: 16,
+            borderWidth: 1,
+            borderColor: "#a7f3d0",
+            marginBottom: 32,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 16,
+              fontWeight: "500",
+              color: "#059669",
+              textAlign: "center",
+              marginBottom: 4,
+            }}
+          >
             Thank you for visiting Chai Point!
           </Text>
-          <Text style={{
-            fontSize: 14,
-            color: "#047857",
-            textAlign: "center",
-          }}>
+          <Text
+            style={{
+              fontSize: 14,
+              color: "#047857",
+              textAlign: "center",
+            }}
+          >
             Have a great day! ☕
           </Text>
         </View>
       </ScrollView>
 
       {/* Done Button */}
-      <View style={{
-        backgroundColor: "white",
-        borderTopWidth: 1,
-        borderTopColor: "#f3f4f6",
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-      }}>
+      <View
+        style={{
+          backgroundColor: "white",
+          borderTopWidth: 1,
+          borderTopColor: "#f3f4f6",
+          paddingHorizontal: 16,
+          paddingVertical: 16,
+        }}
+      >
         <TouchableOpacity
           onPress={handleDone}
           style={{
@@ -847,11 +1020,13 @@ export default function ReceiptScreen() {
             justifyContent: "center",
           }}
         >
-          <Text style={{
-            color: "white",
-            fontWeight: "600",
-            fontSize: 18,
-          }}>
+          <Text
+            style={{
+              color: "white",
+              fontWeight: "600",
+              fontSize: 18,
+            }}
+          >
             DONE
           </Text>
         </TouchableOpacity>

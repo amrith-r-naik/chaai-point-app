@@ -126,20 +126,26 @@ function toCloud(table: TableName, row: RowMap): RowMap {
     };
   }
   if (table === "bills") {
-    return {
+    const payload: any = {
       ...base,
-      bill_number: row.billNumber,
       customer_id: row.customerId,
       total: row.total,
     };
+    if (row.billNumber && Number(row.billNumber) > 0) {
+      payload.bill_number = row.billNumber;
+    }
+    return payload;
   }
   if (table === "kot_orders") {
-    return {
+    const payload: any = {
       ...base,
-      kot_number: row.kotNumber,
       customer_id: row.customerId,
       bill_id: row.billId ?? null,
     };
+    if (row.kotNumber && Number(row.kotNumber) > 0) {
+      payload.kot_number = row.kotNumber;
+    }
+    return payload;
   }
   if (table === "kot_items") {
     return {
@@ -162,25 +168,31 @@ function toCloud(table: TableName, row: RowMap): RowMap {
     };
   }
   if (table === "receipts") {
-    return {
+    const payload: any = {
       ...base,
-      receipt_no: row.receiptNo,
       customer_id: row.customerId,
       bill_id: row.billId ?? null,
       amount: row.amount,
       mode: row.mode,
       remarks: row.remarks ?? null,
     };
+    if (row.receiptNo && Number(row.receiptNo) > 0) {
+      payload.receipt_no = row.receiptNo;
+    }
+    return payload;
   }
   if (table === "expenses") {
-    return {
+    const payload: any = {
       ...base,
-      voucher_no: row.voucherNo,
       amount: row.amount,
       towards: row.towards,
       mode: row.mode,
       remarks: row.remarks ?? null,
     };
+    if (row.voucherNo && Number(row.voucherNo) > 0) {
+      payload.voucher_no = row.voucherNo;
+    }
+    return payload;
   }
   if (table === "split_payments") {
     return {
@@ -305,6 +317,54 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
   if (!db || !rows.length) return;
   await db.execAsync("BEGIN IMMEDIATE TRANSACTION");
   try {
+    // Helper to ensure a referenced customer exists locally by pulling once from cloud if missing
+    const ensureLocalCustomer = async (
+      customerId: string | null | undefined
+    ) => {
+      if (!customerId) return;
+      const exists = (await db!.getFirstAsync(
+        `SELECT id FROM customers WHERE id = ?`,
+        [customerId]
+      )) as any;
+      if (exists?.id) return;
+      // Fetch from cloud and insert
+      const { data, error } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("id", customerId)
+        .maybeSingle();
+      if (error) {
+        console.warn(`[sync] ensureLocalCustomer fetch failed`, error);
+        return;
+      }
+      if (!data) return;
+      const r: any = { ...data };
+      const mapKeys: Record<string, string> = {
+        created_at: "createdAt",
+        updated_at: "updatedAt",
+        deleted_at: "deletedAt",
+        shop_id: "shopId",
+        credit_balance: "creditBalance",
+      } as any;
+      for (const [k, v] of Object.entries(mapKeys)) {
+        if (r[k] !== undefined) {
+          r[v] = r[k];
+          delete r[k];
+        }
+      }
+      const cols = Object.keys(r);
+      const placeholders = cols.map(() => "?").join(",");
+      const updates = cols
+        .filter((c) => c !== "id")
+        .map((c) => `${c}=excluded.${c}`)
+        .join(",");
+      const values = cols.map((c) => r[c]);
+      await db!.runAsync(
+        `INSERT INTO customers (${cols.join(",")}) VALUES (${placeholders})
+         ON CONFLICT(id) DO UPDATE SET ${updates}`,
+        values
+      );
+    };
     for (const r of rows) {
       // Map cloud snake_case to local camelCase
       const mapped: any = { ...r };
@@ -349,6 +409,11 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
       ) {
         // Local is newer or equal; skip applying this cloud row
         continue;
+      }
+
+      // Ensure parents exist for FK tables before insert
+      if (table === "bills") {
+        await ensureLocalCustomer(mapped.customerId);
       }
 
       const cols = Object.keys(mapped);

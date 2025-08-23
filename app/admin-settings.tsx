@@ -725,6 +725,7 @@ export default function AdminSettingsScreen() {
             </Text>
           )}
         </View>
+        {/* Diagnostics entry removed for production */}
         {/* Database Statistics */}
         <View style={{ marginBottom: 32 }}>
           <Text

@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { supabase } from "@/lib/supabase";
+import { syncLog } from "@/services/syncLog";
 
 type TableName =
   | "customers"
@@ -26,6 +27,26 @@ const TABLES: TableName[] = [
   "payments",
   "expenses",
 ];
+
+// Time helpers to robustly compare timestamps (supporting both ISO and "YYYY-MM-DD HH:MM:SS")
+function normalizeTsString(ts: string | null | undefined): string | null {
+  if (!ts) return null;
+  if (ts.includes("T")) return ts; // Assume already ISO
+  return ts.replace(" ", "T") + "Z";
+}
+
+function toMs(ts: string | null | undefined): number | null {
+  const norm = normalizeTsString(ts);
+  if (!norm) return null;
+  const ms = Date.parse(norm);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+function latestMs(...values: (string | null | undefined)[]): number | null {
+  const arr = values.map((v) => toMs(v)).filter((v): v is number => v !== null);
+  if (!arr.length) return null;
+  return Math.max(...arr);
+}
 
 async function getSyncCheckpoint(table: string) {
   if (!db) throw new Error("DB not ready");
@@ -68,6 +89,11 @@ async function fetchLocalChanges(
     `SELECT * FROM ${table} ${clause}`,
     params
   )) as any[];
+  syncLog.log(`[sync][local] fetchLocalChanges`, {
+    table,
+    since,
+    count: rows.length,
+  });
   return rows;
 }
 
@@ -171,39 +197,50 @@ function toCloud(table: TableName, row: RowMap): RowMap {
 async function fetchServerUpdatedMap(
   table: TableName,
   ids: string[]
-): Promise<Map<string, string | null>> {
+): Promise<Map<string, number | null>> {
   if (!ids.length) return new Map();
   // PostgREST 'in' filter; chunk if too many IDs
   const chunkSize = 500;
-  const map = new Map<string, string | null>();
+  const map = new Map<string, number | null>();
   for (let i = 0; i < ids.length; i += chunkSize) {
     const chunk = ids.slice(i, i + chunkSize);
     const { data, error } = await supabase
       .from(table)
-      .select("id, updated_at")
+      .select("id, updated_at, deleted_at")
       .in("id", chunk);
     if (error) {
       console.error(`[sync] fetchServerUpdatedMap failed for ${table}`, error);
       throw error;
     }
-    (data || []).forEach((row: any) => map.set(row.id, row.updated_at || null));
+    (data || []).forEach((row: any) => {
+      const latest = latestMs(row.updated_at, row.deleted_at);
+      map.set(row.id, latest);
+    });
   }
   return map;
 }
 
 async function upsertCloud(table: TableName, rows: RowMap[]) {
   if (!rows.length) return { maxUpdatedAt: null as string | null };
-  // Conflict-aware filter: don't push if server has newer updated_at
+  // Conflict-aware filter: don't push if server has newer latest timestamp
   const serverMap = await fetchServerUpdatedMap(
     table,
     rows.map((r) => r.id)
   );
-  const toSend = rows.filter((r) => {
-    const localUpdated = (r.updatedAt || r.createdAt || "") as string;
-    const serverUpdated = serverMap.get(r.id) || null;
-    // if server has no row -> insert; else push only if local >= server
-    if (!serverUpdated) return true;
-    return localUpdated >= serverUpdated;
+  const candidates = rows;
+  const toSend = candidates.filter((r) => {
+    const localLatest = latestMs(r.updatedAt, r.deletedAt, r.createdAt);
+    const serverLatest = serverMap.get(r.id) ?? null;
+    if (serverLatest === null) return true; // server missing -> insert
+    if (localLatest === null) return false;
+    const isDelete = !!r.deletedAt;
+    // For deletes, allow equality to ensure tombstones propagate despite same-second timestamps
+    return isDelete ? localLatest >= serverLatest : localLatest > serverLatest;
+  });
+  syncLog.log(`[sync][cloud] push candidates`, {
+    table,
+    candidates: candidates.length,
+    toSend: toSend.length,
   });
   if (!toSend.length) return { maxUpdatedAt: null };
   const payload = toSend.map((r) => toCloud(table, r));
@@ -215,6 +252,7 @@ async function upsertCloud(table: TableName, rows: RowMap[]) {
       error,
       count: payload.length,
     });
+    syncLog.log(`[sync][cloud] upsert failed`, { table, error: String(error) });
     throw error;
   }
   const maxUpdatedAt =
@@ -223,6 +261,11 @@ async function upsertCloud(table: TableName, rows: RowMap[]) {
       .filter(Boolean)
       .sort()
       .at(-1) || null;
+  syncLog.log(`[sync][cloud] upsert ok`, {
+    table,
+    count: payload.length,
+    maxUpdatedAt,
+  });
   return { maxUpdatedAt };
 }
 
@@ -240,9 +283,15 @@ async function pullCloud(
   const { data, error } = await query;
   if (error) {
     console.error(`[sync] pullCloud failed for ${table}`, { error, since });
+    syncLog.log(`[sync][cloud] pull failed`, {
+      table,
+      error: String(error),
+      since,
+    });
     throw error;
   }
   const rows = (data || []) as any[];
+  syncLog.log(`[sync][cloud] pulled`, { table, since, count: rows.length });
   const maxUpdatedAt =
     rows
       .map((r) => r.updated_at as string)
@@ -288,12 +337,16 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
 
       // Conflict-aware: only apply cloud if newer than local
       const existing = (await db.getFirstAsync(
-        `SELECT updatedAt FROM ${table} WHERE id = ?`,
+        `SELECT updatedAt, deletedAt FROM ${table} WHERE id = ?`,
         [mapped.id]
       )) as any;
-      const localUpdated = (existing?.updatedAt || null) as string | null;
-      const cloudUpdated = (mapped.updatedAt || null) as string | null;
-      if (localUpdated && cloudUpdated && !(cloudUpdated > localUpdated)) {
+      const localLatest = latestMs(existing?.updatedAt, existing?.deletedAt);
+      const cloudLatest = latestMs(mapped.updatedAt, mapped.deletedAt);
+      if (
+        localLatest !== null &&
+        cloudLatest !== null &&
+        !(cloudLatest > localLatest)
+      ) {
         // Local is newer or equal; skip applying this cloud row
         continue;
       }
@@ -311,9 +364,11 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
         values
       );
     }
+    syncLog.log(`[sync][local] applied rows`, { table, count: rows.length });
     await db.execAsync("COMMIT");
   } catch (e) {
     console.error(`[sync] applyPulled failed for ${table}`, e);
+    syncLog.log(`[sync][local] apply failed`, { table, error: String(e) });
     await db.execAsync("ROLLBACK");
     throw e;
   }
@@ -321,10 +376,13 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
 
 export const syncService = {
   async syncAll() {
+    syncLog.log(`[sync] starting`);
     for (const table of TABLES) {
       try {
+        syncLog.log(`[sync] table begin`, { table });
         // PULL first (conflict-aware apply will skip if local is newer)
         const { lastPullAt } = await getSyncCheckpoint(table);
+        syncLog.log(`[sync][cloud] pull`, { table, since: lastPullAt });
         const pulled = await pullCloud(table, lastPullAt);
         await applyPulled(table, pulled.rows);
         if (pulled.maxUpdatedAt)
@@ -332,14 +390,50 @@ export const syncService = {
 
         // PUSH (conflict-aware upsert will skip if server is newer)
         const { lastPushAt } = await getSyncCheckpoint(table);
+        syncLog.log(`[sync][cloud] push`, { table, since: lastPushAt });
         const toPush = await fetchLocalChanges(table, lastPushAt);
         const pushed = await upsertCloud(table, toPush);
-        if (pushed.maxUpdatedAt)
+        if (pushed.maxUpdatedAt) {
           await setSyncCheckpoint(table, { lastPushAt: pushed.maxUpdatedAt });
+        } else if (toPush.length > 0) {
+          // Nothing sent (server newer/equal). Avoid resending same candidates next run.
+          const localMax = toPush
+            .map((r) =>
+              normalizeTsString(
+                r.updatedAt || r.deletedAt || r.createdAt || null
+              )
+            )
+            .filter((s): s is string => !!s)
+            .sort()
+            .at(-1) as string | undefined;
+          if (localMax) {
+            syncLog.log(`[sync][cloud] advance lastPushAt without send`, {
+              table,
+              localMax,
+            });
+            await setSyncCheckpoint(table, { lastPushAt: localMax });
+          }
+        }
+        syncLog.log(`[sync] table end`, { table });
       } catch (e) {
         console.error(`[sync] table sync failed for ${table}`, e);
+        syncLog.log(`[sync] table error`, { table, error: String(e) });
         throw e;
       }
+    }
+    syncLog.log(`[sync] completed`);
+  },
+  async resetPushCheckpoint(table?: TableName) {
+    if (!db) throw new Error("DB not ready");
+    if (table) {
+      await db.runAsync(
+        `INSERT INTO sync_state (tableName, lastPushAt, lastPullAt)
+         VALUES (?, NULL, (SELECT lastPullAt FROM sync_state WHERE tableName = ?))
+         ON CONFLICT(tableName) DO UPDATE SET lastPushAt = NULL`,
+        [table, table]
+      );
+    } else {
+      await db.execAsync(`UPDATE sync_state SET lastPushAt = NULL`);
     }
   },
   async resetPullCheckpoint(table?: TableName) {

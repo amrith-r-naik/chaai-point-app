@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "chaaipointapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true
     },

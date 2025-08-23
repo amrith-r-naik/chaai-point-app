@@ -33,7 +33,7 @@ export async function seedTestData() {
       `INSERT OR IGNORE INTO customers (id, name, contact, createdAt, updatedAt) 
        VALUES ('cust1', 'John Doe', '9876543210', datetime('now'), datetime('now'))`
     );
-    
+
     await db.runAsync(
       `INSERT OR IGNORE INTO customers (id, name, contact, createdAt, updatedAt) 
        VALUES ('cust2', 'Jane Smith', '9876543211', datetime('now'), datetime('now'))`
@@ -44,7 +44,7 @@ export async function seedTestData() {
       `INSERT OR IGNORE INTO menu_items (id, name, category, price, isActive, createdAt, updatedAt) 
        VALUES ('item1', 'Masala Chai', 'Beverages', 1500, 1, datetime('now'), datetime('now'))`
     );
-    
+
     await db.runAsync(
       `INSERT OR IGNORE INTO menu_items (id, name, category, price, isActive, createdAt, updatedAt) 
        VALUES ('item2', 'Samosa', 'Snacks', 2000, 1, datetime('now'), datetime('now'))`
@@ -57,12 +57,13 @@ export async function seedTestData() {
 
     // Create some test orders from today
     const today = new Date().toISOString();
-    
+
     // Order 1
     await db.runAsync(
       `INSERT OR IGNORE INTO kot_orders (id, kotNumber, customerId, createdAt) 
-       VALUES ('order1', 1001, 'cust1', ?)`
-    , [today]);
+       VALUES ('order1', 1001, 'cust1', ?)`,
+      [today]
+    );
 
     await db.runAsync(
       `INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime) 
@@ -77,8 +78,9 @@ export async function seedTestData() {
     // Order 2
     await db.runAsync(
       `INSERT OR IGNORE INTO kot_orders (id, kotNumber, customerId, createdAt) 
-       VALUES ('order2', 1002, 'cust2', ?)`
-    , [today]);
+       VALUES ('order2', 1002, 'cust2', ?)`,
+      [today]
+    );
 
     await db.runAsync(
       `INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime) 
@@ -93,13 +95,15 @@ export async function seedTestData() {
     // Add some expenses
     await db.runAsync(
       `INSERT OR IGNORE INTO expenses (id, voucherNo, amount, towards, mode, remarks, createdAt) 
-       VALUES ('exp1', 1, 25000, 'Rent', 'Cash', 'Monthly shop rent', ?)`
-    , [today]);
+       VALUES ('exp1', 1, 25000, 'Rent', 'Cash', 'Monthly shop rent', ?)`,
+      [today]
+    );
 
     await db.runAsync(
       `INSERT OR IGNORE INTO expenses (id, voucherNo, amount, towards, mode, remarks, createdAt) 
-       VALUES ('exp2', 2, 5000, 'Supplies', 'UPI', 'Tea leaves and milk', ?)`
-    , [today]);
+       VALUES ('exp2', 2, 5000, 'Supplies', 'UPI', 'Tea leaves and milk', ?)`,
+      [today]
+    );
 
     console.log("Test data seeded successfully");
   } catch (error) {
@@ -116,6 +120,7 @@ export async function recreateDatabase() {
   try {
     // Drop all tables first
     await db.execAsync(`
+      DROP TABLE IF EXISTS split_payments;
       DROP TABLE IF EXISTS receipts;
       DROP TABLE IF EXISTS expenses;
       DROP TABLE IF EXISTS payments;
@@ -125,6 +130,7 @@ export async function recreateDatabase() {
       DROP TABLE IF EXISTS menu_items;
       DROP TABLE IF EXISTS customers;
       DROP TABLE IF EXISTS users;
+      DROP TABLE IF EXISTS sync_state;
     `);
 
     console.log("All tables dropped");
@@ -146,7 +152,8 @@ export async function recreateDatabase() {
         name TEXT NOT NULL,
         contact TEXT UNIQUE,
         createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
+        updatedAt TEXT NOT NULL,
+        creditBalance INTEGER NOT NULL DEFAULT 0
       );
 
       CREATE TABLE menu_items (
@@ -194,6 +201,7 @@ export async function recreateDatabase() {
         customerId TEXT NOT NULL,
         amount INTEGER NOT NULL,
         mode TEXT NOT NULL,
+        subType TEXT,
         remarks TEXT,
         createdAt TEXT NOT NULL,
         FOREIGN KEY (billId) REFERENCES bills(id),
@@ -204,11 +212,13 @@ export async function recreateDatabase() {
         id TEXT PRIMARY KEY,
         receiptNo INTEGER NOT NULL,
         customerId TEXT NOT NULL,
+        billId TEXT,
         amount INTEGER NOT NULL,
         mode TEXT NOT NULL,
         remarks TEXT,
         createdAt TEXT NOT NULL,
-        FOREIGN KEY (customerId) REFERENCES customers(id)
+        FOREIGN KEY (customerId) REFERENCES customers(id),
+        FOREIGN KEY (billId) REFERENCES bills(id)
       );
 
       CREATE TABLE expenses (
@@ -220,6 +230,23 @@ export async function recreateDatabase() {
         remarks TEXT,
         createdAt TEXT NOT NULL
       );
+
+      CREATE TABLE split_payments (
+        id TEXT PRIMARY KEY,
+        receiptId TEXT NOT NULL,
+        paymentType TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        createdAt TEXT NOT NULL,
+        FOREIGN KEY (receiptId) REFERENCES receipts(id)
+      );
+
+      -- Indices for performance
+      CREATE INDEX IF NOT EXISTS idx_payments_customer ON payments(customerId);
+      CREATE INDEX IF NOT EXISTS idx_payments_bill ON payments(billId);
+      CREATE INDEX IF NOT EXISTS idx_bills_customer ON bills(customerId);
+      CREATE INDEX IF NOT EXISTS idx_bills_createdAt ON bills(createdAt);
+      CREATE INDEX IF NOT EXISTS idx_payments_createdAt ON payments(createdAt);
+      CREATE INDEX IF NOT EXISTS idx_receipts_bill ON receipts(billId);
     `);
 
     console.log("Database schema recreated successfully");

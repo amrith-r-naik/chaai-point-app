@@ -576,10 +576,18 @@ export async function nextLocalNumber(
 ): Promise<number> {
   if (!db) throw new Error("Database not initialized");
   const shop = "shop_1"; // single-shop local scope
-  const periodKey =
-    name === "kot"
-      ? date.toISOString().slice(0, 10) // YYYY-MM-DD
-      : String(date.getUTCFullYear()); // YYYY
+
+  // Use IST as shop-local time (UTC+05:30). If you support multi-timezone shops later,
+  // make this configurable per shop.
+  const istMs = date.getTime() + 5.5 * 60 * 60 * 1000;
+  const ist = new Date(istMs);
+
+  // Period keys: KOT resets daily (IST). Others reset by Indian fiscal year (Apr 1–Mar 31, IST).
+  const istDateKey = ist.toISOString().slice(0, 10); // YYYY-MM-DD (from IST-shifted date)
+  const istMonth = ist.getUTCMonth(); // 0=Jan .. 11=Dec on IST-shifted date
+  const istYear = ist.getUTCFullYear();
+  const fiscalStartYear = istMonth >= 3 ? istYear : istYear - 1; // Apr (3) -> next Mar
+  const periodKey = name === "kot" ? istDateKey : String(fiscalStartYear);
   const scope = shop;
   // Read
   let row = (await db.getFirstAsync(
@@ -590,30 +598,46 @@ export async function nextLocalNumber(
     // seed from maxima in existing tables
     let seed = 0;
     if (name === "kot") {
+      // Compare by IST date
       const r = (await db.getFirstAsync(
-        `SELECT COALESCE(MAX(kotNumber),0) as m FROM kot_orders WHERE DATE(createdAt)=DATE(?)`,
-        [date.toISOString()]
+        `SELECT COALESCE(MAX(kotNumber),0) as m
+         FROM kot_orders
+         WHERE DATE(createdAt, '+330 minutes') = ?`,
+        [istDateKey]
       )) as any;
       seed = r?.m || 0;
     } else if (name === "bill") {
-      const year = String(date.getUTCFullYear());
+      // Fiscal year window in IST
+      const fyStart = `${fiscalStartYear}-04-01`;
+      const fyEnd = `${fiscalStartYear + 1}-03-31`;
       const r = (await db.getFirstAsync(
-        `SELECT COALESCE(MAX(billNumber),0) as m FROM bills WHERE strftime('%Y', createdAt)=?`,
-        [year]
+        `SELECT COALESCE(MAX(billNumber),0) as m
+         FROM bills
+         WHERE DATE(createdAt, '+330 minutes') >= ?
+           AND DATE(createdAt, '+330 minutes') <= ?`,
+        [fyStart, fyEnd]
       )) as any;
       seed = r?.m || 0;
     } else if (name === "receipt") {
-      const year = String(date.getUTCFullYear());
+      const fyStart = `${fiscalStartYear}-04-01`;
+      const fyEnd = `${fiscalStartYear + 1}-03-31`;
       const r = (await db.getFirstAsync(
-        `SELECT COALESCE(MAX(receiptNo),0) as m FROM receipts WHERE strftime('%Y', createdAt)=?`,
-        [year]
+        `SELECT COALESCE(MAX(receiptNo),0) as m
+         FROM receipts
+         WHERE DATE(createdAt, '+330 minutes') >= ?
+           AND DATE(createdAt, '+330 minutes') <= ?`,
+        [fyStart, fyEnd]
       )) as any;
       seed = r?.m || 0;
     } else if (name === "expense") {
-      const year = String(date.getUTCFullYear());
+      const fyStart = `${fiscalStartYear}-04-01`;
+      const fyEnd = `${fiscalStartYear + 1}-03-31`;
       const r = (await db.getFirstAsync(
-        `SELECT COALESCE(MAX(voucherNo),0) as m FROM expenses WHERE strftime('%Y', createdAt)=?`,
-        [year]
+        `SELECT COALESCE(MAX(voucherNo),0) as m
+         FROM expenses
+         WHERE DATE(createdAt, '+330 minutes') >= ?
+           AND DATE(createdAt, '+330 minutes') <= ?`,
+        [fyStart, fyEnd]
       )) as any;
       seed = r?.m || 0;
     }

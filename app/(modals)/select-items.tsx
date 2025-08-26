@@ -367,20 +367,29 @@ export default function SelectItemsModal() {
   );
 
   const scrollToCategory = (cat: string) => {
+    // If a search is active and a category is chosen, clear the search
+    if (cat !== "All" && search.trim().length > 0) {
+      setSearch("");
+      setNotice("Search cleared for category view");
+      setTimeout(() => setNotice(null), 2200);
+    }
     setCategory(cat);
     if (cat === "All") return; // nothing to scroll because we rebuild sections
+    // Defer scroll to the next frame so sections reflect the new state
     if (cat !== "All" && category === "All") {
-      const index = sections.findIndex((s) => s.title === cat);
-      if (index !== -1) {
-        try {
-          listRef.current?.scrollToLocation({
-            sectionIndex: index,
-            itemIndex: 0,
-            animated: true,
-            viewPosition: 0,
-          });
-        } catch {}
-      }
+      requestAnimationFrame(() => {
+        const index = sections.findIndex((s) => s.title === cat);
+        if (index !== -1) {
+          try {
+            listRef.current?.scrollToLocation({
+              sectionIndex: index,
+              itemIndex: 0,
+              animated: true,
+              viewPosition: 0,
+            });
+          } catch {}
+        }
+      });
     }
   };
 
@@ -439,6 +448,13 @@ export default function SelectItemsModal() {
   const handleChangeSearchText = (text: string) => {
     setSearch(text);
     if (!showSearchDropdown) setShowSearchDropdown(true);
+    const trimmed = text.trim();
+    // If user starts typing a search while a category is selected, switch to All
+    if (trimmed.length > 0 && category !== "All") {
+      setCategory("All");
+      setNotice("Category cleared to search all items");
+      setTimeout(() => setNotice(null), 2200);
+    }
   };
 
   const keyExtractorFn = (item: MenuItem) => item.id;
@@ -462,7 +478,7 @@ export default function SelectItemsModal() {
       <Text
         style={{ fontSize: 14, fontWeight: "700", color: theme.colors.text }}
       >
-        {getCategoryEmoji(section.title)} {section.title}
+        {getCategoryEmoji(section.title || "")} {section.title || ""}
       </Text>
     </View>
   );
@@ -815,7 +831,9 @@ export default function SelectItemsModal() {
               windowSize={10}
               maxToRenderPerBatch={16}
               updateCellsBatchingPeriod={50}
-              removeClippedSubviews
+              // Important: disabling on Android to avoid addViewAt crashes when the
+              // list structure changes rapidly (search/category toggles)
+              removeClippedSubviews={false}
             />
           )}
         </View>

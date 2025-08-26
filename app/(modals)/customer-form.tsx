@@ -4,8 +4,7 @@ import { createCustomer, updateCustomer } from "@/services/customerService";
 import { clearCustomerError, customerState } from "@/state/customerState";
 import { use$ } from "@legendapp/state/react";
 import { Stack, useRouter } from "expo-router";
-import { Save } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { theme } from "../../constants/theme";
 
@@ -120,39 +119,6 @@ export default function CustomerFormScreen() {
             fontWeight: "600",
             color: theme.colors.text,
           },
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={handleSubmit}
-              disabled={customerStateData.loading}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                backgroundColor: customerStateData.loading
-                  ? theme.colors.borderLight
-                  : theme.colors.primary,
-                paddingHorizontal: 16,
-                paddingVertical: 8,
-                borderRadius: 20,
-                opacity: customerStateData.loading ? 0.6 : 1,
-              }}
-            >
-              <Save size={16} color="white" />
-              <Text
-                style={{
-                  color: "white",
-                  fontWeight: "600",
-                  marginLeft: 6,
-                  fontSize: 14,
-                }}
-              >
-                {customerStateData.loading
-                  ? "Saving..."
-                  : isEditing
-                    ? "Update"
-                    : "Save"}
-              </Text>
-            </TouchableOpacity>
-          ),
         }}
       />
       <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>

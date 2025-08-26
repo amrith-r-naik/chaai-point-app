@@ -213,4 +213,5 @@ The foundation is solid and ready for these enhancements! 🎉
 10. DONE - Redirect to active add of customers page after placing order
 11. DONE - Auto refresh all list throughout app asap upon changes
 12. Swipe right and left to navigate among active completed and all tabs of customers page
-13. In select items scree, When a category is selected and if I search something then the category should exit and search should happen in all list. and if I have searched for an item and if I select a category then the search should be cleared
+13. DONE - In select items scree, When a category is selected and if I search something then the category should exit and search should happen in all list. and if I have searched for an item and if I select a category then the search should be cleared
+14. DONE - Remove the extra save button in add customer screen

@@ -205,8 +205,12 @@ The foundation is solid and ready for these enhancements! 🎉
 2. DONE - Reset KOT ID everyday, Reset other IDs every year(receipt, bill) - check this
 3. DONE(Made it functional instead of removing) - Remove New order button in Customer details page
 4. Menu Category heading position bug
-5. Accrued credit is being considered for total amount of that day
-6. Improve speed of modal change
+5. DONE - Accrued credit is being considered for total amount of that day
+6. DONE - Improve speed of modal change
 7. Delay in updating dashboard data
 8. Export report as excel file
 9. Rethink admin features
+10. Redirect to active add of customers page after placing order
+11. Auto refresh all list throughout app asap upon changes
+12. Swipe right and left to navigate among active completed and all tabs of customers page
+13.

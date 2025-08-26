@@ -8,7 +8,8 @@ export default function ModalsLayout() {
         headerShown: true,
         presentation: "modal",
         gestureEnabled: true,
-        animation: "slide_from_right",
+        // Use a lighter animation for better perceived performance on Android
+        animation: "fade_from_bottom",
       }}
     />
   );

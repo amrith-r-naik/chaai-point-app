@@ -3,9 +3,10 @@ import { use$ } from "@legendapp/state/react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Stack, useRouter } from "expo-router";
 import { Plus, Search } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
+  InteractionManager,
   Pressable,
   Text,
   TextInput,
@@ -31,9 +32,23 @@ function CustomerItem({
 }) {
   const getAvatarColor = (name: string): string => {
     const colors = [
-      "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e",
-      "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1",
-      "#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e"
+      "#ef4444",
+      "#f97316",
+      "#f59e0b",
+      "#eab308",
+      "#84cc16",
+      "#22c55e",
+      "#10b981",
+      "#14b8a6",
+      "#06b6d4",
+      "#0ea5e9",
+      "#3b82f6",
+      "#6366f1",
+      "#8b5cf6",
+      "#a855f7",
+      "#d946ef",
+      "#ec4899",
+      "#f43f5e",
     ];
     const index = name.charCodeAt(0) % colors.length;
     return colors[index];
@@ -138,16 +153,27 @@ export default function SelectCustomerScreen() {
 
   useEffect(() => {
     if (auth.isDbReady) {
-      loadCustomers();
+      const task = InteractionManager.runAfterInteractions(() => {
+        loadCustomers();
+      });
+      return () => task?.cancel?.();
     }
   }, [auth.isDbReady]);
 
   // Reload customers when screen comes back into focus (e.g., after adding a new customer)
   useFocusEffect(
     useCallback(() => {
+      let cancelled = false;
       if (auth.isDbReady) {
-        loadCustomers();
+        const task = InteractionManager.runAfterInteractions(() => {
+          if (!cancelled) loadCustomers();
+        });
+        return () => {
+          cancelled = true;
+          task?.cancel?.();
+        };
       }
+      return () => {};
     }, [auth.isDbReady])
   );
 
@@ -372,6 +398,12 @@ export default function SelectCustomerScreen() {
                 contentContainerStyle={{
                   paddingBottom: 32,
                 }}
+                // Performance tuning
+                initialNumToRender={12}
+                windowSize={10}
+                maxToRenderPerBatch={12}
+                updateCellsBatchingPeriod={50}
+                removeClippedSubviews
               />
             )}
           </View>

@@ -70,10 +70,14 @@ export default function CreateOrderScreen() {
           {
             text: "OK",
             onPress: () => {
-              // Reset state and navigate back
+              // Reset state and navigate to Customers Active tab
               orderState.selectedCustomerId.set(null);
               orderState.selectedItems.set([]);
-              router.back();
+              // Replace the modal route with customers tab focused on Active
+              router.replace({
+                pathname: "/(tabs)/customers",
+                params: { tab: "active" },
+              });
             },
           },
         ]

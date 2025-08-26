@@ -10,7 +10,7 @@ import { customerState } from "@/state/customerState";
 import { use$ } from "@legendapp/state/react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Lock } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -34,6 +34,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 type TabType = "active" | "completed" | "all";
 
 export default function CustomersScreen() {
+  const { tab } = useLocalSearchParams<{ tab?: string }>();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>("active");
   const [refreshing, setRefreshing] = useState(false);
@@ -45,6 +46,13 @@ export default function CustomersScreen() {
   const customerStateData = use$(customerState);
   const auth = use$(authState);
   const router = useRouter();
+
+  // Initialize/Update active tab from route param when present
+  useEffect(() => {
+    if (tab && ["active", "completed", "all"].includes(tab)) {
+      setActiveTab(tab as TabType);
+    }
+  }, [tab]);
 
   const loadOrdersData = useCallback(async () => {
     try {

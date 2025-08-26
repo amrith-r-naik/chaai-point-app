@@ -1,6 +1,8 @@
+import { theme } from "@/constants/theme";
 import { SplitModalScreen, SplitPayment } from "@/types/payment";
+import { X } from "lucide-react-native";
 import React from "react";
-import { Modal, View } from "react-native";
+import { Modal, TouchableOpacity, View } from "react-native";
 import { AddSplitForm } from "./AddSplitForm";
 import { SplitPaymentList } from "./SplitPaymentList";
 
@@ -19,6 +21,7 @@ interface SplitPaymentModalProps {
   onConfirmSplit: () => void;
   onRemoveSplit: (id: string) => void;
   onProceed: () => void;
+  onClose: () => void;
 }
 
 export const SplitPaymentModal: React.FC<SplitPaymentModalProps> = ({
@@ -36,28 +39,43 @@ export const SplitPaymentModal: React.FC<SplitPaymentModalProps> = ({
   onConfirmSplit,
   onRemoveSplit,
   onProceed,
+  onClose,
 }) => {
   return (
     <Modal
       visible={visible}
       transparent={true}
       animationType="fade"
+      onRequestClose={onClose}
     >
-      <View style={{
-        flex: 1,
-        backgroundColor: "rgba(0, 0, 0, 0.5)",
-        justifyContent: "center",
-        alignItems: "center",
-        paddingHorizontal: 20,
-      }}>
-        <View style={{
-          backgroundColor: "white",
-          borderRadius: 16,
-          padding: 24,
-          width: "100%",
-          maxWidth: 400,
-          maxHeight: "80%",
-        }}>
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0, 0, 0, 0.5)",
+          justifyContent: "center",
+          alignItems: "center",
+          paddingHorizontal: 20,
+        }}
+      >
+        <View
+          style={{
+            backgroundColor: "white",
+            borderRadius: 16,
+            padding: 24,
+            width: "100%",
+            maxWidth: 400,
+            maxHeight: "80%",
+          }}
+        >
+          {/* Close button */}
+          <TouchableOpacity
+            onPress={onClose}
+            accessibilityLabel="Close"
+            style={{ position: "absolute", top: 8, right: 8, padding: 8 }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <X size={20} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
           {screen === "list" ? (
             <SplitPaymentList
               splitPayments={splitPayments}

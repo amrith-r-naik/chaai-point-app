@@ -5,6 +5,7 @@ import {
 } from "@/services/customerService";
 import { orderService } from "@/services/orderService";
 import { paymentService } from "@/services/paymentService";
+import { appEvents } from "@/state/appEvents";
 import { authState } from "@/state/authState";
 import { customerState } from "@/state/customerState";
 import { use$ } from "@legendapp/state/react";
@@ -46,6 +47,7 @@ export default function CustomersScreen() {
   const customerStateData = use$(customerState);
   const auth = use$(authState);
   const router = useRouter();
+  const ev = use$(appEvents);
 
   // Initialize/Update active tab from route param when present
   useEffect(() => {
@@ -303,6 +305,22 @@ export default function CustomersScreen() {
   useEffect(() => {
     loadCustomers();
   }, [loadCustomers, activeTab]);
+
+  // Auto-refresh when key data changes (orders/bills/payments/customers)
+  useEffect(() => {
+    if (auth.isDbReady) {
+      loadCustomers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    ev.ordersVersion,
+    ev.billsVersion,
+    ev.paymentsVersion,
+    ev.customersVersion,
+    ev.anyVersion,
+    auth.isDbReady,
+    activeTab,
+  ]);
 
   // Auto-refresh when screen comes into focus
   useFocusEffect(

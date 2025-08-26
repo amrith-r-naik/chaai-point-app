@@ -231,7 +231,11 @@ class DashboardService {
         createdAt,
       ]
     );
-
+    try {
+      const { signalChange } = await import("@/state/appEvents");
+      signalChange.expenses();
+      signalChange.any();
+    } catch {}
     return expenseId;
   }
 

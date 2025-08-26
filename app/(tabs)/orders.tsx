@@ -1,9 +1,10 @@
 import { KotOrder, orderService } from "@/services/orderService";
+import { appEvents } from "@/state/appEvents";
 import { authState } from "@/state/authState";
 import { orderState } from "@/state/orderState";
 import { use$ } from "@legendapp/state/react";
 import { useRouter } from "expo-router";
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import {
   FlatList,
   Pressable,
@@ -87,6 +88,14 @@ export default function OrdersScreen() {
       loadOrders();
     }
   }, [auth.isDbReady]);
+
+  // Auto-refresh when orders or global changes occur
+  const ev = use$(appEvents);
+  useEffect(() => {
+    if (auth.isDbReady) {
+      loadOrders();
+    }
+  }, [ev.ordersVersion, ev.anyVersion, auth.isDbReady]);
 
   const loadOrders = async () => {
     try {

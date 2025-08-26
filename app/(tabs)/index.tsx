@@ -11,6 +11,7 @@ import {
   DateFilterOptions,
 } from "@/services/dashboardService";
 import { syncService } from "@/services/syncService";
+import { appEvents } from "@/state/appEvents";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import { LinearGradient } from "expo-linear-gradient";
@@ -31,7 +32,6 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -42,7 +42,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const { width: screenWidth } = Dimensions.get("window");
+// const { width: screenWidth } = Dimensions.get("window"); // not used
 
 const styles = StyleSheet.create({
   container: {
@@ -518,7 +518,7 @@ export default function HomeScreen() {
     null
   );
 
-  const getDateFilter = (): DateFilterOptions => {
+  const getDateFilter = React.useCallback((): DateFilterOptions => {
     const today = new Date();
     const endDate = today.toISOString().split("T")[0];
 
@@ -542,9 +542,9 @@ export default function HomeScreen() {
       default:
         return { startDate: endDate, endDate };
     }
-  };
+  }, [selectedFilter]);
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = React.useCallback(async () => {
     try {
       const dateFilter = getDateFilter();
       const dashboardStats =
@@ -557,20 +557,17 @@ export default function HomeScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [getDateFilter]);
 
   useEffect(() => {
     loadDashboardData();
-  }, [selectedFilter]);
+  }, [loadDashboardData]);
 
-  // Auto-refresh dashboard every 3 seconds
+  // Auto-refresh dashboard on any data change
+  const ev = use$(appEvents);
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadDashboardData();
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [selectedFilter]);
+    loadDashboardData();
+  }, [ev.anyVersion, loadDashboardData]);
 
   const handleRefresh = () => {
     setRefreshing(true);

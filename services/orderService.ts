@@ -335,6 +335,11 @@ class OrderService {
         );
       }
     });
+    try {
+      const { signalChange } = await import("@/state/appEvents");
+      signalChange.orders();
+      signalChange.any();
+    } catch {}
     return orderId;
   }
 
@@ -846,10 +851,18 @@ class OrderService {
         }
       }
 
-      return {
+      const summary = {
         processedKOTs: activeKOTs.length,
         totalAmount: totalProcessedAmount, // Already in rupees from KOT calculation
       };
+      try {
+        const { signalChange } = await import("@/state/appEvents");
+        signalChange.orders();
+        signalChange.bills();
+        signalChange.payments();
+        signalChange.any();
+      } catch {}
+      return summary;
     } catch (error) {
       console.error("Error processing EOD:", error);
       throw error;

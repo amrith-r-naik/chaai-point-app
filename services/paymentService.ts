@@ -94,7 +94,11 @@ class PaymentService {
     `,
       [bill.id, bill.billNumber, bill.customerId, bill.total, bill.createdAt]
     );
-
+    try {
+      const { signalChange } = await import("@/state/appEvents");
+      signalChange.bills();
+      signalChange.any();
+    } catch {}
     return bill;
   }
 
@@ -244,6 +248,13 @@ class PaymentService {
         bill.id,
         paymentData.targetDate
       );
+      try {
+        const { signalChange } = await import("@/state/appEvents");
+        signalChange.payments();
+        signalChange.bills();
+        signalChange.orders();
+        signalChange.any();
+      } catch {}
       return { receipt, bill, paidPortion, creditPortion };
     });
   }
@@ -310,6 +321,14 @@ class PaymentService {
     );
     // Link KOTs created today (reuse logic)
     await this.linkKOTsToBill(customerId, bill.id);
+    try {
+      const { signalChange } = await import("@/state/appEvents");
+      signalChange.payments();
+      signalChange.bills();
+      signalChange.orders();
+      signalChange.customers();
+      signalChange.any();
+    } catch {}
     return { bill };
   }
 

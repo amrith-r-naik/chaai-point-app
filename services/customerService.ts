@@ -37,27 +37,30 @@ export async function getAllCustomers(): Promise<Customer[]> {
 }
 
 // Minimal aggregated stats per customer for lightweight listing
-export async function getCustomersSummary(): Promise<Array<{
-  id: string;
-  name: string;
-  contact?: string;
-  creditBalance: number;
-  billCount: number;
-  totalBilled: number;
-  lastBillAt: string | null;
-}>> {
+export async function getCustomersSummary(): Promise<
+  {
+    id: string;
+    name: string;
+    contact?: string;
+    creditBalance: number;
+    billCount: number;
+    totalBilled: number;
+    lastBillAt: string | null;
+  }[]
+> {
   try {
     if (!db) throw new Error("Database not initialized");
 
     // Ensure DB ready
     let retries = 0;
     while (!authState.isDbReady.get() && retries < 50) {
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 100));
       retries++;
     }
-    if (!authState.isDbReady.get()) throw new Error("Database not ready after timeout");
+    if (!authState.isDbReady.get())
+      throw new Error("Database not ready after timeout");
 
-    const rows = await db.getAllAsync(`
+    const rows = (await db.getAllAsync(`
       SELECT 
         c.id,
         c.name,
@@ -68,9 +71,9 @@ export async function getCustomersSummary(): Promise<Array<{
         (SELECT MAX(createdAt) FROM bills b3 WHERE b3.customerId = c.id) as lastBillAt
       FROM customers c
       ORDER BY c.name ASC
-    `) as any[];
+    `)) as any[];
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       id: r.id,
       name: r.name,
       contact: r.contact || undefined,
@@ -80,7 +83,7 @@ export async function getCustomersSummary(): Promise<Array<{
       lastBillAt: r.lastBillAt || null,
     }));
   } catch (error) {
-    console.error('Error fetching customer summaries:', error);
+    console.error("Error fetching customer summaries:", error);
     return [];
   }
 }
@@ -111,7 +114,11 @@ export async function createCustomer(
         customer.updatedAt,
       ]
     );
-
+    try {
+      const { signalChange } = await import("@/state/appEvents");
+      signalChange.customers();
+      signalChange.any();
+    } catch {}
     return customer;
   } catch (error) {
     console.error("Error creating customer:", error);
@@ -142,7 +149,11 @@ export async function updateCustomer(
     if (!customer) {
       throw new Error("Customer not found after update");
     }
-
+    try {
+      const { signalChange } = await import("@/state/appEvents");
+      signalChange.customers();
+      signalChange.any();
+    } catch {}
     return customer;
   } catch (error) {
     console.error("Error updating customer:", error);
@@ -165,6 +176,11 @@ export async function deleteCustomer(id: string): Promise<void> {
     }
 
     await db.runAsync(`DELETE FROM customers WHERE id = ?`, [id]);
+    try {
+      const { signalChange } = await import("@/state/appEvents");
+      signalChange.customers();
+      signalChange.any();
+    } catch {}
   } catch (error) {
     console.error("Error deleting customer:", error);
     throw error;

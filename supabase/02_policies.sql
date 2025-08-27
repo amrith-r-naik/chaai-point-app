@@ -3,6 +3,12 @@
 
 alter table public.profiles enable row level security;
 
+-- Allow each authenticated user to read their own profile (to get role/shop)
+drop policy if exists profiles_select on public.profiles;
+create policy profiles_select on public.profiles
+  for select
+  using ( id = auth.uid() );
+
 -- Policy helpers
 create or replace function public.current_role()
 returns text language sql stable as $$

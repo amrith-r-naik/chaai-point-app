@@ -1,4 +1,3 @@
-import { ensureInitialUsersFromCloud } from "@/services/userBootstrap";
 import { use$ } from "@legendapp/state/react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useEffect } from "react";
@@ -21,8 +20,7 @@ export default function RootLayout() {
         await openDatabase();
         console.log("Database opened successfully");
         await debugDatabase();
-        // Production bootstrap: pull admin/staff users from cloud on first launch (if local users table is empty)
-        await ensureInitialUsersFromCloud("shop_1");
+        // No user bootstrap: use Supabase Auth sign-in only
         // await seedTestCustomers();
         // await seedTestMenuItems();
         // await seedTestOrders();

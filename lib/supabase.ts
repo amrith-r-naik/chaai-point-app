@@ -2,11 +2,11 @@ import { createClient } from "@supabase/supabase-js";
 
 // Use Expo public env vars; set in app config or EAS env/secrets
 const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL || "").trim();
-const SUPABASE_ANON_KEY = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "").trim();
+const SUPABASE_ANON_KEY = (
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ""
+).trim();
 
-export const isSupabaseConfigured = Boolean(
-  SUPABASE_URL && SUPABASE_ANON_KEY
-);
+export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
 if (!isSupabaseConfigured) {
   console.warn(
@@ -36,6 +36,11 @@ function createStub() {
     from: chain,
     storage: {
       from: () => ({ upload: thrower, list: thrower }),
+    },
+    auth: {
+      signInWithPassword: thrower,
+      signOut: thrower,
+      getSession: thrower,
     },
   } as any;
 }

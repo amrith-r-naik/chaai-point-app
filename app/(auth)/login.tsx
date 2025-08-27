@@ -3,10 +3,13 @@ import { loginUser } from "@/services/authService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import { Eye, EyeOff, Lock, Mail } from "lucide-react-native";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -22,6 +25,21 @@ export default function LoginScreen() {
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const buttonScale = new Animated.Value(1);
+  const [showPassword, setShowPassword] = useState(false);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", (e) => {
+      setKeyboardOffset(e.endCoordinates?.height ?? 0);
+    });
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardOffset(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -96,20 +114,31 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : "padding"}
       className="flex-1"
+      keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 20}
     >
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingBottom: 0 + keyboardOffset,
+        }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View className="flex-1 justify-center px-6 py-8">
           {/* Header Section */}
           <View className="items-center mb-12">
-            <View className="w-20 h-20 bg-black rounded-full items-center justify-center mb-6">
-              <Text className="text-white text-3xl font-bold">C</Text>
-            </View>
+            <Image
+              source={require("@/assets/images/icon.png")}
+              style={{
+                width: 96,
+                height: 96,
+                marginBottom: 24,
+                borderRadius: 80,
+              }}
+              resizeMode="contain"
+            />
             <Text className="text-3xl font-bold text-gray-900 mb-2">
               Welcome Back
             </Text>
@@ -117,52 +146,71 @@ export default function LoginScreen() {
               Sign in to your Chaai Point account
             </Text>
           </View>
+          {/* Form Card */}
+          <View className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            {/* Form Section */}
+            <View className="flex gap-3">
+              <View>
+                <TextInputField
+                  label="Email Address"
+                  value={email}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    if (emailError) validateEmail(text);
+                  }}
+                  onBlur={() => validateEmail(email)}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  placeholder="you@shop.com"
+                  leftIcon={<Mail size={18} color="#6b7280" />}
+                />
+                {emailError ? (
+                  <Text className="-mt-3 text-red-500 text-sm ml-1">
+                    {emailError}
+                  </Text>
+                ) : null}
+              </View>
 
-          {/* Form Section */}
-          <View className="space-y-4">
-            <View>
-              <TextInputField
-                label="Email Address"
-                value={email}
-                onChangeText={(text) => {
-                  setEmail(text);
-                  if (emailError) validateEmail(text);
-                }}
-                onBlur={() => validateEmail(email)}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-              />
-              {emailError ? (
-                <Text className="text-red-500 text-sm mt-1 ml-1">
-                  {emailError}
-                </Text>
-              ) : null}
+              <View>
+                <TextInputField
+                  label="Password"
+                  value={password}
+                  secureTextEntry={!showPassword}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    if (passwordError) validatePassword(text);
+                  }}
+                  onBlur={() => validatePassword(password)}
+                  autoComplete="password"
+                  autoCapitalize="none"
+                  placeholder="••••••••"
+                  leftIcon={<Lock size={18} color="#6b7280" />}
+                  rightIcon={
+                    <TouchableOpacity
+                      onPress={() => setShowPassword((s) => !s)}
+                      accessibilityLabel={
+                        showPassword ? "Hide password" : "Show password"
+                      }
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      {showPassword ? (
+                        <EyeOff size={18} color="#6b7280" />
+                      ) : (
+                        <Eye size={18} color="#6b7280" />
+                      )}
+                    </TouchableOpacity>
+                  }
+                  returnKeyType="done"
+                  onSubmitEditing={onLogin}
+                />
+                {passwordError ? (
+                  <Text className="text-red-500 text-sm -mt-3 ml-1">
+                    {passwordError}
+                  </Text>
+                ) : null}
+              </View>
             </View>
-
-            <View>
-              <TextInputField
-                label="Password"
-                value={password}
-                secureTextEntry
-                onChangeText={(text) => {
-                  setPassword(text);
-                  if (passwordError) validatePassword(text);
-                }}
-                onBlur={() => validatePassword(password)}
-                autoComplete="password"
-              />
-              {passwordError ? (
-                <Text className="text-red-500 text-sm mt-1 ml-1">
-                  {passwordError}
-                </Text>
-              ) : null}
-            </View>
-
-            {/* TODO:Forgot Password Link */}
-            {/* <TouchableOpacity className="self-end">
-              <Text className="text-black font-medium">Forgot Password?</Text>
-            </TouchableOpacity> */}
           </View>
 
           {/* Error Message */}

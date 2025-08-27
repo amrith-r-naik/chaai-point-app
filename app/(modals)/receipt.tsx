@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/constants/appConstants";
 import { theme } from "@/constants/theme";
 import { Bill, paymentService, Receipt } from "@/services/paymentService";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -831,11 +832,7 @@ export default function ReceiptScreen() {
                   color: theme.colors.text,
                 }}
               >
-                {new Date(receipt.createdAt).toLocaleDateString("en-IN")}{" "}
-                {new Date(receipt.createdAt).toLocaleTimeString("en-IN", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                {formatDateTime(new Date(receipt.createdAt))}
               </Text>
             </View>
 

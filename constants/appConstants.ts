@@ -1,11 +1,24 @@
 // Centralized application constants & enums
 // Keep this file lean and only for shared immutable config.
 
-export const PAYMENT_MODES = ["Cash", "UPI", "Card", "Bank Transfer", "Credit", "Split"] as const;
-export type PaymentMode = typeof PAYMENT_MODES[number];
+export const PAYMENT_MODES = [
+  "Cash",
+  "UPI",
+  "Card",
+  "Bank Transfer",
+  "Credit",
+  "Split",
+] as const;
+export type PaymentMode = (typeof PAYMENT_MODES)[number];
 
 // Displayable (non-transaction) payment options (exclude internal Split handling where needed)
-export const PRIMARY_PAYMENT_OPTIONS: PaymentMode[] = ["Cash", "UPI", "Card", "Bank Transfer", "Credit"];
+export const PRIMARY_PAYMENT_OPTIONS: PaymentMode[] = [
+  "Cash",
+  "UPI",
+  "Card",
+  "Bank Transfer",
+  "Credit",
+];
 
 export interface CategoryMeta {
   name: string;
@@ -46,15 +59,24 @@ export const formatCurrency = (amount: number): string => `₹${amount}`;
 
 export const DATE_FORMAT_LOCALE = "en-IN";
 
-export const formatDateTime = (iso: string): string => {
+// Stable dd/MM/yyyy, hh:mm am format without relying on platform locale quirks
+export const formatDateTime = (input: string | number | Date): string => {
   try {
-    return new Date(iso).toLocaleString(DATE_FORMAT_LOCALE, {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const d = new Date(input);
+    if (isNaN(d.getTime())) return String(input);
+
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    const ampm = hours >= 12 ? "pm" : "am";
+    hours = hours % 12 || 12; // 0 -> 12
+    const hh = String(hours).padStart(2, "0");
+
+    return `${dd}-${mm}-${yyyy} ${hh}:${minutes} ${ampm}`;
   } catch {
-    return iso;
+    return String(input);
   }
 };

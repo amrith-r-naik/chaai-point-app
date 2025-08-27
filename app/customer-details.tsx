@@ -25,7 +25,7 @@ import {
 } from "react-native";
 
 interface CustomerStats {
-  totalBilled: number;
+  totalPaid: number;
   billCount: number;
   creditBalance: number;
   lastBillAt: string | null;
@@ -54,10 +54,16 @@ export default function CustomerDetailsScreen() {
       const bills =
         await paymentService.getCustomerBillsWithPayments(customerId);
       const paymentRows = await paymentService.getPaymentHistory(customerId);
-      const totalBilled = bills.reduce((s: number, b: any) => s + b.total, 0);
+      const totalPaid = paymentRows.reduce((s: number, p: any) => {
+        // Exclude credit accrual payments (pure credit sales)
+        if (p.mode === "Credit" && p.subType === "Accrual") {
+          return s;
+        }
+        return s + p.amount;
+      }, 0);
       const billCount = bills.length;
       const lastBillAt = bills[0]?.createdAt || null;
-      setStats({ totalBilled, billCount, creditBalance, lastBillAt });
+      setStats({ totalPaid, billCount, creditBalance, lastBillAt });
       setBillHistory(bills);
       setPaymentHistory(paymentRows);
     } catch (error) {
@@ -563,7 +569,7 @@ export default function CustomerDetailsScreen() {
                     marginBottom: 4,
                   }}
                 >
-                  Total Billed
+                  Total Paid
                 </Text>
                 <Text
                   style={{
@@ -572,7 +578,7 @@ export default function CustomerDetailsScreen() {
                     color: theme.colors.text,
                   }}
                 >
-                  {formatCurrency(stats?.totalBilled || 0)}
+                  {formatCurrency(stats?.totalPaid || 0)}
                 </Text>
               </View>
             </View>

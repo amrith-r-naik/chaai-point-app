@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import * as FileSystem from "expo-file-system";
 
 function toDbPath(dbName = "chaai-point.db") {
@@ -25,6 +25,11 @@ function base64ToUint8(base64: string): Uint8Array {
 
 export const backupService = {
   async backupNow(shopId = "shop_1") {
+    if (!isSupabaseConfigured) {
+      throw new Error(
+        "Cloud backup unavailable: Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY and rebuild."
+      );
+    }
     const dbPath = toDbPath();
     const exists = await FileSystem.getInfoAsync(dbPath);
     if (!exists.exists) {
@@ -52,6 +57,7 @@ export const backupService = {
   },
 
   async listBackups(shopId = "shop_1") {
+  if (!isSupabaseConfigured) return [];
     const { data, error } = await supabase.storage
       .from("backups")
       .list(shopId, { limit: 50, sortBy: { column: "name", order: "desc" } });
@@ -60,7 +66,7 @@ export const backupService = {
   },
 
   async getLatestBackup(shopId = "shop_1") {
-    const files = await this.listBackups(shopId);
+  const files = await this.listBackups(shopId);
     if (!files.length) return null;
     // Names contain ISO-like timestamp; desc sort gives latest first
     return files[0];

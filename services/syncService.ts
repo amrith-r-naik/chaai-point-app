@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { syncLog } from "@/services/syncLog";
 
 type TableName =
@@ -433,6 +433,13 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
 
 export const syncService = {
   async syncAll() {
+    if (!isSupabaseConfigured) {
+      // Skip cloud sync silently but log once
+      console.warn(
+        "[sync] Skipping cloud sync: Supabase not configured (set EXPO_PUBLIC_SUPABASE_URL/EXPO_PUBLIC_SUPABASE_ANON_KEY)."
+      );
+      return;
+    }
     syncLog.log(`[sync] starting`);
     for (const table of TABLES) {
       try {

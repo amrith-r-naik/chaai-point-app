@@ -39,6 +39,7 @@ export interface ExpenseListItem extends ExpenseData {
   paidAmount: number;
   creditOutstanding: number;
   status: "Paid" | "Partial" | "Credit";
+  expenseDate: string;
 }
 
 export interface RevenueByDay {
@@ -198,7 +199,7 @@ class DashboardService {
     const result = (await db.getFirstAsync(
       `SELECT COALESCE(SUM(amount), 0) as expenses 
        FROM expenses 
-       WHERE date(createdAt) BETWEEN ? AND ?`,
+       WHERE date(expenseDate) BETWEEN ? AND ?`,
       [startDate, endDate]
     )) as any;
 
@@ -324,11 +325,11 @@ class DashboardService {
     let params: string[] = [];
 
     if (dateFilter) {
-      query += ` WHERE date(createdAt) BETWEEN ? AND ?`;
+      query += ` WHERE date(expenseDate) BETWEEN ? AND ?`;
       params = [dateFilter.startDate, dateFilter.endDate];
     }
 
-    query += ` ORDER BY createdAt DESC`;
+    query += ` ORDER BY expenseDate DESC, createdAt DESC`;
 
     const result = (await db.getAllAsync(query, params)) as any[];
 
@@ -340,6 +341,7 @@ class DashboardService {
       mode: row.mode,
       remarks: row.remarks,
       createdAt: row.createdAt,
+      expenseDate: row.expenseDate,
     }));
   }
 
@@ -348,13 +350,13 @@ class DashboardService {
   ): Promise<ExpenseListItem[]> {
     if (!db) throw new Error("Database not initialized");
 
-    const where = dateFilter ? `WHERE date(e.createdAt) BETWEEN ? AND ?` : "";
+    const where = dateFilter ? `WHERE date(e.expenseDate) BETWEEN ? AND ?` : "";
     const params: string[] = dateFilter
       ? [dateFilter.startDate, dateFilter.endDate]
       : [];
     const rows = (await db.getAllAsync(
       `SELECT 
-         e.id, e.voucherNo, e.amount, e.towards, e.mode, e.remarks, e.createdAt,
+         e.id, e.voucherNo, e.amount, e.towards, e.mode, e.remarks, e.createdAt, e.expenseDate,
          COALESCE(SUM(CASE WHEN s.paymentType IN ('Cash','UPI') AND (s.subType IS NULL OR s.subType='') THEN s.amount ELSE 0 END),0) as paidAmount,
          COALESCE(SUM(CASE WHEN s.paymentType='Credit' AND s.subType='Accrual' THEN s.amount ELSE 0 END),0) as accrued,
          COALESCE(SUM(CASE WHEN s.subType='Clearance' THEN s.amount ELSE 0 END),0) as cleared
@@ -362,7 +364,7 @@ class DashboardService {
        LEFT JOIN expense_settlements s ON s.expenseId = e.id AND s.deletedAt IS NULL
        ${where}
        GROUP BY e.id
-       ORDER BY e.createdAt DESC`,
+       ORDER BY e.expenseDate DESC, e.createdAt DESC`,
       params
     )) as any[];
 
@@ -382,6 +384,7 @@ class DashboardService {
         mode: r.mode,
         remarks: r.remarks,
         createdAt: r.createdAt,
+        expenseDate: r.expenseDate,
         paidAmount: r.paidAmount || 0,
         creditOutstanding: outstanding,
         status,

@@ -136,7 +136,8 @@ async function initializeSchema() {
         towards TEXT NOT NULL,
         mode TEXT NOT NULL,
         remarks TEXT,
-        createdAt TEXT NOT NULL
+  createdAt TEXT NOT NULL,
+  expenseDate TEXT NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS split_payments (
@@ -247,7 +248,25 @@ async function runMigrations() {
     }
   }
 
-  // v2 -> v3: add metadata columns for sync (shopId, deletedAt, updatedAt, createdAt where missing)
+  // vX -> vY: add expenseDate to expenses and backfill
+  if (v < 8) {
+    await db!.execAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      await addColumnIfMissing("expenses", "expenseDate", "TEXT");
+      // Backfill: set expenseDate = date part of createdAt for existing rows
+      await backfillIfNull(
+        "expenses",
+        "expenseDate",
+        "substr(createdAt, 1, 10)"
+      );
+      await setUserVersion(8);
+      await db!.execAsync("COMMIT");
+      v = 8;
+    } catch (e) {
+      await db!.execAsync("ROLLBACK");
+      throw e;
+    }
+  }
   if (v < 3) {
     await db!.execAsync("BEGIN IMMEDIATE TRANSACTION");
     try {

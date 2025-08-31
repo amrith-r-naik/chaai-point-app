@@ -184,6 +184,8 @@ function toCloud(table: TableName, row: RowMap): RowMap {
       towards: row.towards,
       mode: row.mode,
       remarks: row.remarks ?? null,
+      expense_date:
+        row.expenseDate ?? (row.createdAt ? row.createdAt.slice(0, 10) : null),
     };
     // Do not push local provisional voucher numbers; server will assign
     return payload;
@@ -481,6 +483,7 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
         payment_type: "paymentType",
         sub_type: "subType",
         expense_id: "expenseId",
+        expense_date: "expenseDate",
       } as any;
       for (const [k, v] of Object.entries(mapKeys)) {
         if ((mapped as any)[k] !== undefined) {

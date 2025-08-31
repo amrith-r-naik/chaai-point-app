@@ -18,12 +18,18 @@ export const ExpenseItem: React.FC<{
   const pct = ratio * 100;
   const pctDisplay = pct > 0 && pct < 2 ? 2 : pct; // ensure a thin sliver is visible for tiny paid amounts
   const isFullyPaid = (outstanding ?? 0) <= 0 || expense.status === "Paid";
-  const dateStr = new Date(expense.createdAt).toLocaleString("en-IN", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const dateStr = expense.expenseDate
+    ? new Date(expense.expenseDate).toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : new Date(expense.createdAt).toLocaleString("en-IN", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
 
   const statusStyles =
     expense.status === "Paid"

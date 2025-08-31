@@ -1,6 +1,8 @@
 import { theme } from "@/constants/theme";
 import { expenseService } from "@/services/expenseService";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import {
+  Calendar,
   CreditCard,
   DollarSign,
   FileText,
@@ -259,6 +261,8 @@ export default function AddExpenseModal({
   onExpenseAdded,
 }: AddExpenseModalProps) {
   const [amount, setAmount] = useState("");
+  const [expenseDate, setExpenseDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [towards, setTowards] = useState("");
   const [mode, setMode] = useState("Cash");
   const [remarks, setRemarks] = useState("");
@@ -315,6 +319,7 @@ export default function AddExpenseModal({
         amount: Math.round(expenseAmount),
         towards: towards.trim(),
         remarks: remarks.trim() || null,
+        expenseDate: expenseDate.toISOString().slice(0, 10),
       } as const;
       if (mode === "Split") {
         const sp: { type: "Cash" | "UPI" | "Credit"; amount: number }[] = [];
@@ -494,6 +499,37 @@ export default function AddExpenseModal({
                 </TouchableOpacity>
               ))}
             </View>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionTitle}>
+              <Calendar size={20} color="#334155" />
+              <Text
+                style={{ fontSize: 16, fontWeight: "700", color: "#334155" }}
+              >
+                Expense Date
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.inputContainer, { padding: 16 }]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Text style={{ fontSize: 16, color: "#1e293b" }}>
+                {expenseDate.toISOString().slice(0, 10)}
+              </Text>
+            </TouchableOpacity>
+            {showDatePicker && (
+              <DateTimePicker
+                value={expenseDate}
+                mode="date"
+                display="default"
+                onChange={(event, date) => {
+                  setShowDatePicker(false);
+                  if (date) setExpenseDate(date);
+                }}
+                maximumDate={new Date()}
+              />
+            )}
           </View>
 
           {/* Payment Mode Section */}

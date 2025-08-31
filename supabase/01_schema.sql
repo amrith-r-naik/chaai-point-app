@@ -133,6 +133,9 @@ create table if not exists public.expenses (
   mode text not null,
   remarks text,
   created_at timestamptz not null default now(),
+  expense_date date not null default now(),
+-- Backfill expense_date for existing rows
+update public.expenses set expense_date = date_trunc('day', created_at) where expense_date is null;
   updated_at timestamptz not null default now(),
   deleted_at timestamptz,
   shop_id text not null

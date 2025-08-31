@@ -9,6 +9,7 @@ import {
 import { expenseService } from "@/services/expenseService";
 import { appEvents } from "@/state/appEvents";
 import { use$ } from "@legendapp/state/react";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   Activity,
   Calendar,
@@ -37,7 +38,6 @@ import {
 import { formatCurrency, getCurrencyFontSize } from "@/utils/currency";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ExpenseItem } from "../../components/expenses/ExpenseItem";
-import { FilterButton } from "../../components/expenses/FilterButton";
 
 // Dimensions not used currently
 
@@ -180,9 +180,10 @@ export default function BillingScreen() {
   const [expenses, setExpenses] = useState<ExpenseListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<
-    "today" | "week" | "month" | "all"
-  >("today");
+  const [startDate, setStartDate] = useState(new Date());
+  const [endDate, setEndDate] = useState(new Date());
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [outstandingCredit, setOutstandingCredit] = useState(0);
@@ -194,32 +195,11 @@ export default function BillingScreen() {
   const [clearUpi, setClearUpi] = useState("");
   const [focusedField, setFocusedField] = useState<"cash" | "upi" | null>(null);
 
-  const getDateFilter = React.useCallback((): DateFilterOptions | undefined => {
-    const today = new Date();
-    const endDate = today.toISOString().split("T")[0];
-
-    switch (selectedFilter) {
-      case "today":
-        return { startDate: endDate, endDate };
-      case "week":
-        const weekStart = new Date(today);
-        weekStart.setDate(today.getDate() - 6);
-        return {
-          startDate: weekStart.toISOString().split("T")[0],
-          endDate,
-        };
-      case "month":
-        const monthStart = new Date(today);
-        monthStart.setDate(1);
-        return {
-          startDate: monthStart.toISOString().split("T")[0],
-          endDate,
-        };
-      case "all":
-      default:
-        return undefined;
-    }
-  }, [selectedFilter]);
+  const getDateFilter = React.useCallback((): DateFilterOptions => {
+    const startStr = startDate.toISOString().slice(0, 10);
+    const endStr = endDate.toISOString().slice(0, 10);
+    return { startDate: startStr, endDate: endStr };
+  }, [startDate, endDate]);
 
   const loadExpenses = React.useCallback(async () => {
     try {
@@ -363,14 +343,18 @@ export default function BillingScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Enhanced Filter Section */}
-          <View>
-            <View
+          {/* Date Range Picker Filter Section */}
+          <View style={{ marginBottom: 16, flexDirection: "row", gap: 12 }}>
+            <TouchableOpacity
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                marginBottom: 16,
+                flex: 1,
+                backgroundColor: "rgba(255,255,255,0.1)",
+                borderRadius: 8,
+                padding: 8,
               }}
+              onPress={() => setShowStartPicker(true)}
             >
               <Calendar
                 size={18}
@@ -384,36 +368,70 @@ export default function BillingScreen() {
                   fontWeight: "600",
                 }}
               >
-                Filter by period:
+                {startDate.toISOString().slice(0, 10)}
               </Typography>
-            </View>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <FilterButton
-                active={selectedFilter === "today"}
-                onPress={() => setSelectedFilter("today")}
+            </TouchableOpacity>
+            <Typography
+              style={{
+                color: "rgba(255,255,255,0.7)",
+                fontSize: 16,
+                fontWeight: "600",
+                alignSelf: "center",
+              }}
+            >
+              to
+            </Typography>
+            <TouchableOpacity
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                flex: 1,
+                backgroundColor: "rgba(255,255,255,0.1)",
+                borderRadius: 8,
+                padding: 8,
+              }}
+              onPress={() => setShowEndPicker(true)}
+            >
+              <Calendar
+                size={18}
+                color="rgba(255,255,255,0.9)"
+                style={{ marginRight: 10 }}
+              />
+              <Typography
+                style={{
+                  color: "rgba(255,255,255,0.9)",
+                  fontSize: 16,
+                  fontWeight: "600",
+                }}
               >
-                Today
-              </FilterButton>
-              <FilterButton
-                active={selectedFilter === "week"}
-                onPress={() => setSelectedFilter("week")}
-              >
-                This Week
-              </FilterButton>
-              <FilterButton
-                active={selectedFilter === "month"}
-                onPress={() => setSelectedFilter("month")}
-              >
-                This Month
-              </FilterButton>
-              <FilterButton
-                active={selectedFilter === "all"}
-                onPress={() => setSelectedFilter("all")}
-              >
-                All Time
-              </FilterButton>
-            </ScrollView>
+                {endDate.toISOString().slice(0, 10)}
+              </Typography>
+            </TouchableOpacity>
+            {showStartPicker && (
+              <DateTimePicker
+                value={startDate}
+                mode="date"
+                display="default"
+                onChange={(event, date) => {
+                  setShowStartPicker(false);
+                  if (date && date <= endDate) setStartDate(date);
+                }}
+                maximumDate={endDate}
+              />
+            )}
+            {showEndPicker && (
+              <DateTimePicker
+                value={endDate}
+                mode="date"
+                display="default"
+                onChange={(event, date) => {
+                  setShowEndPicker(false);
+                  if (date && date >= startDate) setEndDate(date);
+                }}
+                minimumDate={startDate}
+                maximumDate={new Date()}
+              />
+            )}
           </View>
         </View>
 
@@ -422,7 +440,7 @@ export default function BillingScreen() {
           {/* Total Expenses Card */}
           <StatCard
             icon={<TrendingDown size={28} color="#EF4444" />}
-            title={`Total Expenses ${selectedFilter !== "all" ? `(${selectedFilter})` : ""}`}
+            title={`Total Expenses (${startDate.toISOString().slice(0, 10)} to ${endDate.toISOString().slice(0, 10)})`}
             value={formatCurrency(totalExpenses)}
             trend="down"
             color="#EF4444"
@@ -539,9 +557,7 @@ export default function BillingScreen() {
                   paddingHorizontal: 20,
                 }}
               >
-                {selectedFilter === "all"
-                  ? "You haven't added any expenses yet. Start tracking your business expenses to get better insights."
-                  : `No expenses found for ${selectedFilter}. Try selecting a different time period or add a new expense.`}
+                {`No expenses found for the selected date range. Try picking a different range or add a new expense.`}
               </Typography>
 
               <TouchableOpacity

@@ -124,6 +124,7 @@ class ExpenseService {
     amount: number;
     towards: string;
     remarks?: string | null;
+    expenseDate?: string; // YYYY-MM-DD
     paymentType?: "Cash" | "UPI" | "Credit"; // for simple path
     splitPayments?: ExpenseSplit[]; // for split path
   }): Promise<{ expenseId: string }> {
@@ -165,8 +166,8 @@ class ExpenseService {
         if (onlyType.size === 1) mode = splits[0].type;
       }
       await db!.runAsync(
-        `INSERT INTO expenses (id, voucherNo, amount, towards, mode, remarks, createdAt, shopId)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'shop_1')`,
+        `INSERT INTO expenses (id, voucherNo, amount, towards, mode, remarks, createdAt, expenseDate, shopId)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'shop_1')`,
         [
           id,
           voucherNo,
@@ -175,6 +176,7 @@ class ExpenseService {
           mode,
           params.remarks ?? null,
           createdAt,
+          params.expenseDate ?? createdAt.slice(0, 10),
         ]
       );
       // Insert settlements

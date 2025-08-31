@@ -18,10 +18,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import {
   AlertCircle,
-  BarChart3,
+  BanknoteArrowDown,
   Calendar,
   Database,
-  DollarSign,
+  IndianRupee,
   LogOut,
   Settings,
   ShoppingCart,
@@ -738,11 +738,11 @@ export default function HomeScreen() {
               <MetricCard
                 title="Revenue"
                 value={stats?.totalRevenue || 0}
-                icon={<DollarSign size={20} color={theme.colors.success} />}
+                icon={<IndianRupee size={20} color={theme.colors.success} />}
                 iconBg={theme.colors.successLight}
                 valueColor={theme.colors.success}
                 featured={true}
-                subtitle="Net earnings"
+                subtitle="Total billed amount"
               />
               <MetricCard
                 title="Profit"
@@ -800,16 +800,15 @@ export default function HomeScreen() {
                 subtitle="Customer credit"
               />
               <MetricCard
-                title="Avg Order"
-                value={
-                  stats?.totalOrders && stats?.totalOrders > 0
-                    ? Math.round(stats.totalRevenue / stats.totalOrders)
-                    : 0
+                title="Payment Received"
+                value={stats?.totalReceived || 0}
+                icon={
+                  <BanknoteArrowDown size={20} color={theme.colors.success} />
                 }
-                icon={<BarChart3 size={20} color={theme.colors.info} />}
-                iconBg="#eff6ff"
-                valueColor={theme.colors.info}
-                subtitle="Per order"
+                iconBg={theme.colors.successLight}
+                valueColor={theme.colors.success}
+                featured={true}
+                subtitle="Total received"
               />
             </View>
           </View>

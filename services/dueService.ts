@@ -262,7 +262,7 @@ class DueService {
   /**
    * Get revenue from paid orders (orders with billId)
    */
-  async getTotalRevenue(): Promise<number> {
+  async gettotalReceived(): Promise<number> {
     if (!db) throw new Error("Database not initialized");
 
     const result = (await db.getFirstAsync(`

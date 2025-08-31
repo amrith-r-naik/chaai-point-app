@@ -2,14 +2,12 @@ import { db } from "../lib/db";
 
 export interface DashboardStats {
   totalOrders: number;
-  totalRevenue: number; // Sum of paid portions (non-credit) from KOTs whose bills have any paid component
+  totalReceived: number; // Sum of paid portions (non-credit) from KOTs whose bills have any paid component
   outstandingCredit: number; // SUM(customers.creditBalance)
   totalExpenses: number;
   profit: number;
   todayOrders: number;
-  todayRevenue: number;
   todayExpenses: number;
-  todayProfit: number;
   creditAccrued?: number; // total credit granted in filter window
   creditCleared?: number; // total credit cleared in filter window
   netCreditChange?: number; // accrued - cleared
@@ -18,6 +16,7 @@ export interface DashboardStats {
   expenseCreditAccrued?: number;
   expenseCreditCleared?: number;
   expenseOutstandingCredit?: number;
+  totalRevenue: number; // Total billed amount (sum of all items in billed KOTs)
 }
 
 export interface DateFilterOptions {
@@ -51,7 +50,7 @@ export interface RevenueByDay {
 class DashboardService {
   async getDashboardStats(
     dateFilter?: DateFilterOptions
-  ): Promise<DashboardStats> {
+  ): Promise<DashboardStats & { totalRevenue: number }> {
     if (!db) throw new Error("Database not initialized");
 
     const today = new Date().toISOString().split("T")[0];
@@ -60,11 +59,10 @@ class DashboardService {
 
     const [
       totalOrdersResult,
-      totalRevenueResult,
+      totalReceivedResult,
       outstandingCreditResult,
       totalExpensesResult,
       todayOrdersResult,
-      todayRevenueResult,
       todayExpensesResult,
       creditAccruedResult,
       creditClearedResult,
@@ -72,13 +70,13 @@ class DashboardService {
       expenseCreditAccruedResult,
       expenseCreditClearedResult,
       expenseOutstandingCreditResult,
+      totalRevenueResult,
     ] = await Promise.all([
       this.getTotalOrders(filterStartDate, filterEndDate),
-      this.getTotalRevenue(filterStartDate, filterEndDate),
+      this.gettotalReceived(filterStartDate, filterEndDate),
       this.getOutstandingCredit(),
       this.getTotalExpenses(filterStartDate, filterEndDate),
       this.getTotalOrders(today, today),
-      this.getTotalRevenue(today, today),
       this.getTotalExpenses(today, today),
       this.getCreditAccrued(filterStartDate, filterEndDate),
       this.getCreditCleared(filterStartDate, filterEndDate),
@@ -86,31 +84,28 @@ class DashboardService {
       this.getExpenseCreditAccrued(filterStartDate, filterEndDate),
       this.getExpenseCreditCleared(filterStartDate, filterEndDate),
       this.getExpenseOutstandingCredit(),
+      this.getTotalRevenue(filterStartDate, filterEndDate),
     ]);
 
     const totalOrders = totalOrdersResult;
-    const totalRevenue = totalRevenueResult;
+    const totalReceived = totalReceivedResult;
     const outstandingCredit = outstandingCreditResult;
     const creditAccrued = creditAccruedResult;
     const creditCleared = creditClearedResult;
     const totalExpenses = totalExpensesResult;
-    const profit = totalRevenue - totalExpenses;
+    const profit = totalReceived - totalExpenses;
 
     const todayOrders = todayOrdersResult;
-    const todayRevenue = todayRevenueResult;
     const todayExpenses = todayExpensesResult;
-    const todayProfit = todayRevenue - todayExpenses;
 
     return {
       totalOrders,
-      totalRevenue,
+      totalReceived,
       outstandingCredit,
       totalExpenses,
       profit,
       todayOrders,
-      todayRevenue,
       todayExpenses,
-      todayProfit,
       creditAccrued,
       creditCleared,
       netCreditChange: (creditAccrued || 0) - (creditCleared || 0),
@@ -118,6 +113,7 @@ class DashboardService {
       expenseCreditAccrued: expenseCreditAccruedResult,
       expenseCreditCleared: expenseCreditClearedResult,
       expenseOutstandingCredit: expenseOutstandingCreditResult,
+      totalRevenue: totalRevenueResult,
     };
   }
 
@@ -136,7 +132,7 @@ class DashboardService {
     return result?.count || 0;
   }
 
-  private async getTotalRevenue(
+  private async gettotalReceived(
     startDate: string,
     endDate: string
   ): Promise<number> {
@@ -402,7 +398,7 @@ class DashboardService {
     {
       itemName: string;
       totalQuantity: number;
-      totalRevenue: number;
+      totalReceived: number;
     }[]
   > {
     if (!db) throw new Error("Database not initialized");
@@ -411,7 +407,7 @@ class DashboardService {
       SELECT 
         mi.name as itemName,
         SUM(ki.quantity) as totalQuantity,
-        SUM(ki.quantity * ki.priceAtTime) as totalRevenue
+        SUM(ki.quantity * ki.priceAtTime) as totalReceived
       FROM kot_items ki
       JOIN menu_items mi ON ki.itemId = mi.id
       JOIN kot_orders ko ON ki.kotId = ko.id
@@ -437,8 +433,22 @@ class DashboardService {
     return result.map((row) => ({
       itemName: row.itemName,
       totalQuantity: row.totalQuantity || 0,
-      totalRevenue: row.totalRevenue || 0,
+      totalReceived: row.totalReceived || 0,
     }));
+  }
+
+  async getTotalRevenue(startDate: string, endDate: string): Promise<number> {
+    if (!db) throw new Error("Database not initialized");
+    // Total billed amount: sum of all items in billed KOTs
+    const result = (await db.getFirstAsync(
+      `SELECT COALESCE(SUM(ki.quantity * ki.priceAtTime), 0) as totalRevenue
+       FROM kot_items ki
+       JOIN kot_orders ko ON ki.kotId = ko.id
+       WHERE ko.billId IS NOT NULL
+         AND date(ko.createdAt) BETWEEN ? AND ?`,
+      [startDate, endDate]
+    )) as any;
+    return result?.totalRevenue || 0;
   }
 }
 

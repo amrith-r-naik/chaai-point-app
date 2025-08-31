@@ -4,8 +4,9 @@ import { theme } from "@/constants/theme";
 import {
   dashboardService,
   DateFilterOptions,
-  ExpenseData,
+  ExpenseListItem,
 } from "@/services/dashboardService";
+import { expenseService } from "@/services/expenseService";
 import { appEvents } from "@/state/appEvents";
 import { use$ } from "@legendapp/state/react";
 import {
@@ -14,26 +15,33 @@ import {
   Clock,
   DollarSign,
   Plus,
-  Receipt,
   TrendingDown,
   TrendingUp,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
   RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ExpenseItem } from "../../components/expenses/ExpenseItem";
+import { FilterButton } from "../../components/expenses/FilterButton";
 
 // Dimensions not used currently
 
 // Format currency properly without truncation
-const formatCurrency = (amount: number): string => {
+export const formatCurrency = (amount: number): string => {
   const value = Math.abs(amount);
   const formatted = new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -67,7 +75,7 @@ const styles = StyleSheet.create({
 });
 
 // Get appropriate font size based on amount length
-const getCurrencyFontSize = (
+export const getCurrencyFontSize = (
   amount: number,
   baseFontSize: number = 18
 ): number => {
@@ -79,43 +87,6 @@ const getCurrencyFontSize = (
   if (length <= 16) return baseFontSize * 0.75;
   return baseFontSize * 0.65;
 };
-
-const FilterButton: React.FC<{
-  active: boolean;
-  onPress: () => void;
-  children: React.ReactNode;
-}> = ({ active, onPress, children }) => (
-  <TouchableOpacity
-    onPress={onPress}
-    style={{
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      borderRadius: 25,
-      backgroundColor: active ? "white" : "rgba(255,255,255,0.1)",
-      borderWidth: 1,
-      borderColor: active ? "white" : "rgba(255,255,255,0.2)",
-      marginRight: 12,
-      shadowColor: active ? "#000" : "transparent",
-      shadowOffset: active ? { width: 0, height: 4 } : { width: 0, height: 0 },
-      shadowOpacity: active ? 0.15 : 0,
-      shadowRadius: active ? 8 : 0,
-      elevation: active ? 4 : 0,
-      minWidth: 80,
-      alignItems: "center",
-    }}
-  >
-    <Typography
-      variant="caption"
-      weight="bold"
-      style={{
-        color: active ? theme.colors.primary : "white",
-        fontSize: 13,
-      }}
-    >
-      {children}
-    </Typography>
-  </TouchableOpacity>
-);
 
 const StatCard: React.FC<{
   icon: React.ReactNode;
@@ -229,176 +200,10 @@ const StatCard: React.FC<{
   </TouchableOpacity>
 );
 
-const ExpenseItem: React.FC<{ expense: ExpenseData; index: number }> = ({
-  expense,
-  index,
-}) => (
-  <View
-    style={{
-      backgroundColor: "white",
-      padding: 20,
-      borderRadius: 16,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
-      elevation: 3,
-      marginBottom: 12,
-      borderWidth: 1,
-      borderColor: "#F8FAFC",
-    }}
-  >
-    <View
-      style={{
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "flex-start",
-      }}
-    >
-      <View style={{ flex: 1, marginRight: 16 }}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            marginBottom: 8,
-          }}
-        >
-          <View
-            style={{
-              width: 40,
-              height: 40,
-              backgroundColor: "#FEF2F2",
-              borderRadius: 12,
-              justifyContent: "center",
-              alignItems: "center",
-              marginRight: 12,
-            }}
-          >
-            <Receipt size={18} color="#EF4444" />
-          </View>
-          <View
-            style={{
-              backgroundColor: "#EEF2FF",
-              paddingHorizontal: 8,
-              paddingVertical: 4,
-              borderRadius: 8,
-            }}
-          >
-            <Typography
-              variant="caption"
-              style={{ color: "#4F46E5", fontWeight: "600", fontSize: 10 }}
-            >
-              #{expense.voucherNo}
-            </Typography>
-          </View>
-        </View>
-
-        <Typography
-          variant="body"
-          weight="bold"
-          style={{
-            marginBottom: 6,
-            fontSize: 16,
-            color: "#1E293B",
-            lineHeight: 22,
-          }}
-        >
-          {expense.towards}
-        </Typography>
-
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            marginBottom: 4,
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: "#F8FAFC",
-              paddingHorizontal: 8,
-              paddingVertical: 3,
-              borderRadius: 6,
-              marginRight: 8,
-            }}
-          >
-            <Typography
-              variant="caption"
-              style={{ color: "#64748B", fontSize: 11, fontWeight: "500" }}
-            >
-              {expense.mode}
-            </Typography>
-          </View>
-          <Typography
-            variant="caption"
-            color="textSecondary"
-            style={{ fontSize: 11 }}
-          >
-            {new Date(expense.createdAt).toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
-          </Typography>
-        </View>
-
-        {expense.remarks && (
-          <View
-            style={{
-              backgroundColor: "#FFFBEB",
-              padding: 8,
-              borderRadius: 8,
-              marginTop: 8,
-              borderLeftWidth: 3,
-              borderLeftColor: "#F59E0B",
-            }}
-          >
-            <Typography
-              variant="caption"
-              style={{ color: "#92400E", fontSize: 11, lineHeight: 16 }}
-            >
-              💬 {expense.remarks}
-            </Typography>
-          </View>
-        )}
-      </View>
-
-      <View style={{ alignItems: "flex-end" }}>
-        <Typography
-          variant="h4"
-          weight="bold"
-          style={{
-            color: "#EF4444",
-            fontSize: getCurrencyFontSize(expense.amount, 20),
-            lineHeight: 24,
-          }}
-        >
-          -{formatCurrency(expense.amount)}
-        </Typography>
-        <View
-          style={{
-            backgroundColor: "#FEE2E2",
-            paddingHorizontal: 6,
-            paddingVertical: 2,
-            borderRadius: 6,
-            marginTop: 4,
-          }}
-        >
-          <Typography
-            style={{ color: "#DC2626", fontSize: 9, fontWeight: "600" }}
-          >
-            EXPENSE
-          </Typography>
-        </View>
-      </View>
-    </View>
-  </View>
-);
-
 export default function BillingScreen() {
   const insets = useSafeAreaInsets();
   const ev = use$(appEvents);
-  const [expenses, setExpenses] = useState<ExpenseData[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<
@@ -407,6 +212,13 @@ export default function BillingScreen() {
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [outstandingCredit, setOutstandingCredit] = useState(0);
+  const [clearModal, setClearModal] = useState<{
+    visible: boolean;
+    expense?: ExpenseListItem;
+  }>({ visible: false });
+  const [clearCash, setClearCash] = useState("");
+  const [clearUpi, setClearUpi] = useState("");
+  const [focusedField, setFocusedField] = useState<"cash" | "upi" | null>(null);
 
   const getDateFilter = React.useCallback((): DateFilterOptions | undefined => {
     const today = new Date();
@@ -439,11 +251,13 @@ export default function BillingScreen() {
     try {
       const dateFilter = getDateFilter();
       const [expensesData, stats] = await Promise.all([
-        dashboardService.getExpenses(dateFilter),
+        dashboardService.getExpensesWithStatus(dateFilter),
         dashboardService.getDashboardStats(),
       ]);
       setExpenses(expensesData);
-      setOutstandingCredit(stats.outstandingCredit || 0);
+      setOutstandingCredit(
+        (stats as any).expenseOutstandingCredit ?? stats.outstandingCredit ?? 0
+      );
 
       const total = expensesData.reduce(
         (sum, expense) => sum + expense.amount,
@@ -783,7 +597,14 @@ export default function BillingScreen() {
           ) : (
             <View style={{ marginBottom: 20 }}>
               {expenses.map((expense, index) => (
-                <ExpenseItem key={expense.id} expense={expense} index={index} />
+                <ExpenseItem
+                  key={expense.id}
+                  expense={expense}
+                  index={index}
+                  onClearCredit={(e) => {
+                    setClearModal({ visible: true, expense: e });
+                  }}
+                />
               ))}
             </View>
           )}
@@ -798,6 +619,295 @@ export default function BillingScreen() {
         onClose={() => setShowAddExpense(false)}
         onExpenseAdded={handleExpenseAdded}
       />
+
+      <Modal
+        visible={!!clearModal.visible && !!clearModal.expense}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setClearModal({ visible: false })}
+      >
+        <View style={{ flex: 1, justifyContent: "flex-end" }}>
+          <Pressable
+            onPress={() => setClearModal({ visible: false })}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0,0,0,0.35)",
+            }}
+          />
+          <KeyboardAvoidingView
+            behavior={Platform.select({ ios: "padding", android: undefined })}
+            style={{ width: "100%" }}
+          >
+            <View
+              style={{
+                backgroundColor: "white",
+                borderTopLeftRadius: 16,
+                borderTopRightRadius: 16,
+                padding: 16,
+                paddingBottom: 16,
+              }}
+            >
+              {clearModal.expense &&
+                (() => {
+                  const outstanding =
+                    clearModal.expense!.creditOutstanding || 0;
+                  const nCash = Math.max(
+                    0,
+                    parseInt((clearCash || "0").replace(/[^0-9]/g, ""), 10) || 0
+                  );
+                  const nUpi = Math.max(
+                    0,
+                    parseInt((clearUpi || "0").replace(/[^0-9]/g, ""), 10) || 0
+                  );
+                  const total = nCash + nUpi;
+                  const remaining = Math.max(0, outstanding - total);
+                  const over = total > outstanding;
+
+                  const setSafe = (which: "cash" | "upi", txt: string) => {
+                    const sanitized = (txt || "").replace(/[^0-9]/g, "");
+                    if (which === "cash") setClearCash(sanitized);
+                    else setClearUpi(sanitized);
+                  };
+
+                  const applyChip = (amt: number | "max") => {
+                    const other = focusedField === "cash" ? nUpi : nCash;
+                    const available = Math.max(0, outstanding - other);
+                    const inc =
+                      amt === "max" ? available : Math.min(amt, available);
+                    const current = focusedField === "cash" ? nCash : nUpi;
+                    const next = Math.max(
+                      0,
+                      Math.min(available, current + inc)
+                    );
+                    if (focusedField === "cash") setClearCash(String(next));
+                    else setClearUpi(String(next));
+                  };
+
+                  const onConfirm = async () => {
+                    if (total <= 0 || over) return;
+                    try {
+                      const splits: { type: "Cash" | "UPI"; amount: number }[] =
+                        [];
+                      if (nCash > 0)
+                        splits.push({ type: "Cash", amount: nCash });
+                      if (nUpi > 0) splits.push({ type: "UPI", amount: nUpi });
+                      await expenseService.clearExpenseCredit(
+                        clearModal.expense!.id,
+                        splits
+                      );
+                      setClearModal({ visible: false });
+                      setClearCash("");
+                      setClearUpi("");
+                      loadExpenses();
+                    } catch (e) {
+                      Alert.alert("Error", String((e as any)?.message || e));
+                    }
+                  };
+
+                  return (
+                    <>
+                      <View style={{ alignItems: "center", paddingBottom: 8 }}>
+                        <View
+                          style={{
+                            width: 40,
+                            height: 4,
+                            backgroundColor: "#E5E7EB",
+                            borderRadius: 2,
+                          }}
+                        />
+                      </View>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginBottom: 6,
+                        }}
+                      >
+                        <Typography variant="h3">
+                          Clear expense credit
+                        </Typography>
+                        <TouchableOpacity
+                          onPress={() => setClearModal({ visible: false })}
+                        >
+                          <Typography
+                            style={{
+                              color: theme.colors.primary,
+                              fontWeight: "700",
+                            }}
+                          >
+                            Close
+                          </Typography>
+                        </TouchableOpacity>
+                      </View>
+                      <Typography style={{ color: "#64748B", marginBottom: 6 }}>
+                        Outstanding
+                      </Typography>
+                      <Typography
+                        variant="h2"
+                        weight="bold"
+                        style={{ color: "#DC2626", marginBottom: 12 }}
+                      >
+                        {formatCurrency(outstanding)}
+                      </Typography>
+
+                      <View style={{ gap: 12 }}>
+                        <View>
+                          <Typography
+                            variant="caption"
+                            style={{ marginBottom: 6, color: "#64748B" }}
+                          >
+                            Cash amount
+                          </Typography>
+                          <View
+                            style={{
+                              borderWidth: 1,
+                              borderColor: "#E5E7EB",
+                              borderRadius: 12,
+                              paddingHorizontal: 12,
+                              paddingVertical: 10,
+                              backgroundColor: "#F9FAFB",
+                            }}
+                          >
+                            <TextInput
+                              value={clearCash}
+                              onChangeText={(t) => setSafe("cash", t)}
+                              onFocus={() => setFocusedField("cash")}
+                              placeholder="0"
+                              keyboardType="numeric"
+                            />
+                          </View>
+                        </View>
+                        <View>
+                          <Typography
+                            variant="caption"
+                            style={{ marginBottom: 6, color: "#64748B" }}
+                          >
+                            UPI amount
+                          </Typography>
+                          <View
+                            style={{
+                              borderWidth: 1,
+                              borderColor: "#E5E7EB",
+                              borderRadius: 12,
+                              paddingHorizontal: 12,
+                              paddingVertical: 10,
+                              backgroundColor: "#F9FAFB",
+                            }}
+                          >
+                            <TextInput
+                              value={clearUpi}
+                              onChangeText={(t) => setSafe("upi", t)}
+                              onFocus={() => setFocusedField("upi")}
+                              placeholder="0"
+                              keyboardType="numeric"
+                            />
+                          </View>
+                        </View>
+                      </View>
+
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          flexWrap: "wrap",
+                          gap: 8,
+                          marginTop: 12,
+                        }}
+                      >
+                        {[100, 500, 1000].map((v) => (
+                          <TouchableOpacity
+                            key={v}
+                            onPress={() => applyChip(v)}
+                            style={{
+                              backgroundColor: "#F3F4F6",
+                              paddingHorizontal: 10,
+                              paddingVertical: 6,
+                              borderRadius: 8,
+                            }}
+                          >
+                            <Typography
+                              style={{ color: "#111827", fontWeight: "600" }}
+                            >
+                              +{formatCurrency(v)}
+                            </Typography>
+                          </TouchableOpacity>
+                        ))}
+                        <TouchableOpacity
+                          onPress={() => applyChip("max")}
+                          style={{
+                            backgroundColor: "#EEF2FF",
+                            paddingHorizontal: 10,
+                            paddingVertical: 6,
+                            borderRadius: 8,
+                          }}
+                        >
+                          <Typography
+                            style={{ color: "#4F46E5", fontWeight: "700" }}
+                          >
+                            Max
+                          </Typography>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setClearCash("");
+                            setClearUpi("");
+                          }}
+                          style={{
+                            backgroundColor: "#FFE4E6",
+                            paddingHorizontal: 10,
+                            paddingVertical: 6,
+                            borderRadius: 8,
+                          }}
+                        >
+                          <Typography
+                            style={{ color: "#E11D48", fontWeight: "700" }}
+                          >
+                            Clear
+                          </Typography>
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={{ marginTop: 14 }}>
+                        <Typography
+                          style={{ color: over ? "#DC2626" : "#64748B" }}
+                        >
+                          Clearing {formatCurrency(total)} · Remaining{" "}
+                          {formatCurrency(remaining)}
+                        </Typography>
+                      </View>
+
+                      <TouchableOpacity
+                        disabled={total <= 0 || over}
+                        onPress={onConfirm}
+                        style={{
+                          marginTop: 14,
+                          backgroundColor:
+                            total <= 0 || over
+                              ? "#93C5FD"
+                              : theme.colors.primary,
+                          paddingVertical: 14,
+                          borderRadius: 12,
+                          alignItems: "center",
+                        }}
+                      >
+                        <Typography
+                          style={{ color: "white", fontWeight: "800" }}
+                        >
+                          Clear credit{" "}
+                          {total > 0 ? `· ${formatCurrency(total)}` : ""}
+                        </Typography>
+                      </TouchableOpacity>
+                    </>
+                  );
+                })()}
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

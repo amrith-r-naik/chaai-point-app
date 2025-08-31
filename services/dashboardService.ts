@@ -35,6 +35,12 @@ export interface ExpenseData {
   createdAt: string;
 }
 
+export interface ExpenseListItem extends ExpenseData {
+  paidAmount: number;
+  creditOutstanding: number;
+  status: "Paid" | "Partial" | "Credit";
+}
+
 export interface RevenueByDay {
   date: string;
   revenue: number;
@@ -335,6 +341,53 @@ class DashboardService {
       remarks: row.remarks,
       createdAt: row.createdAt,
     }));
+  }
+
+  async getExpensesWithStatus(
+    dateFilter?: DateFilterOptions
+  ): Promise<ExpenseListItem[]> {
+    if (!db) throw new Error("Database not initialized");
+
+    const where = dateFilter ? `WHERE date(e.createdAt) BETWEEN ? AND ?` : "";
+    const params: string[] = dateFilter
+      ? [dateFilter.startDate, dateFilter.endDate]
+      : [];
+    const rows = (await db.getAllAsync(
+      `SELECT 
+         e.id, e.voucherNo, e.amount, e.towards, e.mode, e.remarks, e.createdAt,
+         COALESCE(SUM(CASE WHEN s.paymentType IN ('Cash','UPI') AND (s.subType IS NULL OR s.subType='') THEN s.amount ELSE 0 END),0) as paidAmount,
+         COALESCE(SUM(CASE WHEN s.paymentType='Credit' AND s.subType='Accrual' THEN s.amount ELSE 0 END),0) as accrued,
+         COALESCE(SUM(CASE WHEN s.subType='Clearance' THEN s.amount ELSE 0 END),0) as cleared
+       FROM expenses e
+       LEFT JOIN expense_settlements s ON s.expenseId = e.id AND s.deletedAt IS NULL
+       ${where}
+       GROUP BY e.id
+       ORDER BY e.createdAt DESC`,
+      params
+    )) as any[];
+
+    return rows.map((r) => {
+      const outstanding = Math.max(0, (r.accrued || 0) - (r.cleared || 0));
+      let status: "Paid" | "Partial" | "Credit" = "Paid";
+      if (outstanding > 0)
+        status =
+          (r.paidAmount || 0) > 0 || (r.cleared || 0) > 0
+            ? "Partial"
+            : "Credit";
+      const item: ExpenseListItem = {
+        id: r.id,
+        voucherNo: r.voucherNo,
+        amount: r.amount,
+        towards: r.towards,
+        mode: r.mode,
+        remarks: r.remarks,
+        createdAt: r.createdAt,
+        paidAmount: r.paidAmount || 0,
+        creditOutstanding: outstanding,
+        status,
+      };
+      return item;
+    });
   }
 
   // Numbers assigned by server; no local voucher generator

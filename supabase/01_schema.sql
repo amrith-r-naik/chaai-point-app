@@ -149,13 +149,27 @@ create table if not exists public.split_payments (
   shop_id text not null
 );
 
+-- Expense settlements: detailed payments/credit for expenses
+create table if not exists public.expense_settlements (
+  id text primary key,
+  expense_id text not null references public.expenses(id) on delete cascade,
+  payment_type text not null,
+  sub_type text,
+  amount integer not null,
+  remarks text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  shop_id text not null
+);
+
 -- Triggers to maintain updated_at on update
 do $$
 declare
   t text;
 begin
   foreach t in array array[
-    'customers','menu_items','bills','kot_orders','kot_items','payments','receipts','expenses','split_payments'
+  'customers','menu_items','bills','kot_orders','kot_items','payments','receipts','expenses','split_payments','expense_settlements'
   ] loop
     execute format('drop trigger if exists set_updated_at on public.%I;', t);
     execute format('create trigger set_updated_at before update on public.%I for each row execute function public.set_updated_at();', t);
@@ -172,6 +186,9 @@ create index if not exists idx_payments_shop_updated on public.payments(shop_id,
 create index if not exists idx_receipts_shop_updated on public.receipts(shop_id, updated_at);
 create index if not exists idx_expenses_shop_updated on public.expenses(shop_id, updated_at);
 create index if not exists idx_split_payments_shop_updated on public.split_payments(shop_id, updated_at);
+create index if not exists idx_expense_settlements_shop_updated on public.expense_settlements(shop_id, updated_at);
+create index if not exists idx_expense_settlements_expense on public.expense_settlements(expense_id);
+create index if not exists idx_expense_settlements_created on public.expense_settlements(created_at);
 
 -- =============================
 -- Phase 2: Server-assigned numbering

@@ -486,6 +486,78 @@ async function runMigrations() {
       throw e;
     }
   }
+
+  // v6 -> v7: Add expense_settlements table + indexes + triggers, and backfill from legacy expenses.mode
+  if (v < 7) {
+    await db!.execAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      // Create table with sync metadata columns present from the start
+      await db!.execAsync(`
+        CREATE TABLE IF NOT EXISTS expense_settlements (
+          id TEXT PRIMARY KEY,
+          expenseId TEXT NOT NULL,
+          paymentType TEXT NOT NULL,
+          subType TEXT,
+          amount INTEGER NOT NULL,
+          remarks TEXT,
+          createdAt TEXT NOT NULL,
+          shopId TEXT,
+          deletedAt TEXT,
+          updatedAt TEXT,
+          FOREIGN KEY (expenseId) REFERENCES expenses(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_expense_settlements_expense ON expense_settlements(expenseId);
+        CREATE INDEX IF NOT EXISTS idx_expense_settlements_createdAt ON expense_settlements(createdAt);
+        CREATE INDEX IF NOT EXISTS idx_expense_settlements_shop_updated ON expense_settlements(shopId, updatedAt);
+
+        -- Triggers for updatedAt management
+        CREATE TRIGGER IF NOT EXISTS trg_expense_settlements_updatedAt_insert
+        AFTER INSERT ON expense_settlements
+        FOR EACH ROW
+        BEGIN
+          UPDATE expense_settlements SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now')) WHERE id = NEW.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_expense_settlements_updatedAt
+        AFTER UPDATE ON expense_settlements
+        FOR EACH ROW
+        BEGIN
+          UPDATE expense_settlements
+          SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now'))
+          WHERE id = NEW.id;
+        END;
+      `);
+
+      // Backfill: for any expense without settlements, insert a single settlement reflecting legacy mode
+      // Generate deterministic IDs prefixed with 'expset_' to be idempotent.
+      await db!.execAsync(`
+        INSERT INTO expense_settlements (id, expenseId, paymentType, subType, amount, remarks, createdAt, shopId, deletedAt, updatedAt)
+        SELECT 
+          'expset_' || e.id AS id,
+          e.id as expenseId,
+          CASE WHEN e.mode = 'Credit' THEN 'Credit' ELSE e.mode END as paymentType,
+          CASE WHEN e.mode = 'Credit' THEN 'Accrual' ELSE NULL END as subType,
+          e.amount,
+          e.remarks,
+          e.createdAt,
+          e.shopId,
+          NULL as deletedAt,
+          e.createdAt as updatedAt
+        FROM expenses e
+        WHERE NOT EXISTS (
+          SELECT 1 FROM expense_settlements s WHERE s.expenseId = e.id
+        );
+      `);
+
+      await setUserVersion(7);
+      await db!.execAsync("COMMIT");
+      v = 7;
+    } catch (e) {
+      await db!.execAsync("ROLLBACK");
+      throw e;
+    }
+  }
 }
 
 // Integrity audit: verify bill totals and customer credit consistency

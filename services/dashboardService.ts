@@ -13,6 +13,11 @@ export interface DashboardStats {
   creditAccrued?: number; // total credit granted in filter window
   creditCleared?: number; // total credit cleared in filter window
   netCreditChange?: number; // accrued - cleared
+  // Expense split reporting
+  expensePaid?: number;
+  expenseCreditAccrued?: number;
+  expenseCreditCleared?: number;
+  expenseOutstandingCredit?: number;
 }
 
 export interface DateFilterOptions {
@@ -56,6 +61,10 @@ class DashboardService {
       todayExpensesResult,
       creditAccruedResult,
       creditClearedResult,
+      expensePaidResult,
+      expenseCreditAccruedResult,
+      expenseCreditClearedResult,
+      expenseOutstandingCreditResult,
     ] = await Promise.all([
       this.getTotalOrders(filterStartDate, filterEndDate),
       this.getTotalRevenue(filterStartDate, filterEndDate),
@@ -66,6 +75,10 @@ class DashboardService {
       this.getTotalExpenses(today, today),
       this.getCreditAccrued(filterStartDate, filterEndDate),
       this.getCreditCleared(filterStartDate, filterEndDate),
+      this.getExpensePaid(filterStartDate, filterEndDate),
+      this.getExpenseCreditAccrued(filterStartDate, filterEndDate),
+      this.getExpenseCreditCleared(filterStartDate, filterEndDate),
+      this.getExpenseOutstandingCredit(),
     ]);
 
     const totalOrders = totalOrdersResult;
@@ -94,6 +107,10 @@ class DashboardService {
       creditAccrued,
       creditCleared,
       netCreditChange: (creditAccrued || 0) - (creditCleared || 0),
+      expensePaid: expensePaidResult,
+      expenseCreditAccrued: expenseCreditAccruedResult,
+      expenseCreditCleared: expenseCreditClearedResult,
+      expenseOutstandingCredit: expenseOutstandingCreditResult,
     };
   }
 
@@ -180,6 +197,61 @@ class DashboardService {
     )) as any;
 
     return result?.expenses || 0;
+  }
+
+  // Expense reporting based on settlements
+  private async getExpensePaid(
+    startDate: string,
+    endDate: string
+  ): Promise<number> {
+    if (!db) throw new Error("Database not initialized");
+    const row = (await db.getFirstAsync(
+      `SELECT COALESCE(SUM(amount),0) as total FROM expense_settlements 
+       WHERE (subType IS NULL OR subType = '' OR subType = 'Clearance')
+         AND date(createdAt) BETWEEN ? AND ?
+         AND (deletedAt IS NULL)`,
+      [startDate, endDate]
+    )) as any;
+    return row?.total || 0;
+  }
+
+  private async getExpenseCreditAccrued(
+    startDate: string,
+    endDate: string
+  ): Promise<number> {
+    if (!db) throw new Error("Database not initialized");
+    const row = (await db.getFirstAsync(
+      `SELECT COALESCE(SUM(amount),0) as total FROM expense_settlements 
+       WHERE subType = 'Accrual' AND date(createdAt) BETWEEN ? AND ?
+         AND (deletedAt IS NULL)`,
+      [startDate, endDate]
+    )) as any;
+    return row?.total || 0;
+  }
+
+  private async getExpenseCreditCleared(
+    startDate: string,
+    endDate: string
+  ): Promise<number> {
+    if (!db) throw new Error("Database not initialized");
+    const row = (await db.getFirstAsync(
+      `SELECT COALESCE(SUM(amount),0) as total FROM expense_settlements 
+       WHERE subType = 'Clearance' AND date(createdAt) BETWEEN ? AND ?
+         AND (deletedAt IS NULL)`,
+      [startDate, endDate]
+    )) as any;
+    return row?.total || 0;
+  }
+
+  private async getExpenseOutstandingCredit(): Promise<number> {
+    if (!db) throw new Error("Database not initialized");
+    const row = (await db.getFirstAsync(
+      `SELECT 
+         COALESCE(SUM(CASE WHEN paymentType='Credit' AND subType='Accrual' THEN amount ELSE 0 END),0) -
+         COALESCE(SUM(CASE WHEN subType='Clearance' THEN amount ELSE 0 END),0) as outstanding
+       FROM expense_settlements WHERE (deletedAt IS NULL)`
+    )) as any;
+    return row?.outstanding || 0;
   }
 
   async getRevenueByDays(days: number = 7): Promise<RevenueByDay[]> {

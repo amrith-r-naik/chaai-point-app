@@ -10,7 +10,7 @@ import {
   Wallet,
   X,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   Alert,
   Dimensions,
@@ -63,6 +63,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 24,
     gap: 24,
+    paddingBottom: 140, // ensure content isn't hidden behind fixed footer
   },
   section: {
     gap: 12,
@@ -222,65 +223,7 @@ const styles = StyleSheet.create({
   },
 });
 
-const AddSplitQuick: React.FC<{
-  label: "Cash" | "UPI" | "Credit";
-  onAdd: (amount: string) => void;
-  disabled?: boolean;
-}> = ({ label, onAdd, disabled }) => {
-  const [val, setVal] = useState("");
-  return (
-    <View
-      style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}
-    >
-      <View
-        style={{
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          backgroundColor: "#f1f5f9",
-          borderRadius: 8,
-          borderWidth: 1,
-          borderColor: "#e2e8f0",
-        }}
-      >
-        <Text style={{ fontSize: 12, fontWeight: "700", color: "#334155" }}>
-          {label}
-        </Text>
-      </View>
-      <View
-        style={[
-          styles.inputContainer,
-          { flex: 1, borderRadius: 10, borderWidth: 1 },
-        ]}
-      >
-        <TextInput
-          style={[
-            styles.textInput,
-            { paddingVertical: 10, paddingHorizontal: 12 },
-          ]}
-          placeholder="Amount"
-          keyboardType="numeric"
-          value={val}
-          onChangeText={setVal}
-        />
-      </View>
-      <TouchableOpacity
-        disabled={disabled}
-        onPress={() => {
-          onAdd(val);
-          setVal("");
-        }}
-        style={{
-          paddingHorizontal: 14,
-          paddingVertical: 10,
-          borderRadius: 10,
-          backgroundColor: disabled ? "#cbd5e1" : theme.colors.primary,
-        }}
-      >
-        <Text style={{ color: "white", fontWeight: "700" }}>Add</Text>
-      </TouchableOpacity>
-    </View>
-  );
-};
+// Split builder no longer uses per-row add; inline inputs + quick chips instead.
 
 const paymentModes = [
   { id: "Cash", label: "Cash", icon: Wallet },
@@ -321,16 +264,25 @@ export default function AddExpenseModal({
   const [remarks, setRemarks] = useState("");
   const [loading, setLoading] = useState(false);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
-  const [splits, setSplits] = useState<
-    { type: "Cash" | "UPI" | "Credit"; amount: number }[]
-  >([]);
-  const creditCount = splits.filter((s) => s.type === "Credit").length;
+  // Split inputs
+  const [splitCash, setSplitCash] = useState("");
+  const [splitUpi, setSplitUpi] = useState("");
+  const [splitCredit, setSplitCredit] = useState("");
+  const [focusedSplit, setFocusedSplit] = useState<
+    "cash" | "upi" | "credit" | null
+  >(null);
+  const [targetSplit, setTargetSplit] = useState<
+    "cash" | "upi" | "credit" | null
+  >(null);
   const totalAmount = (() => {
     const n = parseFloat(amount);
     return isNaN(n) ? 0 : Math.round(n);
   })();
-  const splitTotal = splits.reduce((s, p) => s + p.amount, 0);
-  const remaining = Math.max(0, totalAmount - splitTotal);
+  const nCash = Math.max(0, Math.round(parseFloat(splitCash) || 0));
+  const nUpi = Math.max(0, Math.round(parseFloat(splitUpi) || 0));
+  const nCredit = Math.max(0, Math.round(parseFloat(splitCredit) || 0));
+  const splitTotal = nCash + nUpi + nCredit;
+  const remaining = totalAmount - splitTotal;
 
   const resetForm = () => {
     setAmount("");
@@ -338,6 +290,11 @@ export default function AddExpenseModal({
     setMode("Cash");
     setRemarks("");
     setFocusedInput(null);
+    setSplitCash("");
+    setSplitUpi("");
+    setSplitCredit("");
+    setFocusedSplit(null);
+    setTargetSplit(null);
   };
 
   const handleAddExpense = async () => {
@@ -360,13 +317,16 @@ export default function AddExpenseModal({
         remarks: remarks.trim() || null,
       } as const;
       if (mode === "Split") {
-        if (splits.length === 0) throw new Error("Add at least one split");
+        const sp: { type: "Cash" | "UPI" | "Credit"; amount: number }[] = [];
+        if (nCash > 0) sp.push({ type: "Cash", amount: nCash });
+        if (nUpi > 0) sp.push({ type: "UPI", amount: nUpi });
+        if (nCredit > 0) sp.push({ type: "Credit", amount: nCredit });
+        if (sp.length === 0) throw new Error("Add at least one split");
         if (splitTotal !== Math.round(expenseAmount))
           throw new Error("Splits must equal total amount");
-        if (creditCount > 1) throw new Error("Only one Credit split allowed");
         await expenseService.createExpense({
           ...payloadBase,
-          splitPayments: splits,
+          splitPayments: sp,
         });
       } else {
         await expenseService.createExpense({
@@ -380,7 +340,6 @@ export default function AddExpenseModal({
       onExpenseAdded();
       onClose();
     } catch (error) {
-      console.error("Error adding expense:", error);
       const msg =
         (error as any)?.message || "Failed to add expense. Please try again.";
       Alert.alert("Error", String(msg));
@@ -398,19 +357,29 @@ export default function AddExpenseModal({
     setAmount(quickAmount.toString());
   };
 
-  const addSplit = (type: "Cash" | "UPI" | "Credit", a: string) => {
-    const n = Math.round(parseFloat(a));
-    if (!a || isNaN(n) || n <= 0)
-      return Alert.alert("Invalid", "Enter a valid split amount");
-    if (type === "Credit" && creditCount >= 1)
-      return Alert.alert("Invalid", "Only one Credit split allowed");
-    if (n > remaining)
-      return Alert.alert("Too high", "Split exceeds remaining amount");
-    setSplits((prev) => [...prev, { type, amount: n }]);
+  // Helpers for split quick chips
+  const applyChip = (amt: number | "max") => {
+    if (totalAmount <= 0) return;
+    const others = (field: "cash" | "upi" | "credit") => {
+      const c = field === "cash" ? 0 : nCash;
+      const u = field === "upi" ? 0 : nUpi;
+      const r = field === "credit" ? 0 : nCredit;
+      return c + u + r;
+    };
+    const field = targetSplit || focusedSplit || "cash";
+    const otherSum = others(field);
+    const available = Math.max(0, totalAmount - otherSum);
+    const inc = amt === "max" ? available : Math.min(amt, available);
+    const current = field === "cash" ? nCash : field === "upi" ? nUpi : nCredit;
+    const next = Math.max(0, current + inc);
+    const set =
+      field === "cash"
+        ? setSplitCash
+        : field === "upi"
+          ? setSplitUpi
+          : setSplitCredit;
+    set(String(next));
   };
-  const removeSplit = (idx: number) =>
-    setSplits((prev) => prev.filter((_, i) => i !== idx));
-  const clearSplits = () => setSplits([]);
 
   return (
     <Modal
@@ -439,10 +408,10 @@ export default function AddExpenseModal({
             <X size={20} color="#64748b" />
           </TouchableOpacity>
         </View>
-
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
         >
           {/* Amount Section */}
           <View style={styles.section}>
@@ -586,88 +555,157 @@ export default function AddExpenseModal({
                 }}
               >
                 <Text
-                  style={{ fontSize: 14, color: "#334155", fontWeight: "700" }}
-                >
-                  Payment Splits
-                </Text>
-                <Text style={{ fontSize: 12, color: "#64748b" }}>
-                  Remaining: ₹{remaining}
-                </Text>
-              </View>
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                {(["Cash", "UPI", "Credit"] as const).map((t) => (
-                  <AddSplitQuick
-                    key={t}
-                    label={t}
-                    onAdd={(amt) => addSplit(t, amt)}
-                    disabled={t === "Credit" && creditCount >= 1}
-                  />
-                ))}
-              </View>
-              {splits.length > 0 && (
-                <View
                   style={{
-                    backgroundColor: "white",
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: "#e2e8f0",
+                    fontSize: 14,
+                    color: "#334155",
+                    fontWeight: "700",
                   }}
                 >
-                  {splits.map((s, idx) => (
-                    <View
-                      key={idx}
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        padding: 12,
-                        borderBottomWidth: idx < splits.length - 1 ? 1 : 0,
-                        borderColor: "#f1f5f9",
-                      }}
-                    >
-                      <Text style={{ fontWeight: "600", color: "#334155" }}>
-                        {s.type}
-                      </Text>
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 12,
-                        }}
-                      >
-                        <Text style={{ color: "#334155" }}>₹{s.amount}</Text>
-                        <TouchableOpacity onPress={() => removeSplit(idx)}>
-                          <X size={16} color="#64748b" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))}
+                  Split payment
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: remaining < 0 ? "#DC2626" : "#64748b",
+                  }}
+                >
+                  Total ₹{totalAmount} · Allocated ₹{splitTotal} · Remaining ₹
+                  {Math.max(0, remaining)}
+                </Text>
+              </View>
+
+              {/* Inline inputs */}
+              {(["Cash", "UPI", "Credit"] as const).map((label) => {
+                const value =
+                  label === "Cash"
+                    ? splitCash
+                    : label === "UPI"
+                      ? splitUpi
+                      : splitCredit;
+                const setter =
+                  label === "Cash"
+                    ? setSplitCash
+                    : label === "UPI"
+                      ? setSplitUpi
+                      : setSplitCredit;
+                const key =
+                  label === "Cash"
+                    ? "cash"
+                    : label === "UPI"
+                      ? "upi"
+                      : "credit";
+                return (
                   <View
+                    key={label}
                     style={{
-                      padding: 12,
                       flexDirection: "row",
-                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 10,
                     }}
                   >
-                    <Text style={{ color: "#64748b" }}>Total</Text>
-                    <Text
-                      style={{ fontWeight: "700", color: theme.colors.primary }}
+                    <TouchableOpacity
+                      onPress={() => setTargetSplit(key as any)}
+                      activeOpacity={0.7}
+                      style={{
+                        width: 64,
+                        paddingVertical: 8,
+                        alignItems: "center",
+                        borderRadius: 10,
+                        backgroundColor: "#F1F5F9",
+                        borderWidth: 1,
+                        borderColor: "#E2E8F0",
+                      }}
                     >
-                      ₹{splitTotal}
-                    </Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: "700",
+                          color: "#334155",
+                        }}
+                      >
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                    <View
+                      style={[
+                        styles.inputContainer,
+                        { flex: 1, borderRadius: 12 },
+                      ]}
+                    >
+                      <TextInput
+                        style={[styles.textInput, { paddingVertical: 12 }]}
+                        placeholder="0"
+                        keyboardType="numeric"
+                        value={value}
+                        onChangeText={setter}
+                        onFocus={() => {
+                          setFocusedSplit(key as any);
+                          setTargetSplit(key as any);
+                        }}
+                        onBlur={() => setFocusedSplit(null)}
+                      />
+                    </View>
                   </View>
-                </View>
-              )}
-              {splits.length > 0 && (
-                <TouchableOpacity
-                  onPress={clearSplits}
-                  style={{ alignSelf: "flex-end", padding: 8 }}
-                >
-                  <Text
-                    style={{ color: theme.colors.primary, fontWeight: "600" }}
+                );
+              })}
+
+              {/* Quick chips */}
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {[100, 500, 1000].map((v) => (
+                  <TouchableOpacity
+                    key={v}
+                    onPress={() => applyChip(v)}
+                    activeOpacity={0.8}
+                    style={{
+                      backgroundColor: "#F3F4F6",
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 10,
+                    }}
                   >
-                    Clear splits
+                    <Text style={{ color: "#111827", fontWeight: "600" }}>
+                      +₹{v}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  onPress={() => applyChip("max")}
+                  activeOpacity={0.8}
+                  style={{
+                    backgroundColor: "#EEF2FF",
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 10,
+                  }}
+                >
+                  <Text style={{ color: "#4F46E5", fontWeight: "700" }}>
+                    Max
                   </Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    setSplitCash("");
+                    setSplitUpi("");
+                    setSplitCredit("");
+                  }}
+                  activeOpacity={0.8}
+                  style={{
+                    backgroundColor: "#FFE4E6",
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 10,
+                  }}
+                >
+                  <Text style={{ color: "#E11D48", fontWeight: "700" }}>
+                    Clear
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {remaining !== 0 && (
+                <Text style={{ color: "#DC2626", fontSize: 12 }}>
+                  Split total must equal the Amount
+                </Text>
               )}
             </View>
           )}

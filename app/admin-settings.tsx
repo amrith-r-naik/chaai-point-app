@@ -69,7 +69,7 @@ export default function AdminSettingsScreen() {
 
     loadTableCounts();
     loadMenuItems();
-  // Sync & Backup state removed here; handled on Dashboard
+    // Sync & Backup state removed here; handled on Dashboard
   }, [auth.user]);
 
   const loadMenuItems = async () => {
@@ -577,7 +577,7 @@ export default function AdminSettingsScreen() {
       </SafeAreaView>
 
       <ScrollView style={{ flex: 1, padding: 24 }}>
-  {/* Sync & Backup controls removed from Admin Settings; use Dashboard */}
+        {/* Sync & Backup controls removed from Admin Settings; use Dashboard */}
         {/* Diagnostics entry removed for production */}
         {/* Database Statistics */}
         <View style={{ marginBottom: 32 }}>
@@ -645,236 +645,254 @@ export default function AdminSettingsScreen() {
         {/* Customer Management removed */}
 
         {/* Database Management */}
-        <View style={{ marginBottom: 32 }}>
-          <Text
-            style={{
-              fontSize: 18,
-              fontWeight: "bold",
-              color: theme.colors.text,
-              marginBottom: 16,
-            }}
-          >
-            Database Management
-          </Text>
-
-          {__DEV__ && (
-            <>
-              <AdminCard
-                title="Seed Menu Items"
-                description="Insert standard menu items into the database"
-                icon={Database}
-                onPress={handleAddDemoMenuItems}
-              />
-
-              <AdminCard
-                title="Clear All Business Data"
-                description="⚠️ Permanently delete ALL business data (orders, customers, menu, payments). User accounts are preserved."
-                icon={Trash2}
-                onPress={handleClearAllTables}
-                destructive
-              />
-            </>
-          )}
-        </View>
-
-        {/* Integrity Audit */}
-        <View style={{ marginBottom: 32 }}>
-          <Text
-            style={{
-              fontSize: 18,
-              fontWeight: "bold",
-              color: theme.colors.text,
-              marginBottom: 8,
-            }}
-          >
-            Integrity Audit
-          </Text>
-          <Text
-            style={{
-              fontSize: 14,
-              color: theme.colors.textSecondary,
-              marginBottom: 12,
-            }}
-          >
-            Check for mismatched bill totals and incorrect customer credit
-            balances.
-          </Text>
-
-          <View style={{ flexDirection: "row", gap: 12, marginBottom: 8 }}>
-            <TouchableOpacity
-              onPress={handleRunAudit}
-              disabled={auditRunning}
-              style={{
-                backgroundColor: theme.colors.primary,
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                borderRadius: 8,
-                alignSelf: "flex-start",
-                opacity: auditRunning ? 0.6 : 1,
-                ...theme.shadows.sm,
-              }}
-            >
-              <Text style={{ color: "white", fontWeight: "600" }}>
-                {auditRunning ? "Running…" : "Run Audit"}
-              </Text>
-            </TouchableOpacity>
-
-            {auditResult && (
-              <TouchableOpacity
-                onPress={() => setAuditResult(null)}
-                style={{
-                  backgroundColor: theme.colors.background,
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: theme.colors.border,
-                  alignSelf: "flex-start",
-                }}
-              >
-                <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
-                  Clear
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {auditError && (
-            <Text style={{ color: "#dc2626", marginBottom: 8 }}>
-              {auditError}
-            </Text>
-          )}
-
-          {auditResult && (
-            <View
-              style={{
-                marginTop: 8,
-                backgroundColor: theme.colors.background,
-                padding: 16,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: theme.colors.border,
-                ...theme.shadows.sm,
-              }}
-            >
+        {process.env.NODE_ENV === "development" && (
+          <>
+            <View style={{ marginBottom: 32 }}>
               <Text
                 style={{
-                  fontSize: 16,
-                  fontWeight: "600",
+                  fontSize: 18,
+                  fontWeight: "bold",
+                  color: theme.colors.text,
+                  marginBottom: 16,
+                }}
+              >
+                Database Management
+              </Text>
+
+              {__DEV__ && (
+                <>
+                  <AdminCard
+                    title="Seed Menu Items"
+                    description="Insert standard menu items into the database"
+                    icon={Database}
+                    onPress={handleAddDemoMenuItems}
+                  />
+
+                  <AdminCard
+                    title="Clear All Business Data"
+                    description="⚠️ Permanently delete ALL business data (orders, customers, menu, payments). User accounts are preserved."
+                    icon={Trash2}
+                    onPress={handleClearAllTables}
+                    destructive
+                  />
+                </>
+              )}
+            </View>
+
+            {/* Integrity Audit */}
+            <View style={{ marginBottom: 32 }}>
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: "bold",
                   color: theme.colors.text,
                   marginBottom: 8,
                 }}
               >
-                Summary
+                Integrity Audit
               </Text>
               <Text
-                style={{ color: theme.colors.textSecondary, marginBottom: 12 }}
+                style={{
+                  fontSize: 14,
+                  color: theme.colors.textSecondary,
+                  marginBottom: 12,
+                }}
               >
-                Bills with mismatched totals: {auditResult.billIssues.length} •
-                Customers with incorrect credit:{" "}
-                {auditResult.creditIssues.length}
+                Check for mismatched bill totals and incorrect customer credit
+                balances.
               </Text>
 
-              {auditResult.billIssues.length === 0 &&
-              auditResult.creditIssues.length === 0 ? (
-                <View style={{ paddingVertical: 4 }}>
-                  <Text style={{ color: "#16a34a", fontWeight: "600" }}>
-                    No issues found.
+              <View style={{ flexDirection: "row", gap: 12, marginBottom: 8 }}>
+                <TouchableOpacity
+                  onPress={handleRunAudit}
+                  disabled={auditRunning}
+                  style={{
+                    backgroundColor: theme.colors.primary,
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    borderRadius: 8,
+                    alignSelf: "flex-start",
+                    opacity: auditRunning ? 0.6 : 1,
+                    ...theme.shadows.sm,
+                  }}
+                >
+                  <Text style={{ color: "white", fontWeight: "600" }}>
+                    {auditRunning ? "Running…" : "Run Audit"}
                   </Text>
-                </View>
-              ) : (
-                <>
-                  {auditResult.billIssues.length > 0 && (
-                    <View style={{ marginTop: 8 }}>
-                      <Text
-                        style={{
-                          fontWeight: "600",
-                          color: theme.colors.text,
-                          marginBottom: 6,
-                        }}
-                      >
-                        Bill Issues
-                      </Text>
-                      {auditResult.billIssues
-                        .slice(0, 10)
-                        .map((b: any, idx: number) => (
-                          <View
-                            key={idx}
-                            style={{
-                              paddingVertical: 6,
-                              borderTopWidth: idx ? 1 : 0,
-                              borderTopColor: theme.colors.border,
-                            }}
-                          >
-                            <Text style={{ color: theme.colors.textSecondary }}>
-                              Bill ID: {b.billId}
-                            </Text>
-                            <Text style={{ color: theme.colors.textSecondary }}>
-                              Stored: ₹{b.stored} • Recomputed: ₹{b.recomputed}{" "}
-                              • Paid: ₹{b.paid} • Credit: ₹{b.credit}
-                            </Text>
-                          </View>
-                        ))}
-                      {auditResult.billIssues.length > 10 && (
-                        <Text
-                          style={{
-                            color: theme.colors.textSecondary,
-                            marginTop: 6,
-                          }}
-                        >
-                          +{auditResult.billIssues.length - 10} more…
-                        </Text>
-                      )}
-                    </View>
-                  )}
+                </TouchableOpacity>
 
-                  {auditResult.creditIssues.length > 0 && (
-                    <View style={{ marginTop: 12 }}>
-                      <Text
-                        style={{
-                          fontWeight: "600",
-                          color: theme.colors.text,
-                          marginBottom: 6,
-                        }}
-                      >
-                        Customer Credit Issues
+                {auditResult && (
+                  <TouchableOpacity
+                    onPress={() => setAuditResult(null)}
+                    style={{
+                      backgroundColor: theme.colors.background,
+                      paddingVertical: 12,
+                      paddingHorizontal: 16,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: theme.colors.border,
+                      alignSelf: "flex-start",
+                    }}
+                  >
+                    <Text
+                      style={{ color: theme.colors.text, fontWeight: "600" }}
+                    >
+                      Clear
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {auditError && (
+                <Text style={{ color: "#dc2626", marginBottom: 8 }}>
+                  {auditError}
+                </Text>
+              )}
+
+              {auditResult && (
+                <View
+                  style={{
+                    marginTop: 8,
+                    backgroundColor: theme.colors.background,
+                    padding: 16,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: theme.colors.border,
+                    ...theme.shadows.sm,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 16,
+                      fontWeight: "600",
+                      color: theme.colors.text,
+                      marginBottom: 8,
+                    }}
+                  >
+                    Summary
+                  </Text>
+                  <Text
+                    style={{
+                      color: theme.colors.textSecondary,
+                      marginBottom: 12,
+                    }}
+                  >
+                    Bills with mismatched totals:{" "}
+                    {auditResult.billIssues.length} • Customers with incorrect
+                    credit: {auditResult.creditIssues.length}
+                  </Text>
+
+                  {auditResult.billIssues.length === 0 &&
+                  auditResult.creditIssues.length === 0 ? (
+                    <View style={{ paddingVertical: 4 }}>
+                      <Text style={{ color: "#16a34a", fontWeight: "600" }}>
+                        No issues found.
                       </Text>
-                      {auditResult.creditIssues
-                        .slice(0, 10)
-                        .map((c: any, idx: number) => (
-                          <View
-                            key={idx}
+                    </View>
+                  ) : (
+                    <>
+                      {auditResult.billIssues.length > 0 && (
+                        <View style={{ marginTop: 8 }}>
+                          <Text
                             style={{
-                              paddingVertical: 6,
-                              borderTopWidth: idx ? 1 : 0,
-                              borderTopColor: theme.colors.border,
+                              fontWeight: "600",
+                              color: theme.colors.text,
+                              marginBottom: 6,
                             }}
                           >
-                            <Text style={{ color: theme.colors.textSecondary }}>
-                              Customer ID: {c.customerId}
+                            Bill Issues
+                          </Text>
+                          {auditResult.billIssues
+                            .slice(0, 10)
+                            .map((b: any, idx: number) => (
+                              <View
+                                key={idx}
+                                style={{
+                                  paddingVertical: 6,
+                                  borderTopWidth: idx ? 1 : 0,
+                                  borderTopColor: theme.colors.border,
+                                }}
+                              >
+                                <Text
+                                  style={{ color: theme.colors.textSecondary }}
+                                >
+                                  Bill ID: {b.billId}
+                                </Text>
+                                <Text
+                                  style={{ color: theme.colors.textSecondary }}
+                                >
+                                  Stored: ₹{b.stored} • Recomputed: ₹
+                                  {b.recomputed} • Paid: ₹{b.paid} • Credit: ₹
+                                  {b.credit}
+                                </Text>
+                              </View>
+                            ))}
+                          {auditResult.billIssues.length > 10 && (
+                            <Text
+                              style={{
+                                color: theme.colors.textSecondary,
+                                marginTop: 6,
+                              }}
+                            >
+                              +{auditResult.billIssues.length - 10} more…
                             </Text>
-                            <Text style={{ color: theme.colors.textSecondary }}>
-                              Stored: ₹{c.stored} • Expected: ₹{c.expected}
-                            </Text>
-                          </View>
-                        ))}
-                      {auditResult.creditIssues.length > 10 && (
-                        <Text
-                          style={{
-                            color: theme.colors.textSecondary,
-                            marginTop: 6,
-                          }}
-                        >
-                          +{auditResult.creditIssues.length - 10} more…
-                        </Text>
+                          )}
+                        </View>
                       )}
-                    </View>
+
+                      {auditResult.creditIssues.length > 0 && (
+                        <View style={{ marginTop: 12 }}>
+                          <Text
+                            style={{
+                              fontWeight: "600",
+                              color: theme.colors.text,
+                              marginBottom: 6,
+                            }}
+                          >
+                            Customer Credit Issues
+                          </Text>
+                          {auditResult.creditIssues
+                            .slice(0, 10)
+                            .map((c: any, idx: number) => (
+                              <View
+                                key={idx}
+                                style={{
+                                  paddingVertical: 6,
+                                  borderTopWidth: idx ? 1 : 0,
+                                  borderTopColor: theme.colors.border,
+                                }}
+                              >
+                                <Text
+                                  style={{ color: theme.colors.textSecondary }}
+                                >
+                                  Customer ID: {c.customerId}
+                                </Text>
+                                <Text
+                                  style={{ color: theme.colors.textSecondary }}
+                                >
+                                  Stored: ₹{c.stored} • Expected: ₹{c.expected}
+                                </Text>
+                              </View>
+                            ))}
+                          {auditResult.creditIssues.length > 10 && (
+                            <Text
+                              style={{
+                                color: theme.colors.textSecondary,
+                                marginTop: 6,
+                              }}
+                            >
+                              +{auditResult.creditIssues.length - 10} more…
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                    </>
                   )}
-                </>
+                </View>
               )}
             </View>
-          )}
-        </View>
+          </>
+        )}
 
         {loading && (
           <View

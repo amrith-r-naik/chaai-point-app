@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { syncLog } from "@/services/syncLog";
 
 type TableName =
@@ -258,6 +258,50 @@ async function upsertCloud(table: TableName, rows: RowMap[]) {
     candidates: candidates.length,
     toSend: toSend.length,
   });
+  // Safety: for child tables with FKs, ensure parents exist on the server before pushing
+  if (table === "expense_settlements" && toSend.length) {
+    // Collect unique parent expense IDs referenced by rows we'll send
+    const expenseIds = Array.from(
+      new Set(
+        toSend
+          .map((r) => r.expenseId)
+          .filter((v): v is string => typeof v === "string" && v.length > 0)
+      )
+    );
+    if (expenseIds.length) {
+      // Check which parent expenses already exist on the server
+      const existingParents = await fetchServerUpdatedMap(
+        "expenses",
+        expenseIds
+      );
+      const missingIds = expenseIds.filter((id) => !existingParents.has(id));
+      if (missingIds.length) {
+        // Fetch local parent expense rows and push them first (bypass lastPushAt)
+        const chunkSize = 500;
+        for (let i = 0; i < missingIds.length; i += chunkSize) {
+          const chunk = missingIds.slice(i, i + chunkSize);
+          const placeholders = chunk.map(() => "?").join(",");
+          const parents = (await db!.getAllAsync(
+            `SELECT * FROM expenses WHERE id IN (${placeholders})`,
+            chunk
+          )) as any[];
+          if (parents.length) {
+            const parentPayload = parents.map((p) => toCloud("expenses", p));
+            const { error: parentErr } = await supabase
+              .from("expenses")
+              .upsert(parentPayload, { onConflict: "id" });
+            if (parentErr) {
+              console.error(
+                `[sync] upsertCloud parent expenses failed`,
+                parentErr
+              );
+              throw parentErr;
+            }
+          }
+        }
+      }
+    }
+  }
   if (!toSend.length) return { maxUpdatedAt: null };
   const payload = toSend.map((r) => toCloud(table, r));
   const { error } = await supabase
@@ -369,6 +413,51 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
         values
       );
     };
+    // Helper to ensure a referenced expense exists locally by pulling once from cloud if missing
+    const ensureLocalExpense = async (expenseId: string | null | undefined) => {
+      if (!expenseId) return;
+      const exists = (await db!.getFirstAsync(
+        `SELECT id FROM expenses WHERE id = ?`,
+        [expenseId]
+      )) as any;
+      if (exists?.id) return;
+      const { data, error } = await supabase
+        .from("expenses")
+        .select("*")
+        .eq("id", expenseId)
+        .maybeSingle();
+      if (error) {
+        console.warn(`[sync] ensureLocalExpense fetch failed`, error);
+        return;
+      }
+      if (!data) return;
+      const r: any = { ...data };
+      const mapKeys: Record<string, string> = {
+        created_at: "createdAt",
+        updated_at: "updatedAt",
+        deleted_at: "deletedAt",
+        shop_id: "shopId",
+        voucher_no: "voucherNo",
+      } as any;
+      for (const [k, v] of Object.entries(mapKeys)) {
+        if (r[k] !== undefined) {
+          r[v] = r[k];
+          delete r[k];
+        }
+      }
+      const cols = Object.keys(r);
+      const placeholders = cols.map(() => "?").join(",");
+      const updates = cols
+        .filter((c) => c !== "id")
+        .map((c) => `${c}=excluded.${c}`)
+        .join(",");
+      const values = cols.map((c) => r[c]);
+      await db!.runAsync(
+        `INSERT INTO expenses (${cols.join(",")}) VALUES (${placeholders})
+         ON CONFLICT(id) DO UPDATE SET ${updates}`,
+        values
+      );
+    };
     for (const r of rows) {
       // Map cloud snake_case to local camelCase
       const mapped: any = { ...r };
@@ -391,7 +480,7 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
         voucher_no: "voucherNo",
         payment_type: "paymentType",
         sub_type: "subType",
-  expense_id: "expenseId",
+        expense_id: "expenseId",
       } as any;
       for (const [k, v] of Object.entries(mapKeys)) {
         if ((mapped as any)[k] !== undefined) {
@@ -419,6 +508,9 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
       // Ensure parents exist for FK tables before insert
       if (table === "bills") {
         await ensureLocalCustomer(mapped.customerId);
+      }
+      if (table === "expense_settlements") {
+        await ensureLocalExpense(mapped.expenseId);
       }
 
       const cols = Object.keys(mapped);

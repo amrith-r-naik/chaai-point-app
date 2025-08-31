@@ -266,3 +266,11 @@ Include:
   - Add two splits; close with X; reopen; proceed; back button dismiss works
 - Due Management: mark one due paid
 - No crashes during the above
+
+## Developer smoke (optional)
+
+- Run Sync Diagnostics screen: from app, open `sync-diagnostics` and tap Run All Tests
+- Run Node smoke tests locally (validates expense split/credit and dashboard):
+  - Ensure TypeScript path aliases resolve for Node (e.g., ts-node with tsconfig paths) or run inside Expo if preferred
+  - The smoke script runs inside a transaction and intentionally rolls back—no persistent data changes
+  - See `scripts/smoke-tests.ts` for details

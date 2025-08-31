@@ -1,9 +1,9 @@
 import { Typography } from "@/components/ui";
 import { theme } from "@/constants/theme";
 import { ExpenseListItem } from "@/services/dashboardService";
+import { formatCurrency, getCurrencyFontSize } from "@/utils/currency";
 import React from "react";
 import { TouchableOpacity, View } from "react-native";
-import { formatCurrency, getCurrencyFontSize } from "../../app/(tabs)/billing";
 
 export const ExpenseItem: React.FC<{
   expense: ExpenseListItem;

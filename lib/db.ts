@@ -609,7 +609,44 @@ export async function runIntegrityAudit() {
       });
     }
   }
-  return { billIssues, creditIssues };
+  // Expense settlements reconciliation
+  const expenseIssues: any[] = [];
+  const expenses = await db.getAllAsync(
+    `SELECT id, amount FROM expenses WHERE (deletedAt IS NULL)`
+  );
+  for (const e of expenses as any[]) {
+    const sums = (await db.getFirstAsync(
+      `SELECT 
+         COALESCE(SUM(CASE WHEN paymentType IN ('Cash','UPI') AND (subType IS NULL OR subType='') THEN amount ELSE 0 END),0) as basePaid,
+         COALESCE(SUM(CASE WHEN paymentType='Credit' AND subType='Accrual' THEN amount ELSE 0 END),0) as accrued,
+         COALESCE(SUM(CASE WHEN subType='Clearance' THEN amount ELSE 0 END),0) as cleared
+       FROM expense_settlements WHERE expenseId=? AND (deletedAt IS NULL)`,
+      [e.id]
+    )) as any;
+    const basePaid = sums?.basePaid || 0;
+    const accrued = sums?.accrued || 0;
+    const cleared = sums?.cleared || 0;
+    if (basePaid + accrued !== e.amount) {
+      expenseIssues.push({
+        expenseId: e.id,
+        kind: "amount_mismatch",
+        amount: e.amount,
+        basePaid,
+        accrued,
+        sum: basePaid + accrued,
+      });
+    }
+    if (cleared > accrued) {
+      expenseIssues.push({
+        expenseId: e.id,
+        kind: "over_cleared",
+        accrued,
+        cleared,
+        delta: cleared - accrued,
+      });
+    }
+  }
+  return { billIssues, creditIssues, expenseIssues };
 }
 
 // Helper to run a set of DB operations inside a transaction safely.

@@ -34,24 +34,12 @@ import {
   View,
 } from "react-native";
 
+import { formatCurrency, getCurrencyFontSize } from "@/utils/currency";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ExpenseItem } from "../../components/expenses/ExpenseItem";
 import { FilterButton } from "../../components/expenses/FilterButton";
 
 // Dimensions not used currently
-
-// Format currency properly without truncation
-export const formatCurrency = (amount: number): string => {
-  const value = Math.abs(amount);
-  const formatted = new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-
-  return amount < 0 ? `-${formatted}` : formatted;
-};
 
 const styles = StyleSheet.create({
   actionButton: {
@@ -73,20 +61,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
 });
-
-// Get appropriate font size based on amount length
-export const getCurrencyFontSize = (
-  amount: number,
-  baseFontSize: number = 18
-): number => {
-  const formatted = formatCurrency(amount);
-  const length = formatted.length;
-
-  if (length <= 8) return baseFontSize;
-  if (length <= 12) return baseFontSize * 0.85;
-  if (length <= 16) return baseFontSize * 0.75;
-  return baseFontSize * 0.65;
-};
 
 const StatCard: React.FC<{
   icon: React.ReactNode;

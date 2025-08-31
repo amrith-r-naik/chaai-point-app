@@ -19,6 +19,8 @@ class AdminService {
       await db.runAsync(`DELETE FROM receipts`);
       await db.runAsync(`DELETE FROM kot_orders`);
       await db.runAsync(`DELETE FROM bills`);
+      // Clear expense_settlements BEFORE expenses when FKs are off to avoid orphans
+      await db.runAsync(`DELETE FROM expense_settlements`);
       await db.runAsync(`DELETE FROM expenses`);
       await db.runAsync(`DELETE FROM menu_items`);
       await db.runAsync(`DELETE FROM customers`);
@@ -51,6 +53,7 @@ class AdminService {
       "receipts",
       "bills",
       "kot_orders",
+      "expense_settlements",
       "expenses",
       "menu_items",
       "customers",

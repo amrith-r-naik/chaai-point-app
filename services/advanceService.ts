@@ -98,7 +98,11 @@ class AdvanceService {
   async applyAdvance(
     customerId: string,
     amount: number,
-    opts?: { remarks?: string; context?: { billId?: string }; inTransaction?: boolean }
+    opts?: {
+      remarks?: string;
+      context?: { billId?: string };
+      inTransaction?: boolean;
+    }
   ): Promise<AdvanceEntry> {
     if (!db) throw new Error("Database not initialized");
     if (amount <= 0) throw new Error("Amount must be positive");

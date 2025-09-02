@@ -213,19 +213,27 @@ class PaymentService {
         for (const part of splitParts) {
           if (part.type === "AdvanceUse") {
             // Deduct from customer's advance wallet
-            await advanceService.applyAdvance(paymentData.customerId, part.amount, {
-              context: { billId: bill.id },
-              remarks: `Applied to bill ${bill.billNumber}`,
-              inTransaction: true,
-            } as any);
+            await advanceService.applyAdvance(
+              paymentData.customerId,
+              part.amount,
+              {
+                context: { billId: bill.id },
+                remarks: `Applied to bill ${bill.billNumber}`,
+                inTransaction: true,
+              } as any
+            );
             continue; // no payments row
           }
           if (part.type === "AdvanceAdd") {
             // Add extra to advance wallet
-            await advanceService.addAdvance(paymentData.customerId, part.amount, {
-              remarks: `Extra paid during bill ${bill.billNumber}`,
-              inTransaction: true,
-            });
+            await advanceService.addAdvance(
+              paymentData.customerId,
+              part.amount,
+              {
+                remarks: `Extra paid during bill ${bill.billNumber}`,
+                inTransaction: true,
+              }
+            );
             continue; // no payments row
           }
           // Normal payment rows
@@ -672,11 +680,15 @@ class PaymentService {
   ): Promise<{ receipt: Receipt; paidTotal: number }> {
     if (!db) throw new Error("Database not initialized");
     await this.ensureSchemaUpgrades();
-  // Validate: allow Cash/UPI and AdvanceUse; sum of Cash/UPI must be > 0
-  const invalid = splits.some((s) => s.type === "Credit" || s.type === "AdvanceAdd" || s.amount <= 0);
+    // Validate: allow Cash/UPI and AdvanceUse; sum of Cash/UPI must be > 0
+    const invalid = splits.some(
+      (s) => s.type === "Credit" || s.type === "AdvanceAdd" || s.amount <= 0
+    );
     if (invalid) throw new Error("Invalid clearance splits");
-  const paidTotal = splits.filter(s => s.type === 'Cash' || s.type === 'UPI').reduce((s, p) => s + p.amount, 0);
-  if (paidTotal <= 0) throw new Error("Clearance amount must be > 0");
+    const paidTotal = splits
+      .filter((s) => s.type === "Cash" || s.type === "UPI")
+      .reduce((s, p) => s + p.amount, 0);
+    if (paidTotal <= 0) throw new Error("Clearance amount must be > 0");
 
     const now = new Date().toISOString();
     // Assign a local provisional receipt number unique for the year
@@ -718,8 +730,11 @@ class PaymentService {
       // Insert payments for Cash/UPI (subType Clearance) and apply advance for AdvanceUse
       let advanceUsed = 0;
       for (const part of splits) {
-        if (part.type === 'AdvanceUse') {
-          await advanceService.applyAdvance(customerId, part.amount, { remarks: receipt.remarks || undefined, inTransaction: true });
+        if (part.type === "AdvanceUse") {
+          await advanceService.applyAdvance(customerId, part.amount, {
+            remarks: receipt.remarks || undefined,
+            inTransaction: true,
+          });
           advanceUsed += part.amount;
           continue;
         }
@@ -749,7 +764,7 @@ class PaymentService {
       );
 
       // Store split meta for UI
-  for (const part of splits) {
+      for (const part of splits) {
         const splitId = uuid.v4() as string;
         await db!.runAsync(
           `

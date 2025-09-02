@@ -3,10 +3,12 @@ import { appEvents } from "@/state/appEvents";
 import { authState } from "@/state/authState";
 import { orderState } from "@/state/orderState";
 import { use$ } from "@legendapp/state/react";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter } from "expo-router";
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
+  Platform,
   Pressable,
   Text,
   TouchableOpacity,
@@ -49,6 +51,13 @@ function OrderItem({ order }: { order: KotOrder }) {
           </Text>
         </View>
         <View className="items-end">
+          {order.billId && (
+            <View className="mb-2 rounded-full bg-green-100 px-2 py-0.5">
+              <Text className="text-green-700 text-xs font-semibold">
+                Billed
+              </Text>
+            </View>
+          )}
           <TouchableOpacity
             onPress={handleViewOrder}
             className="bg-blue-50 px-3 py-1 rounded-md"
@@ -82,26 +91,20 @@ export default function OrdersScreen() {
   const state = use$(orderState);
   const auth = use$(authState);
   const router = useRouter();
+  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
+  const [showPicker, setShowPicker] = useState(false);
 
-  useEffect(() => {
-    if (auth.isDbReady) {
-      loadOrders();
-    }
-  }, [auth.isDbReady]);
+  const toISTDateKey = (d: Date) => {
+    const istMs = d.getTime() + 5.5 * 60 * 60 * 1000;
+    return new Date(istMs).toISOString().slice(0, 10); // YYYY-MM-DD
+  };
 
-  // Auto-refresh when orders or global changes occur
-  const ev = use$(appEvents);
-  useEffect(() => {
-    if (auth.isDbReady) {
-      loadOrders();
-    }
-  }, [ev.ordersVersion, ev.anyVersion, auth.isDbReady]);
-
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     try {
       orderState.isLoading.set(true);
       orderState.error.set(null);
-      const orders = await orderService.getAllOrders();
+      const dateKey = toISTDateKey(selectedDate);
+      const orders = await orderService.getOrdersByDate(dateKey);
       orderState.orders.set(orders);
     } catch (error) {
       console.error("Error loading orders:", error);
@@ -109,7 +112,21 @@ export default function OrdersScreen() {
     } finally {
       orderState.isLoading.set(false);
     }
-  };
+  }, [selectedDate]);
+
+  useEffect(() => {
+    if (auth.isDbReady) {
+      loadOrders();
+    }
+  }, [auth.isDbReady, loadOrders]);
+
+  // Auto-refresh when orders or global changes occur
+  const ev = use$(appEvents);
+  useEffect(() => {
+    if (auth.isDbReady) {
+      loadOrders();
+    }
+  }, [ev.ordersVersion, ev.anyVersion, auth.isDbReady, loadOrders]);
 
   const handleCreateOrder = () => {
     // Reset order state before navigation
@@ -132,8 +149,41 @@ export default function OrdersScreen() {
     <SafeAreaView className="flex-1 bg-gray-50">
       {/* Header */}
       <View className="bg-white px-4 py-3 border-b border-gray-200">
-        <Text className="text-2xl font-bold text-gray-900">Orders (KOT)</Text>
+        <View className="flex-row items-center justify-between">
+          <Text className="text-2xl font-bold text-gray-900">Orders (KOT)</Text>
+          <TouchableOpacity
+            onPress={() => setShowPicker(true)}
+            className="px-3 py-2 rounded-md bg-blue-50"
+          >
+            <Text className="text-blue-600 font-medium">
+              {toISTDateKey(selectedDate)}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
+      {showPicker && (
+        <View className="bg-white px-4 py-2 border-b border-gray-200">
+          <DateTimePicker
+            value={selectedDate}
+            mode="date"
+            display={Platform.OS === "ios" ? "inline" : "default"}
+            onChange={(event, date) => {
+              if (Platform.OS !== "ios") setShowPicker(false);
+              if (date) setSelectedDate(date);
+            }}
+          />
+          {Platform.OS === "ios" && (
+            <View className="flex-row justify-end mt-2">
+              <TouchableOpacity
+                onPress={() => setShowPicker(false)}
+                className="px-4 py-2 bg-blue-600 rounded-md"
+              >
+                <Text className="text-white font-medium">Done</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Content */}
       <View className="flex-1 px-4 pt-4">

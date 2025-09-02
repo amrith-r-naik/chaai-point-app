@@ -89,7 +89,8 @@ async function initializeSchema() {
         kotId TEXT NOT NULL,
         itemId TEXT NOT NULL,
         quantity INTEGER NOT NULL,
-        priceAtTime INTEGER NOT NULL,
+  priceAtTime INTEGER NOT NULL,
+  createdAt TEXT NOT NULL,
         FOREIGN KEY (kotId) REFERENCES kot_orders(id),
         FOREIGN KEY (itemId) REFERENCES menu_items(id)
       );
@@ -147,6 +148,15 @@ async function initializeSchema() {
         amount INTEGER NOT NULL,
         createdAt TEXT NOT NULL,
         FOREIGN KEY (receiptId) REFERENCES receipts(id)
+      );
+
+      -- Local counters for provisional numbering (safe to create in base to avoid early missing-table errors)
+      CREATE TABLE IF NOT EXISTS local_counters (
+        scope TEXT NOT NULL,
+        periodKey TEXT NOT NULL,
+        name TEXT NOT NULL,
+        value INTEGER NOT NULL,
+        PRIMARY KEY (scope, periodKey, name)
       );
 
       -- App settings (simple key/value store)
@@ -713,6 +723,94 @@ async function runMigrations() {
     v = 10;
   }
 
+  // v10 -> v11: Ensure sync metadata columns exist on core tables even if prior migration ordering skipped them
+  if (v < 11) {
+    await db!.execAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      const businessTables = [
+        "customers",
+        "menu_items",
+        "kot_orders",
+        "kot_items",
+        "bills",
+        "payments",
+        "receipts",
+        "expenses",
+        "split_payments",
+      ];
+
+      for (const t of businessTables) {
+        // Ensure columns exist
+        await addColumnIfMissing(t, "shopId", "TEXT");
+        await addColumnIfMissing(t, "deletedAt", "TEXT");
+        await addColumnIfMissing(t, "updatedAt", "TEXT");
+        // Ensure index exists
+        await db!.execAsync(
+          `CREATE INDEX IF NOT EXISTS idx_${t}_shop_updated ON ${t}(shopId, updatedAt);`
+        );
+        // Ensure triggers exist (idempotent)
+        await db!.execAsync(`
+          CREATE TRIGGER IF NOT EXISTS trg_${t}_updatedAt_insert
+          AFTER INSERT ON ${t}
+          FOR EACH ROW
+          BEGIN
+            UPDATE ${t} SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now')) WHERE id = NEW.id;
+          END;
+        `);
+        await db!.execAsync(`
+          CREATE TRIGGER IF NOT EXISTS trg_${t}_updatedAt
+          AFTER UPDATE ON ${t}
+          FOR EACH ROW
+          BEGIN
+            UPDATE ${t}
+            SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now'))
+            WHERE id = NEW.id;
+          END;
+        `);
+      }
+
+      await setUserVersion(11);
+      await db!.execAsync("COMMIT");
+      v = 11;
+    } catch (e) {
+      await db!.execAsync("ROLLBACK");
+      throw e;
+    }
+  }
+
+  // v11 -> v12: Ensure kot_items has createdAt (needed for sync and ordering); backfill from parent kot_orders
+  if (v < 12) {
+    await db!.execAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      const hasCreatedAt = await columnExists("kot_items", "createdAt");
+      if (!hasCreatedAt) {
+        await db!.execAsync(`ALTER TABLE kot_items ADD COLUMN createdAt TEXT;`);
+        // Backfill createdAt from parent KOT order's createdAt
+        await db!.execAsync(`
+          UPDATE kot_items AS ki
+          SET createdAt = (
+            SELECT ko.createdAt FROM kot_orders AS ko WHERE ko.id = ki.kotId
+          )
+          WHERE createdAt IS NULL;
+        `);
+        // For any residual NULLs, set to now to satisfy NOT NULL expectations in code paths
+        await db!.execAsync(`
+          UPDATE kot_items SET createdAt = COALESCE(createdAt, DATETIME('now')) WHERE createdAt IS NULL;
+        `);
+        // Create an index to aid queries by createdAt if helpful
+        await db!.execAsync(
+          `CREATE INDEX IF NOT EXISTS idx_kot_items_createdAt ON kot_items(createdAt);`
+        );
+      }
+      await setUserVersion(12);
+      await db!.execAsync("COMMIT");
+      v = 12;
+    } catch (e) {
+      await db!.execAsync("ROLLBACK");
+      throw e;
+    }
+  }
+
   // Defensive: Ensure customer_advances exists even if user_version is already high (older DBs may have skipped v9)
   try {
     const exists = (await db!.getAllAsync(
@@ -763,6 +861,105 @@ async function runMigrations() {
     }
   } catch (e) {
     console.warn("[migrations] ensure customer_advances failed", e);
+  }
+
+  // Defensive: Ensure expense_settlements exists even if earlier migrations were skipped or versioning advanced out of order
+  try {
+    const exists = (await db!.getAllAsync(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='expense_settlements'`
+    )) as any[];
+    if (!exists || exists.length === 0) {
+      await db!.execAsync("BEGIN IMMEDIATE TRANSACTION");
+      try {
+        await db!.execAsync(`
+          CREATE TABLE IF NOT EXISTS expense_settlements (
+            id TEXT PRIMARY KEY,
+            expenseId TEXT NOT NULL,
+            paymentType TEXT NOT NULL,
+            subType TEXT,
+            amount INTEGER NOT NULL,
+            remarks TEXT,
+            createdAt TEXT NOT NULL,
+            shopId TEXT,
+            deletedAt TEXT,
+            updatedAt TEXT,
+            FOREIGN KEY (expenseId) REFERENCES expenses(id) ON DELETE CASCADE
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_expense_settlements_expense ON expense_settlements(expenseId);
+          CREATE INDEX IF NOT EXISTS idx_expense_settlements_createdAt ON expense_settlements(createdAt);
+          CREATE INDEX IF NOT EXISTS idx_expense_settlements_shop_updated ON expense_settlements(shopId, updatedAt);
+
+          CREATE TRIGGER IF NOT EXISTS trg_expense_settlements_updatedAt_insert
+          AFTER INSERT ON expense_settlements
+          FOR EACH ROW
+          BEGIN
+            UPDATE expense_settlements SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now')) WHERE id = NEW.id;
+          END;
+
+          CREATE TRIGGER IF NOT EXISTS trg_expense_settlements_updatedAt
+          AFTER UPDATE ON expense_settlements
+          FOR EACH ROW
+          BEGIN
+            UPDATE expense_settlements
+            SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now'))
+            WHERE id = NEW.id;
+          END;
+        `);
+
+        // Backfill a single settlement per legacy expense row if none exist yet.
+        // Use shopId from expenses when present; otherwise fallback to 'shop_1'.
+        const expenseCols = (await db!.getAllAsync(
+          `PRAGMA table_info(expenses)`
+        )) as any[];
+        const hasShopId = expenseCols.some((c) => c.name === "shopId");
+        const backfillSql = hasShopId
+          ? `
+            INSERT INTO expense_settlements (id, expenseId, paymentType, subType, amount, remarks, createdAt, shopId, deletedAt, updatedAt)
+            SELECT 
+              'expset_' || e.id AS id,
+              e.id as expenseId,
+              CASE WHEN e.mode = 'Credit' THEN 'Credit' ELSE e.mode END as paymentType,
+              CASE WHEN e.mode = 'Credit' THEN 'Accrual' ELSE NULL END as subType,
+              e.amount,
+              e.remarks,
+              e.createdAt,
+              e.shopId,
+              NULL as deletedAt,
+              e.createdAt as updatedAt
+            FROM expenses e
+            WHERE NOT EXISTS (
+              SELECT 1 FROM expense_settlements s WHERE s.expenseId = e.id
+            );
+          `
+          : `
+            INSERT INTO expense_settlements (id, expenseId, paymentType, subType, amount, remarks, createdAt, shopId, deletedAt, updatedAt)
+            SELECT 
+              'expset_' || e.id AS id,
+              e.id as expenseId,
+              CASE WHEN e.mode = 'Credit' THEN 'Credit' ELSE e.mode END as paymentType,
+              CASE WHEN e.mode = 'Credit' THEN 'Accrual' ELSE NULL END as subType,
+              e.amount,
+              e.remarks,
+              e.createdAt,
+              'shop_1' as shopId,
+              NULL as deletedAt,
+              e.createdAt as updatedAt
+            FROM expenses e
+            WHERE NOT EXISTS (
+              SELECT 1 FROM expense_settlements s WHERE s.expenseId = e.id
+            );
+          `;
+        await db!.execAsync(backfillSql);
+
+        await db!.execAsync("COMMIT");
+      } catch (e) {
+        await db!.execAsync("ROLLBACK");
+        throw e;
+      }
+    }
+  } catch (e) {
+    console.warn("[migrations] ensure expense_settlements failed", e);
   }
 }
 

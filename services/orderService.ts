@@ -182,6 +182,48 @@ class OrderService {
     return orders;
   }
 
+  async getOrdersByDate(dateISO: string): Promise<KotOrder[]> {
+    if (!db) throw new Error("Database not initialized");
+    // dateISO expected as YYYY-MM-DD; compare in IST using '+330 minutes'
+    const result = await db.getAllAsync(
+      `
+      SELECT 
+        ko.*,
+        c.name as customerName,
+        c.contact as customerContact
+      FROM kot_orders ko
+      LEFT JOIN customers c ON ko.customerId = c.id
+      WHERE DATE(ko.createdAt, '+330 minutes') = ?
+      ORDER BY ko.createdAt DESC
+    `,
+      [dateISO]
+    );
+
+    const orders: KotOrder[] = result.map((row: any) => ({
+      id: row.id,
+      kotNumber: row.kotNumber,
+      customerId: row.customerId,
+      billId: row.billId,
+      createdAt: row.createdAt,
+      customer: {
+        id: row.customerId,
+        name: row.customerName,
+        contact: row.customerContact,
+      },
+    }));
+
+    for (const order of orders) {
+      const items = await this.getOrderItems(order.id);
+      order.items = items;
+      order.total = items.reduce(
+        (sum, item) => sum + item.priceAtTime * item.quantity,
+        0
+      );
+    }
+
+    return orders;
+  }
+
   async getOrderById(orderId: string): Promise<KotOrder | null> {
     if (!db) throw new Error("Database not initialized");
 

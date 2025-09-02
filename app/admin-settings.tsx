@@ -602,82 +602,6 @@ export default function AdminSettingsScreen() {
       </SafeAreaView>
 
       <ScrollView style={{ flex: 1, padding: 24 }}>
-        {/* Settings */}
-        <View style={{ marginBottom: 32 }}>
-          <Text
-            style={{
-              fontSize: 18,
-              fontWeight: "bold",
-              color: theme.colors.text,
-              marginBottom: 16,
-            }}
-          >
-            Settings
-          </Text>
-          <TouchableOpacity
-            onPress={toggleAutoApplyAdvance}
-            style={{
-              backgroundColor: theme.colors.background,
-              padding: 16,
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: theme.colors.border,
-              ...theme.shadows.sm,
-              marginBottom: 12,
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text
-                  style={{
-                    fontSize: 16,
-                    fontWeight: "600",
-                    color: theme.colors.text,
-                    marginBottom: 4,
-                  }}
-                >
-                  Auto-apply customer advance on billing
-                </Text>
-                <Text
-                  style={{ fontSize: 14, color: theme.colors.textSecondary }}
-                >
-                  When enabled, available advance will be applied automatically
-                  to new bills (single-mode payments).
-                </Text>
-              </View>
-              <View
-                style={{
-                  width: 46,
-                  height: 28,
-                  borderRadius: 14,
-                  backgroundColor: autoApplyAdvance
-                    ? theme.colors.primary
-                    : "#e5e7eb",
-                  justifyContent: "center",
-                  padding: 3,
-                }}
-              >
-                <View
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: 11,
-                    backgroundColor: "white",
-                    marginLeft: autoApplyAdvance ? 20 : 0,
-                  }}
-                />
-              </View>
-            </View>
-          </TouchableOpacity>
-        </View>
-        {/* Sync & Backup controls removed from Admin Settings; use Dashboard */}
-        {/* Diagnostics entry removed for production */}
         {/* Database Statistics */}
         <View style={{ marginBottom: 32 }}>
           <Text
@@ -741,40 +665,35 @@ export default function AdminSettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Customer Management removed */}
-
         {/* Database Management */}
+        <Text
+          style={{
+            fontSize: 18,
+            fontWeight: "bold",
+            color: theme.colors.text,
+            marginBottom: 16,
+          }}
+        >
+          Database Management
+        </Text>
+        <AdminCard
+          title="Clear All Business Data"
+          description="⚠️ Permanently delete ALL business data (orders, customers, menu, payments). User accounts are preserved."
+          icon={Trash2}
+          onPress={handleClearAllTables}
+          destructive
+        />
+
         {process.env.NODE_ENV === "development" && (
           <>
             <View style={{ marginBottom: 32 }}>
-              <Text
-                style={{
-                  fontSize: 18,
-                  fontWeight: "bold",
-                  color: theme.colors.text,
-                  marginBottom: 16,
-                }}
-              >
-                Database Management
-              </Text>
-
               {__DEV__ && (
-                <>
-                  <AdminCard
-                    title="Seed Menu Items"
-                    description="Insert standard menu items into the database"
-                    icon={Database}
-                    onPress={handleAddDemoMenuItems}
-                  />
-
-                  <AdminCard
-                    title="Clear All Business Data"
-                    description="⚠️ Permanently delete ALL business data (orders, customers, menu, payments). User accounts are preserved."
-                    icon={Trash2}
-                    onPress={handleClearAllTables}
-                    destructive
-                  />
-                </>
+                <AdminCard
+                  title="Seed Menu Items"
+                  description="Insert standard menu items into the database"
+                  icon={Database}
+                  onPress={handleAddDemoMenuItems}
+                />
               )}
             </View>
 

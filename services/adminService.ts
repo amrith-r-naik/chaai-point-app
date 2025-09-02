@@ -3,7 +3,27 @@ import { createCustomer } from "./customerService";
 import { menuService } from "./menuService";
 
 class AdminService {
-  // Clear all data from all tables (PRESERVES USERS TABLE)
+  // Helper: check if a table exists in the current SQLite database
+  private async tableExists(table: string): Promise<boolean> {
+    if (!db) throw new Error("Database not initialized");
+    const row = (await db.getFirstAsync(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
+      [table]
+    )) as { name?: string } | null;
+    return !!row?.name;
+  }
+
+  // Helper: delete from table if it exists
+  private async deleteFromIfExists(table: string): Promise<void> {
+    if (!db) throw new Error("Database not initialized");
+    const exists = await this.tableExists(table);
+    if (exists) {
+      await db.runAsync(`DELETE FROM ${table}`);
+    } else {
+      console.log(`[admin] skip delete, table missing: ${table}`);
+    }
+  }
+  // Clear all business data while preserving users and menu items
   async clearAllTables(): Promise<void> {
     if (!db) throw new Error("Database not initialized");
 
@@ -12,27 +32,32 @@ class AdminService {
       await db.runAsync(`PRAGMA foreign_keys = OFF`);
 
       // Clear all tables in correct order to respect foreign key constraints
-      // NOTE: Users table is preserved to maintain authentication
-      await db.runAsync(`DELETE FROM kot_items`);
-      await db.runAsync(`DELETE FROM split_payments`);
-      await db.runAsync(`DELETE FROM payments`);
-      await db.runAsync(`DELETE FROM receipts`);
-      await db.runAsync(`DELETE FROM kot_orders`);
-      await db.runAsync(`DELETE FROM bills`);
-      await db.runAsync(`DELETE FROM customer_advances`);
+      // NOTE: Users and menu_items are preserved
+      await this.deleteFromIfExists(`kot_items`);
+      await this.deleteFromIfExists(`split_payments`);
+      await this.deleteFromIfExists(`payments`);
+      await this.deleteFromIfExists(`receipts`);
+      await this.deleteFromIfExists(`kot_orders`);
+      await this.deleteFromIfExists(`bills`);
+      await this.deleteFromIfExists(`customer_advances`);
       // Clear expense_settlements BEFORE expenses when FKs are off to avoid orphans
-      await db.runAsync(`DELETE FROM expense_settlements`);
-      await db.runAsync(`DELETE FROM expenses`);
-      await db.runAsync(`DELETE FROM menu_items`);
-      await db.runAsync(`DELETE FROM customers`);
-      await db.runAsync(`DELETE FROM app_settings`);
+      await this.deleteFromIfExists(`expense_settlements`);
+      await this.deleteFromIfExists(`expenses`);
+      // Preserve product catalog
+      // await db.runAsync(`DELETE FROM menu_items`);
+      await this.deleteFromIfExists(`customers`);
+      await this.deleteFromIfExists(`app_settings`);
+      // Reset local counters so numbering restarts from maxima (now 0 after clears)
+      await this.deleteFromIfExists(`local_counters`);
       // Also clear sync checkpoints so next sync re-pulls everything
-      await db.runAsync(`DELETE FROM sync_state`);
+      await this.deleteFromIfExists(`sync_state`);
 
       // Re-enable foreign key constraints
       await db.runAsync(`PRAGMA foreign_keys = ON`);
 
-      console.log("All data tables cleared successfully (users preserved)");
+      console.log(
+        "All business data cleared (users and menu items preserved). Counters reset and sync_state cleared."
+      );
     } catch (error) {
       // Make sure to re-enable foreign keys even if there's an error
       try {
@@ -55,12 +80,15 @@ class AdminService {
       "receipts",
       "bills",
       "kot_orders",
+      "split_payments",
       "expense_settlements",
       "expenses",
       "menu_items",
       "customers",
       "customer_advances",
       "app_settings",
+      "sync_state",
+      "local_counters",
       // "users", // Users table is protected and not allowed to be cleared individually
     ];
 
@@ -71,6 +99,12 @@ class AdminService {
     try {
       // Temporarily disable foreign key constraints for individual table clearing
       await db.runAsync(`PRAGMA foreign_keys = OFF`);
+      const exists = await this.tableExists(tableName);
+      if (!exists) {
+        console.log(`[admin] table not found, skipping clear: ${tableName}`);
+        await db.runAsync(`PRAGMA foreign_keys = ON`);
+        return;
+      }
       await db.runAsync(`DELETE FROM ${tableName}`);
       await db.runAsync(`PRAGMA foreign_keys = ON`);
 
@@ -98,13 +132,25 @@ class AdminService {
         "menu_items",
         "kot_orders",
         "kot_items",
+        "bills",
+        "payments",
+        "receipts",
+        "split_payments",
         "expenses",
+        "expense_settlements",
         "customer_advances",
         "app_settings",
+        "sync_state",
+        "local_counters",
       ];
       const counts: Record<string, number> = {};
 
       for (const table of tables) {
+        const exists = await this.tableExists(table);
+        if (!exists) {
+          counts[table] = 0;
+          continue;
+        }
         const result = (await db.getFirstAsync(
           `SELECT COUNT(*) as count FROM ${table}`
         )) as { count: number };

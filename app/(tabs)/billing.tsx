@@ -13,7 +13,6 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   Activity,
   Calendar,
-  Clock,
   DollarSign,
   Plus,
   TrendingDown,
@@ -445,16 +444,6 @@ export default function BillingScreen() {
             trend="down"
             color="#EF4444"
             backgroundColor="#FEF2F2"
-          />
-
-          {/* Outstanding Credit Card */}
-          <StatCard
-            icon={<Clock size={28} color="#D97706" />}
-            title="Outstanding Credit"
-            value={formatCurrency(outstandingCredit)}
-            trend={outstandingCredit > 0 ? "neutral" : "up"}
-            color={outstandingCredit > 0 ? "#D97706" : "#10B981"}
-            backgroundColor={outstandingCredit > 0 ? "#FEF3C7" : "#D1FAE5"}
           />
 
           {/* Section Header */}

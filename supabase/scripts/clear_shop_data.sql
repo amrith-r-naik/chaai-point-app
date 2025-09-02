@@ -23,6 +23,8 @@ WITH t(name, cnt) AS (
   SELECT 'kot_orders',     count(*) FROM kot_orders     WHERE shop_id = 'shop_1' UNION ALL
   SELECT 'bills',          count(*) FROM bills          WHERE shop_id = 'shop_1' UNION ALL
   SELECT 'expenses',       count(*) FROM expenses       WHERE shop_id = 'shop_1' UNION ALL
+  SELECT 'expense_settlements', count(*) FROM expense_settlements WHERE shop_id = 'shop_1' UNION ALL
+  SELECT 'customer_advances',   count(*) FROM customer_advances   WHERE shop_id = 'shop_1' UNION ALL
   SELECT 'menu_items',     count(*) FROM menu_items     WHERE shop_id = 'shop_1' UNION ALL
   SELECT 'customers',      count(*) FROM customers      WHERE shop_id = 'shop_1'
 )
@@ -41,7 +43,10 @@ UPDATE kot_items      SET deleted_at = now(), updated_at = now() WHERE shop_id =
 UPDATE kot_orders     SET deleted_at = now(), updated_at = now() WHERE shop_id = 'shop_1' AND deleted_at IS NULL;
 UPDATE bills          SET deleted_at = now(), updated_at = now() WHERE shop_id = 'shop_1' AND deleted_at IS NULL;
 UPDATE expenses       SET deleted_at = now(), updated_at = now() WHERE shop_id = 'shop_1' AND deleted_at IS NULL;
-UPDATE menu_items     SET deleted_at = now(), updated_at = now() WHERE shop_id = 'shop_1' AND deleted_at IS NULL;
+-- PRESERVE menu_items: do not soft-delete product catalog
+-- UPDATE menu_items     SET deleted_at = now(), updated_at = now() WHERE shop_id = 'shop_1' AND deleted_at IS NULL;
+UPDATE expense_settlements SET deleted_at = now(), updated_at = now() WHERE shop_id = 'shop_1' AND deleted_at IS NULL;
+UPDATE customer_advances   SET deleted_at = now(), updated_at = now() WHERE shop_id = 'shop_1' AND deleted_at IS NULL;
 UPDATE customers      SET deleted_at = now(), updated_at = now() WHERE shop_id = 'shop_1' AND deleted_at IS NULL;
 
 COMMIT;
@@ -58,8 +63,9 @@ COMMIT;
 -- DELETE FROM kot_items      WHERE shop_id = 'shop_1';
 -- DELETE FROM kot_orders     WHERE shop_id = 'shop_1';
 -- DELETE FROM bills          WHERE shop_id = 'shop_1';
--- DELETE FROM expenses       WHERE shop_id = 'shop_1';
--- DELETE FROM menu_items     WHERE shop_id = 'shop_1';
+-- DELETE FROM expense_settlements WHERE shop_id = 'shop_1';
+-- DELETE FROM expenses           WHERE shop_id = 'shop_1';
+-- DELETE FROM customer_advances  WHERE shop_id = 'shop_1';
 -- DELETE FROM customers      WHERE shop_id = 'shop_1';
 -- COMMIT;
 
@@ -87,6 +93,8 @@ WITH t(name, cnt_remaining, cnt_not_deleted) AS (
   SELECT 'kot_orders',     count(*), count(*) FILTER (WHERE deleted_at IS NULL) FROM kot_orders     WHERE shop_id = 'shop_1' UNION ALL
   SELECT 'bills',          count(*), count(*) FILTER (WHERE deleted_at IS NULL) FROM bills          WHERE shop_id = 'shop_1' UNION ALL
   SELECT 'expenses',       count(*), count(*) FILTER (WHERE deleted_at IS NULL) FROM expenses       WHERE shop_id = 'shop_1' UNION ALL
+  SELECT 'expense_settlements', count(*), count(*) FILTER (WHERE deleted_at IS NULL) FROM expense_settlements WHERE shop_id = 'shop_1' UNION ALL
+  SELECT 'customer_advances',   count(*), count(*) FILTER (WHERE deleted_at IS NULL) FROM customer_advances   WHERE shop_id = 'shop_1' UNION ALL
   SELECT 'menu_items',     count(*), count(*) FILTER (WHERE deleted_at IS NULL) FROM menu_items     WHERE shop_id = 'shop_1' UNION ALL
   SELECT 'customers',      count(*), count(*) FILTER (WHERE deleted_at IS NULL) FROM customers      WHERE shop_id = 'shop_1'
 )

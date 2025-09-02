@@ -6,6 +6,7 @@ import {
   MenuItem,
   menuService,
 } from "@/services/menuService";
+import { settingsService } from "@/services/settingsService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import { router } from "expo-router";
@@ -41,6 +42,7 @@ export default function AdminSettingsScreen() {
     creditIssues: any[];
   } | null>(null);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [autoApplyAdvance, setAutoApplyAdvance] = useState<boolean>(false);
 
   const categories = [
     "Tea",
@@ -69,6 +71,7 @@ export default function AdminSettingsScreen() {
 
     loadTableCounts();
     loadMenuItems();
+    loadSettings();
     // Sync & Backup state removed here; handled on Dashboard
   }, [auth.user]);
 
@@ -78,6 +81,28 @@ export default function AdminSettingsScreen() {
       setMenuItems(items);
     } catch (error) {
       console.error("Error loading menu items:", error);
+    }
+  };
+
+  const loadSettings = async () => {
+    try {
+      const auto = await settingsService.getBool(
+        "advance.autoApplyOnBilling",
+        false
+      );
+      setAutoApplyAdvance(auto);
+    } catch (e) {
+      console.warn("[settings] load failed", e);
+    }
+  };
+
+  const toggleAutoApplyAdvance = async () => {
+    try {
+      const next = !autoApplyAdvance;
+      setAutoApplyAdvance(next);
+      await settingsService.setBool("advance.autoApplyOnBilling", next);
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || String(e));
     }
   };
 
@@ -577,6 +602,80 @@ export default function AdminSettingsScreen() {
       </SafeAreaView>
 
       <ScrollView style={{ flex: 1, padding: 24 }}>
+        {/* Settings */}
+        <View style={{ marginBottom: 32 }}>
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: "bold",
+              color: theme.colors.text,
+              marginBottom: 16,
+            }}
+          >
+            Settings
+          </Text>
+          <TouchableOpacity
+            onPress={toggleAutoApplyAdvance}
+            style={{
+              backgroundColor: theme.colors.background,
+              padding: 16,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+              ...theme.shadows.sm,
+              marginBottom: 12,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontWeight: "600",
+                    color: theme.colors.text,
+                    marginBottom: 4,
+                  }}
+                >
+                  Auto-apply customer advance on billing
+                </Text>
+                <Text
+                  style={{ fontSize: 14, color: theme.colors.textSecondary }}
+                >
+                  When enabled, available advance will be applied automatically
+                  to new bills (single-mode payments).
+                </Text>
+              </View>
+              <View
+                style={{
+                  width: 46,
+                  height: 28,
+                  borderRadius: 14,
+                  backgroundColor: autoApplyAdvance
+                    ? theme.colors.primary
+                    : "#e5e7eb",
+                  justifyContent: "center",
+                  padding: 3,
+                }}
+              >
+                <View
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: 11,
+                    backgroundColor: "white",
+                    marginLeft: autoApplyAdvance ? 20 : 0,
+                  }}
+                />
+              </View>
+            </View>
+          </TouchableOpacity>
+        </View>
         {/* Sync & Backup controls removed from Admin Settings; use Dashboard */}
         {/* Diagnostics entry removed for production */}
         {/* Database Statistics */}

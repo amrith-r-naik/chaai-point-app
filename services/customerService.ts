@@ -175,6 +175,11 @@ export async function deleteCustomer(id: string): Promise<void> {
       throw new Error("Cannot delete customer with existing orders");
     }
 
+    // Soft-delete related advance ledger entries for this customer
+    await db.runAsync(
+      `UPDATE customer_advances SET deletedAt = ? WHERE customerId = ? AND deletedAt IS NULL`,
+      [new Date().toISOString(), id]
+    );
     await db.runAsync(`DELETE FROM customers WHERE id = ?`, [id]);
     try {
       const { signalChange } = await import("@/state/appEvents");

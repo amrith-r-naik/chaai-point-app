@@ -410,7 +410,9 @@ const MetricCard: React.FC<MetricCardProps> = ({
         title.toLowerCase().includes("expense") ||
         title.toLowerCase().includes("profit") ||
         title.toLowerCase().includes("due") ||
-        title.toLowerCase().includes("value"))
+        title.toLowerCase().includes("value") ||
+        title.toLowerCase().includes("advance") ||
+        title.toLowerCase().includes("outstanding"))
     ) {
       return formatCurrency(value);
     }
@@ -424,7 +426,9 @@ const MetricCard: React.FC<MetricCardProps> = ({
         title.toLowerCase().includes("expense") ||
         title.toLowerCase().includes("profit") ||
         title.toLowerCase().includes("due") ||
-        title.toLowerCase().includes("value"))
+        title.toLowerCase().includes("value") ||
+        title.toLowerCase().includes("advance") ||
+        title.toLowerCase().includes("outstanding"))
     ) {
       return getCurrencyFontSize(value, 22);
     }
@@ -811,6 +815,8 @@ export default function HomeScreen() {
                 subtitle="Total received"
               />
             </View>
+
+            {/* Advance metric cards removed as per request */}
           </View>
 
           {/* Unbilled Orders Card removed */}

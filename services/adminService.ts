@@ -19,11 +19,13 @@ class AdminService {
       await db.runAsync(`DELETE FROM receipts`);
       await db.runAsync(`DELETE FROM kot_orders`);
       await db.runAsync(`DELETE FROM bills`);
+      await db.runAsync(`DELETE FROM customer_advances`);
       // Clear expense_settlements BEFORE expenses when FKs are off to avoid orphans
       await db.runAsync(`DELETE FROM expense_settlements`);
       await db.runAsync(`DELETE FROM expenses`);
       await db.runAsync(`DELETE FROM menu_items`);
       await db.runAsync(`DELETE FROM customers`);
+      await db.runAsync(`DELETE FROM app_settings`);
       // Also clear sync checkpoints so next sync re-pulls everything
       await db.runAsync(`DELETE FROM sync_state`);
 
@@ -57,6 +59,8 @@ class AdminService {
       "expenses",
       "menu_items",
       "customers",
+      "customer_advances",
+      "app_settings",
       // "users", // Users table is protected and not allowed to be cleared individually
     ];
 
@@ -95,6 +99,8 @@ class AdminService {
         "kot_orders",
         "kot_items",
         "expenses",
+        "customer_advances",
+        "app_settings",
       ];
       const counts: Record<string, number> = {};
 

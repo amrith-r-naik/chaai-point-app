@@ -166,13 +166,26 @@ create table if not exists public.expense_settlements (
   shop_id text not null
 );
 
+-- Customer advances: ledger of advance add/apply/refund entries
+create table if not exists public.customer_advances (
+  id text primary key,
+  customer_id text not null references public.customers(id),
+  entry_type text not null check (entry_type in ('Add','Apply','Refund')),
+  amount integer not null,
+  remarks text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  shop_id text not null
+);
+
 -- Triggers to maintain updated_at on update
 do $$
 declare
   t text;
 begin
   foreach t in array array[
-  'customers','menu_items','bills','kot_orders','kot_items','payments','receipts','expenses','split_payments','expense_settlements'
+  'customers','menu_items','bills','kot_orders','kot_items','payments','receipts','expenses','split_payments','expense_settlements','customer_advances'
   ] loop
     execute format('drop trigger if exists set_updated_at on public.%I;', t);
     execute format('create trigger set_updated_at before update on public.%I for each row execute function public.set_updated_at();', t);
@@ -192,6 +205,14 @@ create index if not exists idx_split_payments_shop_updated on public.split_payme
 create index if not exists idx_expense_settlements_shop_updated on public.expense_settlements(shop_id, updated_at);
 create index if not exists idx_expense_settlements_expense on public.expense_settlements(expense_id);
 create index if not exists idx_expense_settlements_created on public.expense_settlements(created_at);
+create index if not exists idx_customer_advances_shop_updated on public.customer_advances(shop_id, updated_at);
+create index if not exists idx_customer_advances_customer on public.customer_advances(customer_id);
+create index if not exists idx_customer_advances_created on public.customer_advances(created_at);
+
+-- Backward-compat: drop payment_date if present from earlier iterations
+do $$ begin
+  begin alter table public.customer_advances drop column if exists payment_date; exception when others then end;
+end $$;
 
 -- =============================
 -- Phase 2: Server-assigned numbering

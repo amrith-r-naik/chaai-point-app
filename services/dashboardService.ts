@@ -17,6 +17,12 @@ export interface DashboardStats {
   expenseCreditCleared?: number;
   expenseOutstandingCredit?: number;
   totalRevenue: number; // Total billed amount (sum of all items in billed KOTs)
+  // Advance wallet reporting
+  advanceAdded?: number;
+  advanceUsed?: number;
+  advanceRefunded?: number;
+  advanceNetChange?: number; // added - used - refunded in window
+  advanceOutstanding?: number; // total outstanding advance (all-time)
 }
 
 export interface DateFilterOptions {
@@ -71,6 +77,10 @@ class DashboardService {
       expenseCreditClearedResult,
       expenseOutstandingCreditResult,
       totalRevenueResult,
+      advanceAddedResult,
+      advanceUsedResult,
+      advanceRefundedResult,
+      advanceOutstandingResult,
     ] = await Promise.all([
       this.getTotalOrders(filterStartDate, filterEndDate),
       this.gettotalReceived(filterStartDate, filterEndDate),
@@ -85,6 +95,10 @@ class DashboardService {
       this.getExpenseCreditCleared(filterStartDate, filterEndDate),
       this.getExpenseOutstandingCredit(),
       this.getTotalRevenue(filterStartDate, filterEndDate),
+      this.getAdvanceByType("Add", filterStartDate, filterEndDate),
+      this.getAdvanceByType("Apply", filterStartDate, filterEndDate),
+      this.getAdvanceByType("Refund", filterStartDate, filterEndDate),
+      this.getAdvanceOutstanding(),
     ]);
 
     const totalOrders = totalOrdersResult;
@@ -97,6 +111,12 @@ class DashboardService {
 
     const todayOrders = todayOrdersResult;
     const todayExpenses = todayExpensesResult;
+    const advanceAdded = advanceAddedResult;
+    const advanceUsed = advanceUsedResult;
+    const advanceRefunded = advanceRefundedResult;
+    const advanceNetChange =
+      (advanceAdded || 0) - (advanceUsed || 0) - (advanceRefunded || 0);
+    const advanceOutstanding = advanceOutstandingResult;
 
     return {
       totalOrders,
@@ -114,6 +134,11 @@ class DashboardService {
       expenseCreditCleared: expenseCreditClearedResult,
       expenseOutstandingCredit: expenseOutstandingCreditResult,
       totalRevenue: totalRevenueResult,
+      advanceAdded,
+      advanceUsed,
+      advanceRefunded,
+      advanceNetChange,
+      advanceOutstanding,
     };
   }
 
@@ -278,6 +303,34 @@ class DashboardService {
       revenue: row.revenue || 0,
       orders: row.orders || 0,
     }));
+  }
+
+  // Advances: ledger-based metrics
+  private async getAdvanceByType(
+    entryType: "Add" | "Apply" | "Refund",
+    startDate: string,
+    endDate: string
+  ): Promise<number> {
+    if (!db) throw new Error("Database not initialized");
+    const row = (await db.getFirstAsync(
+      `SELECT COALESCE(SUM(amount),0) as total FROM customer_advances 
+       WHERE entryType = ? AND (deletedAt IS NULL) AND date(createdAt) BETWEEN ? AND ?`,
+      [entryType, startDate, endDate]
+    )) as any;
+    return row?.total || 0;
+  }
+
+  private async getAdvanceOutstanding(): Promise<number> {
+    if (!db) throw new Error("Database not initialized");
+    const row = (await db.getFirstAsync(
+      `SELECT 
+         COALESCE(SUM(CASE WHEN entryType='Add' THEN amount ELSE 0 END),0) -
+         COALESCE(SUM(CASE WHEN entryType='Apply' THEN amount ELSE 0 END),0) -
+         COALESCE(SUM(CASE WHEN entryType='Refund' THEN amount ELSE 0 END),0) as outstanding
+       FROM customer_advances
+       WHERE (deletedAt IS NULL)`
+    )) as any;
+    return row?.outstanding || 0;
   }
 
   async addExpense(expenseData: {

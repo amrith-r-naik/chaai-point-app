@@ -11,11 +11,13 @@ interface SplitPaymentModalProps {
   screen: SplitModalScreen;
   splitPayments: SplitPayment[];
   creditAmount: number;
-  newSplitType: "Cash" | "UPI" | "Credit";
+  advanceUseCap?: number;
+  advanceBalance?: number;
+  newSplitType: "Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAdd";
   newSplitAmount: string;
   canProceed: boolean;
   onScreenChange: (screen: SplitModalScreen) => void;
-  onSplitTypeChange: (type: "Cash" | "UPI" | "Credit") => void;
+  onSplitTypeChange: (type: "Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAdd") => void;
   onAmountChange: (amount: string) => void;
   onAddSplit: () => void;
   onConfirmSplit: () => void;
@@ -29,6 +31,8 @@ export const SplitPaymentModal: React.FC<SplitPaymentModalProps> = ({
   screen,
   splitPayments,
   creditAmount,
+  advanceUseCap,
+  advanceBalance,
   newSplitType,
   newSplitAmount,
   canProceed,
@@ -90,6 +94,8 @@ export const SplitPaymentModal: React.FC<SplitPaymentModalProps> = ({
               newSplitType={newSplitType}
               newSplitAmount={newSplitAmount}
               creditAmount={creditAmount}
+              advanceUseCap={advanceUseCap}
+              advanceBalance={advanceBalance}
               onSplitTypeChange={onSplitTypeChange}
               onAmountChange={onAmountChange}
               onConfirm={onConfirmSplit}

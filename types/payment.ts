@@ -1,8 +1,16 @@
 export type PaymentType = "Cash" | "UPI" | "Credit" | "Split";
 
+// Split entry types can include advance operations in addition to normal payment modes
+export type SplitEntryType =
+  | "Cash"
+  | "UPI"
+  | "Credit"
+  | "AdvanceUse" // using existing advance balance towards bill
+  | "AdvanceAdd"; // extra money paid into advance wallet (not counted towards bill total)
+
 export interface SplitPayment {
   id: string;
-  type: Exclude<PaymentType, "Split">;
+  type: SplitEntryType;
   amount: number;
 }
 

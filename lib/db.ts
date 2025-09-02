@@ -149,6 +149,13 @@ async function initializeSchema() {
         FOREIGN KEY (receiptId) REFERENCES receipts(id)
       );
 
+      -- App settings (simple key/value store)
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      );
+
       -- Indices for performance (idempotent)
       CREATE INDEX IF NOT EXISTS idx_payments_customer ON payments(customerId);
       CREATE INDEX IF NOT EXISTS idx_payments_bill ON payments(billId);
@@ -156,6 +163,7 @@ async function initializeSchema() {
       CREATE INDEX IF NOT EXISTS idx_bills_createdAt ON bills(createdAt);
       CREATE INDEX IF NOT EXISTS idx_payments_createdAt ON payments(createdAt);
       CREATE INDEX IF NOT EXISTS idx_receipts_bill ON receipts(billId);
+  CREATE INDEX IF NOT EXISTS idx_app_settings_updated ON app_settings(updatedAt);
     `);
     await db.execAsync("COMMIT");
   } catch (e) {
@@ -576,6 +584,185 @@ async function runMigrations() {
       await db!.execAsync("ROLLBACK");
       throw e;
     }
+  }
+
+  // v7 -> v9: Add customer_advances ledger table (tracks advance add/apply/refund), with indexes and triggers
+  if (v < 9) {
+    await db!.execAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      // Create table with sync metadata columns present from the start
+      await db!.execAsync(`
+        CREATE TABLE IF NOT EXISTS customer_advances (
+          id TEXT PRIMARY KEY,
+          customerId TEXT NOT NULL,
+          entryType TEXT NOT NULL,
+          amount INTEGER NOT NULL,
+          remarks TEXT,
+          createdAt TEXT NOT NULL,
+          shopId TEXT,
+          deletedAt TEXT,
+          updatedAt TEXT,
+          FOREIGN KEY (customerId) REFERENCES customers(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_customer_advances_customer ON customer_advances(customerId);
+        CREATE INDEX IF NOT EXISTS idx_customer_advances_createdAt ON customer_advances(createdAt);
+        CREATE INDEX IF NOT EXISTS idx_customer_advances_shop_updated ON customer_advances(shopId, updatedAt);
+
+        -- Triggers for updatedAt management
+        CREATE TRIGGER IF NOT EXISTS trg_customer_advances_updatedAt_insert
+        AFTER INSERT ON customer_advances
+        FOR EACH ROW
+        BEGIN
+          UPDATE customer_advances SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now')) WHERE id = NEW.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_customer_advances_updatedAt
+        AFTER UPDATE ON customer_advances
+        FOR EACH ROW
+        BEGIN
+          UPDATE customer_advances
+          SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now'))
+          WHERE id = NEW.id;
+        END;
+      `);
+
+      // Backfill shopId/updatedAt if rows exist (defensive; table is new so no rows expected)
+      await db!.execAsync(
+        `UPDATE customer_advances SET shopId = COALESCE(shopId, 'shop_1')`
+      );
+      await db!.execAsync(
+        `UPDATE customer_advances SET updatedAt = COALESCE(updatedAt, createdAt)`
+      );
+
+      await setUserVersion(9);
+      await db!.execAsync("COMMIT");
+      v = 9;
+    } catch (e) {
+      await db!.execAsync("ROLLBACK");
+      throw e;
+    }
+  }
+
+  // v9 -> v10: Remove paymentDate column from customer_advances if present (rebuild table)
+  if (v < 10) {
+    // Check if column exists before rebuilding
+    const hasPaymentDate = await (async () => {
+      try {
+        const cols = (await db!.getAllAsync(
+          `PRAGMA table_info(customer_advances)`
+        )) as any[];
+        return cols.some((c) => c.name === "paymentDate");
+      } catch {
+        return false;
+      }
+    })();
+    if (hasPaymentDate) {
+      await db!.execAsync("PRAGMA foreign_keys = OFF;");
+      await db!.execAsync("BEGIN IMMEDIATE TRANSACTION");
+      try {
+        await db!.execAsync(`
+          CREATE TABLE customer_advances_new (
+            id TEXT PRIMARY KEY,
+            customerId TEXT NOT NULL,
+            entryType TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            remarks TEXT,
+            createdAt TEXT NOT NULL,
+            shopId TEXT,
+            deletedAt TEXT,
+            updatedAt TEXT,
+            FOREIGN KEY (customerId) REFERENCES customers(id)
+          );
+
+          INSERT INTO customer_advances_new (id, customerId, entryType, amount, remarks, createdAt, shopId, deletedAt, updatedAt)
+          SELECT id, customerId, entryType, amount, remarks, createdAt, shopId, deletedAt, updatedAt FROM customer_advances;
+
+          DROP TABLE customer_advances;
+          ALTER TABLE customer_advances_new RENAME TO customer_advances;
+
+          CREATE INDEX IF NOT EXISTS idx_customer_advances_customer ON customer_advances(customerId);
+          CREATE INDEX IF NOT EXISTS idx_customer_advances_createdAt ON customer_advances(createdAt);
+          CREATE INDEX IF NOT EXISTS idx_customer_advances_shop_updated ON customer_advances(shopId, updatedAt);
+
+          CREATE TRIGGER IF NOT EXISTS trg_customer_advances_updatedAt_insert
+          AFTER INSERT ON customer_advances
+          FOR EACH ROW
+          BEGIN
+            UPDATE customer_advances SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now')) WHERE id = NEW.id;
+          END;
+
+          CREATE TRIGGER IF NOT EXISTS trg_customer_advances_updatedAt
+          AFTER UPDATE ON customer_advances
+          FOR EACH ROW
+          BEGIN
+            UPDATE customer_advances
+            SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now'))
+            WHERE id = NEW.id;
+          END;
+        `);
+        await db!.execAsync("COMMIT");
+        await db!.execAsync("PRAGMA foreign_keys = ON;");
+      } catch (e) {
+        await db!.execAsync("ROLLBACK");
+        await db!.execAsync("PRAGMA foreign_keys = ON;");
+        throw e;
+      }
+    }
+    await setUserVersion(10);
+    v = 10;
+  }
+
+  // Defensive: Ensure customer_advances exists even if user_version is already high (older DBs may have skipped v9)
+  try {
+    const exists = (await db!.getAllAsync(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='customer_advances'`
+    )) as any[];
+    if (!exists || exists.length === 0) {
+      await db!.execAsync("BEGIN IMMEDIATE TRANSACTION");
+      try {
+        await db!.execAsync(`
+          CREATE TABLE IF NOT EXISTS customer_advances (
+            id TEXT PRIMARY KEY,
+            customerId TEXT NOT NULL,
+            entryType TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            remarks TEXT,
+            createdAt TEXT NOT NULL,
+            shopId TEXT,
+            deletedAt TEXT,
+            updatedAt TEXT,
+            FOREIGN KEY (customerId) REFERENCES customers(id)
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_customer_advances_customer ON customer_advances(customerId);
+          CREATE INDEX IF NOT EXISTS idx_customer_advances_createdAt ON customer_advances(createdAt);
+          CREATE INDEX IF NOT EXISTS idx_customer_advances_shop_updated ON customer_advances(shopId, updatedAt);
+
+          CREATE TRIGGER IF NOT EXISTS trg_customer_advances_updatedAt_insert
+          AFTER INSERT ON customer_advances
+          FOR EACH ROW
+          BEGIN
+            UPDATE customer_advances SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now')) WHERE id = NEW.id;
+          END;
+
+          CREATE TRIGGER IF NOT EXISTS trg_customer_advances_updatedAt
+          AFTER UPDATE ON customer_advances
+          FOR EACH ROW
+          BEGIN
+            UPDATE customer_advances
+            SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now'))
+            WHERE id = NEW.id;
+          END;
+        `);
+        await db!.execAsync("COMMIT");
+      } catch (e) {
+        await db!.execAsync("ROLLBACK");
+        throw e;
+      }
+    }
+  } catch (e) {
+    console.warn("[migrations] ensure customer_advances failed", e);
   }
 }
 

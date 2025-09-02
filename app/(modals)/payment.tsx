@@ -1,6 +1,7 @@
 import { SplitPaymentModal } from "@/components/payment/SplitPaymentModal";
 import { theme } from "@/constants/theme";
 import { usePaymentState } from "@/hooks/usePaymentState";
+import { advanceService } from "@/services/advanceService";
 import { paymentService } from "@/services/paymentService";
 import { PaymentType } from "@/types/payment";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -29,6 +30,18 @@ export default function PaymentScreen() {
   const total = parseFloat(totalAmount || "0");
   const isClearance = clearance === "1";
 
+  const [advanceBalance, setAdvanceBalance] = React.useState<number>(0);
+  React.useEffect(() => {
+    (async () => {
+      if (customerId) {
+        try {
+          const bal = await advanceService.getBalance(String(customerId));
+          setAdvanceBalance(bal || 0);
+        } catch {}
+      }
+    })();
+  }, [customerId]);
+
   const {
     selectedPaymentType,
     showSplitPayment,
@@ -36,7 +49,8 @@ export default function PaymentScreen() {
     newSplitType,
     newSplitAmount,
     splitModalScreen,
-    creditAmount,
+  creditAmount,
+  advanceUseCap,
     setShowSplitPayment,
     setSplitModalScreen,
     setNewSplitType,
@@ -46,7 +60,7 @@ export default function PaymentScreen() {
     handleConfirmAddSplit,
     handleRemoveSplit,
     validatePayment,
-  } = usePaymentState({ totalAmount: total, isClearance });
+  } = usePaymentState({ totalAmount: total, isClearance, advanceBalance });
 
   // Build payment options. In clearance mode, hide standalone Credit.
   const paymentOptions: {
@@ -95,12 +109,12 @@ export default function PaymentScreen() {
       }
       return;
     }
-    if (isClearance) {
+  if (isClearance) {
       try {
         // Only Cash/UPI or Split with those; proceed via service
         const splits =
           selectedPaymentType === "Split"
-            ? splitPayments.filter((p) => p.type !== "Credit")
+            ? splitPayments.filter((p) => p.type === "Cash" || p.type === "UPI" || p.type === "AdvanceUse")
             : [{ id: "one", type: selectedPaymentType as any, amount: total }];
         const { receipt } = await paymentService.processCreditClearance(
           customerId as string,
@@ -331,7 +345,7 @@ export default function PaymentScreen() {
                     color: theme.colors.text,
                   }}
                 >
-                  {payment.type}
+                  {payment.type === 'AdvanceUse' ? 'Use Advance' : payment.type === 'AdvanceAdd' ? 'Add to Advance' : payment.type}
                 </Text>
                 <Text
                   style={{
@@ -399,12 +413,14 @@ export default function PaymentScreen() {
       <SplitPaymentModal
         visible={showSplitPayment}
         screen={splitModalScreen}
-        splitPayments={splitPayments}
-        creditAmount={creditAmount}
+  splitPayments={splitPayments}
+  creditAmount={creditAmount}
+  advanceUseCap={advanceUseCap}
+  advanceBalance={advanceBalance}
         canProceed={
           !isClearance || (selectedPaymentType === "Split" && validatePayment())
         }
-        newSplitType={newSplitType}
+  newSplitType={newSplitType}
         newSplitAmount={newSplitAmount}
         onScreenChange={setSplitModalScreen}
         onSplitTypeChange={setNewSplitType}

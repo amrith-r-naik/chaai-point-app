@@ -26,7 +26,7 @@ DO $$
 DECLARE
   t text;
   tables text[] := ARRAY[
-  'customers','menu_items','bills','kot_orders','kot_items','payments','receipts','expenses','split_payments','expense_settlements'
+  'customers','menu_items','bills','kot_orders','kot_items','payments','receipts','expenses','split_payments','expense_settlements','customer_advances'
   ];
 BEGIN
   -- Enable RLS on each table

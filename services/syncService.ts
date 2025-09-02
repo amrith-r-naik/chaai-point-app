@@ -12,7 +12,8 @@ type TableName =
   | "receipts"
   | "expenses"
   | "split_payments"
-  | "expense_settlements";
+  | "expense_settlements"
+  | "customer_advances";
 
 type RowMap = Record<string, any>;
 
@@ -28,6 +29,7 @@ const TABLES: TableName[] = [
   "payments",
   "expenses",
   "expense_settlements",
+  "customer_advances",
 ];
 
 // Time helpers to robustly compare timestamps (supporting both ISO and "YYYY-MM-DD HH:MM:SS")
@@ -207,6 +209,15 @@ function toCloud(table: TableName, row: RowMap): RowMap {
       amount: row.amount,
       remarks: row.remarks ?? null,
     };
+  }
+  if (table === "customer_advances") {
+    return {
+      ...base,
+      customer_id: row.customerId,
+      entry_type: row.entryType,
+      amount: row.amount,
+      remarks: row.remarks ?? null,
+    } as any;
   }
   return base;
 }
@@ -484,6 +495,7 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
         sub_type: "subType",
         expense_id: "expenseId",
         expense_date: "expenseDate",
+        entry_type: "entryType",
       } as any;
       for (const [k, v] of Object.entries(mapKeys)) {
         if ((mapped as any)[k] !== undefined) {
@@ -514,6 +526,9 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
       }
       if (table === "expense_settlements") {
         await ensureLocalExpense(mapped.expenseId);
+      }
+      if (table === "customer_advances") {
+        await ensureLocalCustomer(mapped.customerId);
       }
 
       const cols = Object.keys(mapped);

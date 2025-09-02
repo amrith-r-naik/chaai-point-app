@@ -1,4 +1,6 @@
 import { db, withTransaction } from "@/lib/db";
+import { advanceService } from "@/services/advanceService";
+import { settingsService } from "@/services/settingsService";
 import { SplitPayment } from "@/types/payment";
 import uuid from "react-native-uuid";
 
@@ -116,6 +118,33 @@ class PaymentService {
         paymentData.customerId,
         paymentData.totalAmount
       );
+      // Optionally auto-apply customer advance to this bill (skip for Credit/Split)
+      let effectiveTotal = paymentData.totalAmount;
+      const autoApply = await settingsService.getBool(
+        "advance.autoApplyOnBilling",
+        false
+      );
+      if (
+        autoApply &&
+        paymentData.paymentType !== "Credit" &&
+        paymentData.paymentType !== "Split"
+      ) {
+        try {
+          const balance = await advanceService.getBalance(
+            paymentData.customerId
+          );
+          const toApply = Math.min(balance, effectiveTotal);
+          if (toApply > 0) {
+            await advanceService.applyAdvance(paymentData.customerId, toApply, {
+              context: { billId: bill.id },
+              remarks: `Auto-applied to bill ${bill.billNumber}`,
+            } as any);
+            effectiveTotal -= toApply;
+          }
+        } catch (e) {
+          console.warn("[advance] auto-apply failed", e);
+        }
+      }
       const nowIso = new Date().toISOString();
       // Assign a local provisional receipt number unique for the year
       const localReceiptNo = await (async () => {
@@ -131,13 +160,23 @@ class PaymentService {
         // Normalize/merge duplicate types
         splitParts = this.mergeSplitParts(paymentData.splitPayments);
         for (const part of splitParts) {
-          if (part.type === "Credit") creditPortion += part.amount;
-          else paidPortion += part.amount;
+          if (part.type === "Credit") {
+            creditPortion += part.amount;
+          } else if (part.type === "AdvanceUse") {
+            // Treat as paid portion towards bill (advance wallet deduction)
+            paidPortion += part.amount;
+          } else if (part.type === "AdvanceAdd") {
+            // Does not affect bill portions; handled separately after receipt/bill creation
+          } else {
+            paidPortion += part.amount;
+          }
         }
+        // Note: For split payments we do not auto-adjust parts using advance to avoid ambiguity.
+        // If auto-apply is desired with split, handle explicitly in UI.
       } else if (paymentData.paymentType === "Credit") {
-        creditPortion = paymentData.totalAmount;
+        creditPortion = effectiveTotal;
       } else {
-        paidPortion = paymentData.totalAmount;
+        paidPortion = effectiveTotal;
       }
 
       // Receipt should represent only the paid portion (cash/upi/etc). If fully credit, we shouldn't be here.
@@ -169,9 +208,27 @@ class PaymentService {
         ]
       );
 
-      // Persist payment rows
+      // Persist payment rows and handle advance ledger operations
       if (paymentData.paymentType === "Split" && splitParts) {
         for (const part of splitParts) {
+          if (part.type === "AdvanceUse") {
+            // Deduct from customer's advance wallet
+            await advanceService.applyAdvance(paymentData.customerId, part.amount, {
+              context: { billId: bill.id },
+              remarks: `Applied to bill ${bill.billNumber}`,
+              inTransaction: true,
+            } as any);
+            continue; // no payments row
+          }
+          if (part.type === "AdvanceAdd") {
+            // Add extra to advance wallet
+            await advanceService.addAdvance(paymentData.customerId, part.amount, {
+              remarks: `Extra paid during bill ${bill.billNumber}`,
+              inTransaction: true,
+            });
+            continue; // no payments row
+          }
+          // Normal payment rows
           const pay: Payment = {
             id: uuid.v4() as string,
             billId: bill.id,
@@ -601,7 +658,8 @@ class PaymentService {
     }
     return Object.entries(map).map(([type, amount]) => ({
       id: type,
-      type,
+      // keep type as-is; cast to any then back to SplitPayment
+      type: type as any,
       amount,
     })) as SplitPayment[];
   }
@@ -614,11 +672,11 @@ class PaymentService {
   ): Promise<{ receipt: Receipt; paidTotal: number }> {
     if (!db) throw new Error("Database not initialized");
     await this.ensureSchemaUpgrades();
-    // Validate: only Cash/UPI allowed in splits; sum > 0
-    const invalid = splits.some((s) => s.type === "Credit" || s.amount <= 0);
+  // Validate: allow Cash/UPI and AdvanceUse; sum of Cash/UPI must be > 0
+  const invalid = splits.some((s) => s.type === "Credit" || s.type === "AdvanceAdd" || s.amount <= 0);
     if (invalid) throw new Error("Invalid clearance splits");
-    const paidTotal = splits.reduce((s, p) => s + p.amount, 0);
-    if (paidTotal <= 0) throw new Error("Clearance amount must be > 0");
+  const paidTotal = splits.filter(s => s.type === 'Cash' || s.type === 'UPI').reduce((s, p) => s + p.amount, 0);
+  if (paidTotal <= 0) throw new Error("Clearance amount must be > 0");
 
     const now = new Date().toISOString();
     // Assign a local provisional receipt number unique for the year
@@ -657,8 +715,15 @@ class PaymentService {
         ]
       );
 
-      // Insert payments (subType Clearance) and decrease credit balance
+      // Insert payments for Cash/UPI (subType Clearance) and apply advance for AdvanceUse
+      let advanceUsed = 0;
       for (const part of splits) {
+        if (part.type === 'AdvanceUse') {
+          await advanceService.applyAdvance(customerId, part.amount, { remarks: receipt.remarks || undefined, inTransaction: true });
+          advanceUsed += part.amount;
+          continue;
+        }
+        // Cash/UPI rows
         await db!.runAsync(
           `
           INSERT INTO payments (id, billId, customerId, amount, mode, subType, remarks, createdAt)
@@ -680,11 +745,11 @@ class PaymentService {
         `
         UPDATE customers SET creditBalance = COALESCE(creditBalance,0) - ? WHERE id = ?
       `,
-        [paidTotal, customerId]
+        [paidTotal + advanceUsed, customerId]
       );
 
       // Store split meta for UI
-      for (const part of splits) {
+  for (const part of splits) {
         const splitId = uuid.v4() as string;
         await db!.runAsync(
           `

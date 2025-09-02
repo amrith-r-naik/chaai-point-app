@@ -5,17 +5,20 @@ import { useState } from "react";
 interface UsePaymentStateProps {
   totalAmount: number;
   isClearance?: boolean; // when true, reuse UI for credit clearance (no bill)
+  advanceBalance?: number; // available advance for AdvanceUse cap
 }
 
-export const usePaymentState = ({ totalAmount, isClearance = false }: UsePaymentStateProps) => {
+export const usePaymentState = ({ totalAmount, isClearance = false, advanceBalance = 0 }: UsePaymentStateProps) => {
   const [selectedPaymentType, setSelectedPaymentType] = useState<PaymentType | null>(null);
   const [showSplitPayment, setShowSplitPayment] = useState(false);
   const [splitPayments, setSplitPayments] = useState<SplitPayment[]>([]);
-  const [newSplitType, setNewSplitType] = useState<"Cash" | "UPI" | "Credit">("Cash");
+  const [newSplitType, setNewSplitType] = useState<"Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAdd">("Cash");
   const [newSplitAmount, setNewSplitAmount] = useState<string>("");
   const [splitModalScreen, setSplitModalScreen] = useState<SplitModalScreen>("list");
 
   const creditAmount = SplitPaymentManager.getCreditAmount(splitPayments);
+  const remainingAdvanceCap = advanceBalance - (splitPayments.find(p => p.type === 'AdvanceUse')?.amount || 0);
+  const advanceUseCap = Math.min(creditAmount, Math.max(0, remainingAdvanceCap));
 
   const handlePaymentTypeSelect = (type: PaymentType) => {
     if (type === "Split") {
@@ -36,7 +39,13 @@ export const usePaymentState = ({ totalAmount, isClearance = false }: UsePayment
 
   const handleConfirmAddSplit = () => {
     const amount = parseFloat(newSplitAmount);
-    if (!SplitPaymentManager.validateSplitAmount(newSplitAmount, creditAmount)) {
+    // For AdvanceAdd, allow any positive
+    if (newSplitType !== 'AdvanceAdd') {
+      const max = newSplitType === 'AdvanceUse' ? Math.min(creditAmount, Math.max(0, remainingAdvanceCap)) : creditAmount;
+      if (!SplitPaymentManager.validateSplitAmount(newSplitAmount, max)) {
+        return;
+      }
+    } else if (isNaN(amount) || amount <= 0) {
       return;
     }
 
@@ -64,7 +73,7 @@ export const usePaymentState = ({ totalAmount, isClearance = false }: UsePayment
       if (isClearance) {
         const totalMatches = SplitPaymentManager.validateSplitTotal(splitPayments, totalAmount);
         if (!totalMatches) return false;
-        const hasPaid = splitPayments.some(p => p.type !== "Credit" && p.amount > 0);
+        const hasPaid = splitPayments.some(p => (p.type === "Cash" || p.type === "UPI" || p.type === 'AdvanceUse') && p.amount > 0);
         return hasPaid;
       }
       return SplitPaymentManager.validateSplitTotal(splitPayments, totalAmount);
@@ -82,6 +91,8 @@ export const usePaymentState = ({ totalAmount, isClearance = false }: UsePayment
     newSplitAmount,
     splitModalScreen,
     creditAmount,
+  advanceUseCap,
+  advanceBalance,
   isClearance,
 
     // Actions

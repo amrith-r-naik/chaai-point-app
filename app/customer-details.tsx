@@ -1,4 +1,5 @@
 import { theme } from "@/constants/theme";
+import { advanceService } from "@/services/advanceService";
 import { paymentService } from "@/services/paymentService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
@@ -42,6 +43,7 @@ export default function CustomerDetailsScreen() {
   const [stats, setStats] = useState<CustomerStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [advanceBalance, setAdvanceBalance] = useState<number | null>(null);
   const auth = use$(authState);
 
   const loadCustomerData = useCallback(async () => {
@@ -63,9 +65,11 @@ export default function CustomerDetailsScreen() {
       }, 0);
       const billCount = bills.length;
       const lastBillAt = bills[0]?.createdAt || null;
+      const advBal = await advanceService.getBalance(String(customerId));
       setStats({ totalPaid, billCount, creditBalance, lastBillAt });
       setBillHistory(bills);
       setPaymentHistory(paymentRows);
+      setAdvanceBalance(advBal);
     } catch (error) {
       console.error("Error loading customer data:", error);
       Alert.alert("Error", "Failed to load customer data");
@@ -111,6 +115,8 @@ export default function CustomerDetailsScreen() {
       params: { customerId: String(customerId) },
     });
   };
+
+  // Advance dedicated modals are removed from here per new flow
 
   // removed unused helpers
 
@@ -452,10 +458,11 @@ export default function CustomerDetailsScreen() {
           </View>
         </View>
 
-        {/* Stats Cards */}
+        {/* Content */}
         <View style={{ paddingHorizontal: 20, marginTop: -20 }}>
-          {/* Credit Balance Alert */}
-          {stats && stats.creditBalance > 0 && (
+          {/* Stats Cards */}
+          {/* Credit Balance */}
+          {stats && (
             <View
               style={{
                 backgroundColor: "#fef3c7",
@@ -466,41 +473,33 @@ export default function CustomerDetailsScreen() {
                 borderLeftColor: "#d97706",
               }}
             >
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
-              >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
                 <Wallet size={24} color="#d97706" />
                 <View style={{ flex: 1 }}>
-                  <Text
-                    style={{
-                      color: "#92400e",
-                      fontWeight: "700",
-                      fontSize: 16,
-                    }}
-                  >
+                  <Text style={{ color: "#92400e", fontWeight: "700", fontSize: 16 }}>
                     Outstanding Credit
                   </Text>
-                  <Text
-                    style={{
-                      color: "#d97706",
-                      fontSize: 24,
-                      fontWeight: "bold",
-                    }}
-                  >
-                    {formatCurrency(stats.creditBalance)}
+                  <Text style={{ color: "#d97706", fontSize: 24, fontWeight: "bold" }}>
+                    {formatCurrency(stats.creditBalance || 0)}
                   </Text>
                 </View>
                 <TouchableOpacity
+                  disabled={!stats.creditBalance || stats.creditBalance <= 0}
                   onPress={handleCreditClearance}
                   style={{
-                    backgroundColor: "#d97706",
+                    backgroundColor:
+                      !stats.creditBalance || stats.creditBalance <= 0 ? "#e5e7eb" : "#d97706",
                     paddingHorizontal: 12,
                     paddingVertical: 6,
                     borderRadius: 8,
                   }}
                 >
                   <Text
-                    style={{ color: "white", fontWeight: "600", fontSize: 12 }}
+                    style={{
+                      color: !stats.creditBalance || stats.creditBalance <= 0 ? "#9ca3af" : "white",
+                      fontWeight: "600",
+                      fontSize: 12,
+                    }}
                   >
                     Clear
                   </Text>
@@ -595,7 +594,109 @@ export default function CustomerDetailsScreen() {
             </Text>
           </View>
 
-          {/* Filters removed */}
+          {/* Advance Balance */}
+          <View
+            style={{
+              backgroundColor: "white",
+              borderRadius: 16,
+              padding: 16,
+              marginBottom: 16,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 8,
+              elevation: 4,
+              borderWidth: 1,
+              borderColor: "#f1f5f9",
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <Wallet size={20} color={theme.colors.text} />
+                <Text
+                  style={{
+                    fontWeight: "800",
+                    color: theme.colors.text,
+                    fontSize: 16,
+                  }}
+                >
+                  Advance Balance
+                </Text>
+              </View>
+              <Text
+                style={{
+                  fontWeight: "800",
+                  color: theme.colors.text,
+                  fontSize: 18,
+                }}
+              >
+                ₹{(advanceBalance ?? 0).toLocaleString("en-IN")}
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: "/(modals)/advance",
+                    params: {
+                      customerId: String(customerId),
+                      customerName: String(customerName),
+                      mode: "add",
+                    },
+                  })
+                }
+                style={{
+                  flex: 1,
+                  backgroundColor: theme.colors.primary,
+                  paddingVertical: 10,
+                  borderRadius: 10,
+                  alignItems: "center",
+                }}
+              >
+                <Text style={{ color: "white", fontWeight: "800" }}>
+                  Add Advance
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                disabled={!advanceBalance || advanceBalance <= 0}
+                onPress={() =>
+                  router.push({
+                    pathname: "/(modals)/advance",
+                    params: {
+                      customerId: String(customerId),
+                      customerName: String(customerName),
+                      mode: "refund",
+                    },
+                  })
+                }
+                style={{
+                  flex: 1,
+                  backgroundColor:
+                    !advanceBalance || advanceBalance <= 0 ? "#e5e7eb" : "#dc2626",
+                  paddingVertical: 10,
+                  borderRadius: 10,
+                  alignItems: "center",
+                }}
+              >
+                <Text
+                  style={{
+                    color: !advanceBalance || advanceBalance <= 0 ? "#9ca3af" : "white",
+                    fontWeight: "800",
+                  }}
+                >
+                  Refund Advance
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
 
           {/* Bill History */}
           <View

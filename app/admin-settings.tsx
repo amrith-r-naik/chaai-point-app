@@ -7,6 +7,7 @@ import {
   menuService,
 } from "@/services/menuService";
 import { settingsService } from "@/services/settingsService";
+import { runAllSyncDiagnostics, TestResult } from "@/services/syncDiagnostics";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import { router } from "expo-router";
@@ -43,6 +44,9 @@ export default function AdminSettingsScreen() {
   } | null>(null);
   const [auditError, setAuditError] = useState<string | null>(null);
   const [autoApplyAdvance, setAutoApplyAdvance] = useState<boolean>(false);
+  const [diagRunning, setDiagRunning] = useState(false);
+  const [diagResults, setDiagResults] = useState<TestResult[] | null>(null);
+  const [showDiagModal, setShowDiagModal] = useState(false);
 
   const categories = [
     "Tea",
@@ -96,6 +100,7 @@ export default function AdminSettingsScreen() {
     }
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const toggleAutoApplyAdvance = async () => {
     try {
       const next = !autoApplyAdvance;
@@ -350,6 +355,19 @@ export default function AdminSettingsScreen() {
       setAuditError(e?.message || String(e));
     } finally {
       setAuditRunning(false);
+    }
+  };
+
+  const handleRunSyncDiagnostics = async () => {
+    try {
+      setDiagRunning(true);
+      const results = await runAllSyncDiagnostics();
+      setDiagResults(results);
+      setShowDiagModal(true);
+    } catch (e: any) {
+      Alert.alert("Diagnostics Failed", e?.message || String(e));
+    } finally {
+      setDiagRunning(false);
     }
   };
 
@@ -678,12 +696,49 @@ export default function AdminSettingsScreen() {
         </Text>
         <AdminCard
           title="Clear All Business Data"
-          description="⚠️ Permanently delete ALL business data (orders, customers, menu, payments). User accounts are preserved."
+          description="⚠️ Permanently delete ALL business data. User accounts are preserved."
           icon={Trash2}
           onPress={handleClearAllTables}
           destructive
         />
 
+        {/* Sync Diagnostics */}
+        {process.env.NODE_ENV === "development" && (
+          <View style={{ marginBottom: 24 }}>
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "bold",
+                color: theme.colors.text,
+                marginBottom: 12,
+              }}
+            >
+              Sync Diagnostics
+            </Text>
+            <TouchableOpacity
+              onPress={handleRunSyncDiagnostics}
+              disabled={diagRunning}
+              style={{
+                backgroundColor: theme.colors.primary,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                borderRadius: 8,
+                opacity: diagRunning ? 0.6 : 1,
+                ...theme.shadows.sm,
+              }}
+            >
+              <Database size={18} color="white" />
+              <Text
+                style={{ color: "white", fontWeight: "600", marginLeft: 8 }}
+              >
+                {diagRunning ? "Running…" : "Run Sync Diagnostics"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
         {process.env.NODE_ENV === "development" && (
           <>
             <View style={{ marginBottom: 32 }}>
@@ -1110,6 +1165,77 @@ export default function AdminSettingsScreen() {
                 }}
               />
             </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Sync Diagnostics Modal */}
+      <Modal
+        visible={showDiagModal}
+        animationType="slide"
+        onRequestClose={() => setShowDiagModal(false)}
+        presentationStyle="pageSheet"
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: theme.colors.border,
+            }}
+          >
+            <TouchableOpacity onPress={() => setShowDiagModal(false)}>
+              <X size={24} color={theme.colors.text} />
+            </TouchableOpacity>
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "600",
+                color: theme.colors.text,
+              }}
+            >
+              Sync Diagnostics
+            </Text>
+            <View style={{ width: 24 }} />
+          </View>
+          <ScrollView style={{ flex: 1, padding: 16 }}>
+            {!diagResults && (
+              <Text style={{ color: theme.colors.textSecondary }}>
+                No results yet.
+              </Text>
+            )}
+            {diagResults &&
+              diagResults.map((r, i) => (
+                <View
+                  key={`${r.name}-${i}`}
+                  style={{
+                    backgroundColor: "white",
+                    borderWidth: 1,
+                    borderColor: r.passed ? "#d1fae5" : "#fee2e2",
+                    borderRadius: 8,
+                    padding: 12,
+                    marginBottom: 10,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontWeight: "600",
+                      color: r.passed ? "#065f46" : "#991b1b",
+                      marginBottom: 6,
+                    }}
+                  >
+                    {r.name}
+                  </Text>
+                  <Text style={{ color: theme.colors.textSecondary }}>
+                    {r.passed ? "Passed" : "Failed"}
+                    {r.details ? ` • ${r.details}` : ""}
+                  </Text>
+                </View>
+              ))}
           </ScrollView>
         </SafeAreaView>
       </Modal>

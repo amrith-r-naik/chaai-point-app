@@ -12,7 +12,7 @@ import {
   Wallet,
   X,
 } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Dimensions,
@@ -237,16 +237,15 @@ const paymentModes = [
 const quickAmounts = [100, 500, 1000, 2000, 5000];
 
 const expenseCategories = [
+  "ITC",
+  "Malboro",
   "Rent",
-  "Utilities",
-  "Supplies",
-  "Marketing",
-  "Travel",
-  "Food & Beverages",
-  "Equipment",
-  "Maintenance",
-  "Staff",
-  "Other",
+  "Milk",
+  "Veg",
+  "Breakfast",
+  "Salary 1",
+  "Salary 2",
+  "Misc",
 ];
 
 interface AddExpenseModalProps {
@@ -299,7 +298,17 @@ export default function AddExpenseModal({
     setSplitCredit("");
     setFocusedSplit(null);
     setTargetSplit(null);
+    setExpenseDate(new Date());
+    setShowDatePicker(false);
   };
+
+  // Ensure the date defaults to today every time the modal is opened
+  useEffect(() => {
+    if (visible) {
+      setExpenseDate(new Date());
+      setShowDatePicker(false);
+    }
+  }, [visible]);
 
   const handleAddExpense = async () => {
     if (!amount.trim() || !towards.trim()) {
@@ -489,7 +498,7 @@ export default function AddExpenseModal({
 
             {/* Category Suggestions */}
             <View style={styles.quickAmountContainer}>
-              {expenseCategories.slice(0, 6).map((category) => (
+              {expenseCategories.map((category) => (
                 <TouchableOpacity
                   key={category}
                   style={styles.quickAmountChip}

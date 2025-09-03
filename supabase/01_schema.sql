@@ -216,8 +216,8 @@ end $$;
 
 -- =============================
 -- Phase 2: Server-assigned numbering
--- KOT numbers reset daily per shop
--- Bill and Receipt numbers reset yearly per shop
+-- KOT numbers reset daily per shop (IST)
+-- Bill, Receipt, and Expense voucher numbers reset every Indian financial year (Apr 1–Mar 31, IST)
 -- =============================
 
 -- Counter tables
@@ -255,7 +255,8 @@ returns integer
 language plpgsql
 as $$
 declare
-  v_day date := (p_ts at time zone 'UTC')::date; -- adjust TZ if needed
+  -- Use IST shop-local date for daily reset
+  v_day date := (p_ts at time zone 'Asia/Kolkata')::date;
   v_next integer;
 begin
   -- Ensure row exists
@@ -279,7 +280,10 @@ returns integer
 language plpgsql
 as $$
 declare
-  v_year int := extract(year from (p_ts at time zone 'UTC'))::int;
+  -- Compute Indian fiscal year (Apr–Mar) using IST by shifting minus 3 months
+  -- Example: 2025-09 -> (minus 3 months) 2025-06 -> year 2025 (FY 2025–26)
+  --          2025-01 -> (minus 3 months) 2024-10 -> year 2024 (FY 2024–25)
+  v_year int := extract(year from ((p_ts at time zone 'Asia/Kolkata') - interval '3 months'))::int;
   v_next integer;
 begin
   insert into public.counters_bill_yearly (shop_id, year, last_value)
@@ -301,7 +305,8 @@ returns integer
 language plpgsql
 as $$
 declare
-  v_year int := extract(year from (p_ts at time zone 'UTC'))::int;
+  -- Use IST fiscal year (Apr–Mar) via 3-month shift
+  v_year int := extract(year from ((p_ts at time zone 'Asia/Kolkata') - interval '3 months'))::int;
   v_next integer;
 begin
   insert into public.counters_receipt_yearly (shop_id, year, last_value)
@@ -323,7 +328,8 @@ returns integer
 language plpgsql
 as $$
 declare
-  v_year int := extract(year from (p_ts at time zone 'UTC'))::int;
+  -- Use IST fiscal year (Apr–Mar) via 3-month shift
+  v_year int := extract(year from ((p_ts at time zone 'Asia/Kolkata') - interval '3 months'))::int;
   v_next integer;
 begin
   insert into public.counters_voucher_yearly (shop_id, year, last_value)
@@ -418,22 +424,22 @@ create trigger trg_assign_voucher_number
   for each row execute function public.assign_voucher_number();
 
 -- Uniqueness per shop and period
--- KOT: unique per day
+-- KOT: unique per day (IST)
 create unique index if not exists uniq_kot_shop_day_number
-  on public.kot_orders (shop_id, ((created_at at time zone 'UTC')::date), kot_number)
+  on public.kot_orders (shop_id, ((created_at at time zone 'Asia/Kolkata')::date), kot_number)
   where deleted_at is null;
 
--- Bills: unique per year
+-- Bills: unique per Indian fiscal year (Apr–Mar, IST)
 create unique index if not exists uniq_bills_shop_year_number
-  on public.bills (shop_id, (date_trunc('year', (created_at at time zone 'UTC'))), bill_number)
+  on public.bills (shop_id, (date_trunc('year', ((created_at at time zone 'Asia/Kolkata') - interval '3 months'))), bill_number)
   where deleted_at is null;
 
--- Receipts: unique per year
+-- Receipts: unique per Indian fiscal year (Apr–Mar, IST)
 create unique index if not exists uniq_receipts_shop_year_number
-  on public.receipts (shop_id, (date_trunc('year', (created_at at time zone 'UTC'))), receipt_no)
+  on public.receipts (shop_id, (date_trunc('year', ((created_at at time zone 'Asia/Kolkata') - interval '3 months'))), receipt_no)
   where deleted_at is null;
 
--- Expenses vouchers: unique per year
+-- Expenses vouchers: unique per Indian fiscal year (Apr–Mar, IST)
 create unique index if not exists uniq_expenses_shop_year_voucher
-  on public.expenses (shop_id, (date_trunc('year', (created_at at time zone 'UTC'))), voucher_no)
+  on public.expenses (shop_id, (date_trunc('year', ((created_at at time zone 'Asia/Kolkata') - interval '3 months'))), voucher_no)
   where deleted_at is null;

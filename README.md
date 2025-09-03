@@ -199,6 +199,24 @@ The app should be running with test data including sample orders. Try navigating
 
 The foundation is solid and ready for these enhancements! 🎉
 
+## FY numbering tests
+
+A small script validates local counter resets against IST rules (daily for KOT; FY for bills/receipts/expenses). It runs inside a transaction and rolls back.
+
+Run:
+
+```bash
+npm run test:fy
+```
+
+It prints PASS/FAIL in the console.
+
+If it's your first time, install dev deps (ts-node/typescript) locally:
+
+```bash
+npm i -D ts-node typescript
+```
+
 ### Pending work :
 
 1. DONE - Cloud sync/backup

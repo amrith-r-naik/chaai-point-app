@@ -150,7 +150,8 @@ class DashboardService {
 
     const result = (await db.getFirstAsync(
       `SELECT COUNT(*) as count FROM kot_orders 
-       WHERE date(createdAt) BETWEEN ? AND ?`,
+       WHERE (deletedAt IS NULL)
+         AND DATE(createdAt, '+330 minutes') BETWEEN ? AND ?`,
       [startDate, endDate]
     )) as any;
 
@@ -162,15 +163,29 @@ class DashboardService {
     endDate: string
   ): Promise<number> {
     if (!db) throw new Error("Database not initialized");
-    // Revenue is sum of cash/upi/etc plus credit clearances (exclude Accrual).
-    const result = (await db.getFirstAsync(
-      `SELECT COALESCE(SUM(p.amount),0) as revenue
-       FROM payments p
-       WHERE (p.subType IS NULL OR p.subType = 'Clearance')
-         AND date(p.createdAt) BETWEEN ? AND ?`,
-      [startDate, endDate]
-    )) as any;
-    return result?.revenue || 0;
+    // Revenue is sum of cash/upi/etc plus credit clearances (exclude Accrual)
+    // PLUS advance usage (customer_advances Apply) since those settle bills/credit without a payment row.
+    const [payRow, advRow] = await Promise.all([
+      db.getFirstAsync(
+        `SELECT COALESCE(SUM(p.amount),0) as revenue
+         FROM payments p
+         WHERE (p.subType IS NULL OR p.subType = 'Clearance')
+           AND (p.deletedAt IS NULL)
+           AND DATE(p.createdAt, '+330 minutes') BETWEEN ? AND ?`,
+        [startDate, endDate]
+      ),
+      db.getFirstAsync(
+        `SELECT COALESCE(SUM(amount),0) as total
+         FROM customer_advances
+         WHERE entryType = 'Apply'
+           AND (deletedAt IS NULL)
+           AND DATE(createdAt, '+330 minutes') BETWEEN ? AND ?`,
+        [startDate, endDate]
+      ),
+    ]);
+    const fromPayments = (payRow as any)?.revenue || 0;
+    const fromAdvanceUse = (advRow as any)?.total || 0;
+    return fromPayments + fromAdvanceUse;
   }
 
   private async getOutstandingCredit(): Promise<number> {
@@ -189,7 +204,8 @@ class DashboardService {
     const result = (await db.getFirstAsync(
       `
       SELECT COALESCE(SUM(amount),0) as total FROM payments 
-      WHERE subType = 'Accrual' AND date(createdAt) BETWEEN ? AND ?
+      WHERE subType = 'Accrual' AND (deletedAt IS NULL)
+        AND DATE(createdAt, '+330 minutes') BETWEEN ? AND ?
     `,
       [startDate, endDate]
     )) as any;
@@ -204,7 +220,8 @@ class DashboardService {
     const result = (await db.getFirstAsync(
       `
       SELECT COALESCE(SUM(amount),0) as total FROM payments 
-      WHERE subType = 'Clearance' AND date(createdAt) BETWEEN ? AND ?
+      WHERE subType = 'Clearance' AND (deletedAt IS NULL)
+        AND DATE(createdAt, '+330 minutes') BETWEEN ? AND ?
     `,
       [startDate, endDate]
     )) as any;
@@ -219,8 +236,8 @@ class DashboardService {
 
     const result = (await db.getFirstAsync(
       `SELECT COALESCE(SUM(amount), 0) as expenses 
-       FROM expenses 
-       WHERE date(expenseDate) BETWEEN ? AND ?`,
+   FROM expenses 
+   WHERE (deletedAt IS NULL) AND date(expenseDate) BETWEEN ? AND ?`,
       [startDate, endDate]
     )) as any;
 
@@ -236,7 +253,7 @@ class DashboardService {
     const row = (await db.getFirstAsync(
       `SELECT COALESCE(SUM(amount),0) as total FROM expense_settlements 
        WHERE (subType IS NULL OR subType = '' OR subType = 'Clearance')
-         AND date(createdAt) BETWEEN ? AND ?
+         AND DATE(createdAt, '+330 minutes') BETWEEN ? AND ?
          AND (deletedAt IS NULL)`,
       [startDate, endDate]
     )) as any;
@@ -250,7 +267,7 @@ class DashboardService {
     if (!db) throw new Error("Database not initialized");
     const row = (await db.getFirstAsync(
       `SELECT COALESCE(SUM(amount),0) as total FROM expense_settlements 
-       WHERE subType = 'Accrual' AND date(createdAt) BETWEEN ? AND ?
+       WHERE subType = 'Accrual' AND DATE(createdAt, '+330 minutes') BETWEEN ? AND ?
          AND (deletedAt IS NULL)`,
       [startDate, endDate]
     )) as any;
@@ -264,7 +281,7 @@ class DashboardService {
     if (!db) throw new Error("Database not initialized");
     const row = (await db.getFirstAsync(
       `SELECT COALESCE(SUM(amount),0) as total FROM expense_settlements 
-       WHERE subType = 'Clearance' AND date(createdAt) BETWEEN ? AND ?
+       WHERE subType = 'Clearance' AND DATE(createdAt, '+330 minutes') BETWEEN ? AND ?
          AND (deletedAt IS NULL)`,
       [startDate, endDate]
     )) as any;
@@ -287,15 +304,17 @@ class DashboardService {
 
     const result = (await db.getAllAsync(
       `SELECT 
-         date(ko.createdAt) as date,
+         DATE(ko.createdAt, '+330 minutes') as date,
          COALESCE(SUM(ki.quantity * ki.priceAtTime), 0) as revenue,
          COUNT(DISTINCT ko.id) as orders
        FROM kot_orders ko
        LEFT JOIN kot_items ki ON ko.id = ki.kotId
        WHERE ko.billId IS NOT NULL 
-         AND date(ko.createdAt) >= date('now', '-${days} days')
-       GROUP BY date(ko.createdAt)
-       ORDER BY date(ko.createdAt) DESC`
+         AND (ko.deletedAt IS NULL)
+         AND (ki.deletedAt IS NULL OR ki.deletedAt IS NULL)
+         AND DATE(ko.createdAt, '+330 minutes') >= DATE('now', '+330 minutes', '-${days} days')
+       GROUP BY DATE(ko.createdAt, '+330 minutes')
+       ORDER BY DATE(ko.createdAt, '+330 minutes') DESC`
     )) as any[];
 
     return result.map((row) => ({
@@ -498,7 +517,9 @@ class DashboardService {
        FROM kot_items ki
        JOIN kot_orders ko ON ki.kotId = ko.id
        WHERE ko.billId IS NOT NULL
-         AND date(ko.createdAt) BETWEEN ? AND ?`,
+         AND (ko.deletedAt IS NULL)
+         AND (ki.deletedAt IS NULL OR ki.deletedAt IS NULL)
+         AND DATE(ko.createdAt, '+330 minutes') BETWEEN ? AND ?`,
       [startDate, endDate]
     )) as any;
     return result?.totalRevenue || 0;

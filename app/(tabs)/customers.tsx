@@ -854,9 +854,6 @@ export default function CustomersScreen() {
                 Manage your customer orders and billing
               </Text>
             </View>
-            <TouchableOpacity className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center">
-              <Text className="text-gray-600 text-lg">⚙️</Text>
-            </TouchableOpacity>
           </View>
 
           {/* Enhanced Search Bar */}

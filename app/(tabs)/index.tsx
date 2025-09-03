@@ -14,6 +14,7 @@ import { syncService } from "@/services/syncService";
 import { appEvents } from "@/state/appEvents";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import {
@@ -484,25 +485,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
   return <CardContent />;
 };
 
-const FilterButton: React.FC<{
-  active: boolean;
-  onPress: () => void;
-  children: React.ReactNode;
-}> = ({ active, onPress, children }) => (
-  <TouchableOpacity
-    onPress={onPress}
-    style={[styles.filterButton, active && styles.filterButtonActive]}
-  >
-    <Text
-      style={[
-        styles.filterText,
-        active ? styles.filterTextActive : styles.filterTextInactive,
-      ]}
-    >
-      {children}
-    </Text>
-  </TouchableOpacity>
-);
+// FilterButton removed (no longer needed with date-range picker)
 
 export default function HomeScreen() {
   const auth = use$(authState);
@@ -511,9 +494,11 @@ export default function HomeScreen() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<
-    "today" | "week" | "month"
-  >("today");
+  // Date range (default to today)
+  const [startDate, setStartDate] = useState(new Date());
+  const [endDate, setEndDate] = useState(new Date());
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [syncRunning, setSyncRunning] = useState(false);
   const [backupRunning, setBackupRunning] = useState(false);
@@ -523,30 +508,10 @@ export default function HomeScreen() {
   );
 
   const getDateFilter = React.useCallback((): DateFilterOptions => {
-    const today = new Date();
-    const endDate = today.toISOString().split("T")[0];
-
-    switch (selectedFilter) {
-      case "today":
-        return { startDate: endDate, endDate };
-      case "week":
-        const weekStart = new Date(today);
-        weekStart.setDate(today.getDate() - 6);
-        return {
-          startDate: weekStart.toISOString().split("T")[0],
-          endDate,
-        };
-      case "month":
-        const monthStart = new Date(today);
-        monthStart.setDate(1);
-        return {
-          startDate: monthStart.toISOString().split("T")[0],
-          endDate,
-        };
-      default:
-        return { startDate: endDate, endDate };
-    }
-  }, [selectedFilter]);
+    const startStr = startDate.toISOString().split("T")[0];
+    const endStr = endDate.toISOString().split("T")[0];
+    return { startDate: startStr, endDate: endStr };
+  }, [startDate, endDate]);
 
   const loadDashboardData = React.useCallback(async () => {
     try {
@@ -710,26 +675,102 @@ export default function HomeScreen() {
                 <Calendar size={14} color="rgba(255,255,255,0.9)" />
                 <Text style={styles.filterLabelText}>Time Period</Text>
               </View>
-              <View style={styles.filterContainer}>
-                <FilterButton
-                  active={selectedFilter === "today"}
-                  onPress={() => setSelectedFilter("today")}
+              {/* Date Range Picker (default today) */}
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <TouchableOpacity
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    flex: 1,
+                    backgroundColor: "rgba(255,255,255,0.15)",
+                    borderRadius: 10,
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    borderWidth: 1,
+                    borderColor: "rgba(255,255,255,0.2)",
+                  }}
+                  onPress={() => setShowStartPicker(true)}
                 >
-                  Today
-                </FilterButton>
-                <FilterButton
-                  active={selectedFilter === "week"}
-                  onPress={() => setSelectedFilter("week")}
+                  <Calendar
+                    size={16}
+                    color="rgba(255,255,255,0.9)"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text
+                    style={{
+                      color: "rgba(255,255,255,0.95)",
+                      fontSize: 14,
+                      fontWeight: "700",
+                    }}
+                  >
+                    {startDate.toISOString().slice(0, 10)}
+                  </Text>
+                </TouchableOpacity>
+                <Text
+                  style={{
+                    color: "rgba(255,255,255,0.75)",
+                    fontSize: 14,
+                    alignSelf: "center",
+                    fontWeight: "700",
+                  }}
                 >
-                  Week
-                </FilterButton>
-                <FilterButton
-                  active={selectedFilter === "month"}
-                  onPress={() => setSelectedFilter("month")}
+                  to
+                </Text>
+                <TouchableOpacity
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    flex: 1,
+                    backgroundColor: "rgba(255,255,255,0.15)",
+                    borderRadius: 10,
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    borderWidth: 1,
+                    borderColor: "rgba(255,255,255,0.2)",
+                  }}
+                  onPress={() => setShowEndPicker(true)}
                 >
-                  Month
-                </FilterButton>
+                  <Calendar
+                    size={16}
+                    color="rgba(255,255,255,0.9)"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text
+                    style={{
+                      color: "rgba(255,255,255,0.95)",
+                      fontSize: 14,
+                      fontWeight: "700",
+                    }}
+                  >
+                    {endDate.toISOString().slice(0, 10)}
+                  </Text>
+                </TouchableOpacity>
               </View>
+              {showStartPicker && (
+                <DateTimePicker
+                  value={startDate}
+                  mode="date"
+                  display="default"
+                  onChange={(event, date) => {
+                    setShowStartPicker(false);
+                    if (date && date <= endDate) setStartDate(date);
+                  }}
+                  maximumDate={endDate}
+                />
+              )}
+              {showEndPicker && (
+                <DateTimePicker
+                  value={endDate}
+                  mode="date"
+                  display="default"
+                  onChange={(event, date) => {
+                    setShowEndPicker(false);
+                    if (date && date >= startDate) setEndDate(date);
+                  }}
+                  minimumDate={startDate}
+                  maximumDate={new Date()}
+                />
+              )}
             </View>
           </View>
         </LinearGradient>

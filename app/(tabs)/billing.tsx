@@ -34,6 +34,7 @@ import {
   View,
 } from "react-native";
 
+import ExpenseDetailsModal from "@/app/(modals)/expense-details";
 import { formatCurrency, getCurrencyFontSize } from "@/utils/currency";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ExpenseItem } from "../../components/expenses/ExpenseItem";
@@ -193,10 +194,12 @@ export default function BillingScreen() {
   const [clearCash, setClearCash] = useState("");
   const [clearUpi, setClearUpi] = useState("");
   const [focusedField, setFocusedField] = useState<"cash" | "upi" | null>(null);
+  const [detailsModal, setDetailsModal] = useState<{ visible: boolean; expenseId: string | null }>({ visible: false, expenseId: null });
 
   const getDateFilter = React.useCallback((): DateFilterOptions => {
-    const startStr = startDate.toISOString().slice(0, 10);
-    const endStr = endDate.toISOString().slice(0, 10);
+    // Use local calendar day to avoid UTC shift issues
+    const startStr = startDate.toLocaleDateString("en-CA"); // YYYY-MM-DD
+    const endStr = endDate.toLocaleDateString("en-CA");
     return { startDate: startStr, endDate: endStr };
   }, [startDate, endDate]);
 
@@ -367,7 +370,7 @@ export default function BillingScreen() {
                   fontWeight: "600",
                 }}
               >
-                {startDate.toISOString().slice(0, 10)}
+                {startDate.toLocaleDateString("en-CA")}
               </Typography>
             </TouchableOpacity>
             <Typography
@@ -403,7 +406,7 @@ export default function BillingScreen() {
                   fontWeight: "600",
                 }}
               >
-                {endDate.toISOString().slice(0, 10)}
+                {endDate.toLocaleDateString("en-CA")}
               </Typography>
             </TouchableOpacity>
             {showStartPicker && (
@@ -439,12 +442,13 @@ export default function BillingScreen() {
           {/* Total Expenses Card */}
           <StatCard
             icon={<TrendingDown size={28} color="#EF4444" />}
-            title={`Total Expenses (${startDate.toISOString().slice(0, 10)} to ${endDate.toISOString().slice(0, 10)})`}
+            title={`Total Expenses (${startDate.toLocaleDateString("en-CA")} to ${endDate.toLocaleDateString("en-CA")})`}
             value={formatCurrency(totalExpenses)}
             trend="down"
             color="#EF4444"
             backgroundColor="#FEF2F2"
           />
+
 
           {/* Section Header */}
           <View
@@ -583,6 +587,7 @@ export default function BillingScreen() {
                   onClearCredit={(e) => {
                     setClearModal({ visible: true, expense: e });
                   }}
+                  onPress={(e) => setDetailsModal({ visible: true, expenseId: e.id })}
                 />
               ))}
             </View>
@@ -597,6 +602,12 @@ export default function BillingScreen() {
         visible={showAddExpense}
         onClose={() => setShowAddExpense(false)}
         onExpenseAdded={handleExpenseAdded}
+      />
+
+      <ExpenseDetailsModal
+        visible={detailsModal.visible}
+        expenseId={detailsModal.expenseId}
+        onClose={() => setDetailsModal({ visible: false, expenseId: null })}
       />
 
       <Modal

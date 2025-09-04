@@ -508,8 +508,9 @@ export default function HomeScreen() {
   );
 
   const getDateFilter = React.useCallback((): DateFilterOptions => {
-    const startStr = startDate.toISOString().split("T")[0];
-    const endStr = endDate.toISOString().split("T")[0];
+    // Use local calendar day to avoid UTC shift issues
+    const startStr = startDate.toLocaleDateString("en-CA"); // YYYY-MM-DD
+    const endStr = endDate.toLocaleDateString("en-CA");
     return { startDate: startStr, endDate: endStr };
   }, [startDate, endDate]);
 
@@ -703,7 +704,7 @@ export default function HomeScreen() {
                       fontWeight: "700",
                     }}
                   >
-                    {startDate.toISOString().slice(0, 10)}
+                    {startDate.toLocaleDateString("en-CA")}
                   </Text>
                 </TouchableOpacity>
                 <Text
@@ -742,7 +743,7 @@ export default function HomeScreen() {
                       fontWeight: "700",
                     }}
                   >
-                    {endDate.toISOString().slice(0, 10)}
+                    {endDate.toLocaleDateString("en-CA")}
                   </Text>
                 </TouchableOpacity>
               </View>

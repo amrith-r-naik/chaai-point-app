@@ -18,12 +18,12 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface CustomerStats {
   totalPaid: number;
@@ -45,6 +45,7 @@ export default function CustomerDetailsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [advanceBalance, setAdvanceBalance] = useState<number | null>(null);
   const auth = use$(authState);
+  const insets = useSafeAreaInsets();
 
   const loadCustomerData = useCallback(async () => {
     if (!customerId || !auth.isDbReady) return;
@@ -55,7 +56,9 @@ export default function CustomerDetailsScreen() {
         await paymentService.getCustomerCreditBalance(customerId);
       const bills =
         await paymentService.getCustomerBillsWithPayments(customerId);
-      const paymentRows = await paymentService.getPaymentHistory(customerId);
+      const paymentRows = await paymentService.getPaymentHistoryWithAdvanceParts(
+        customerId
+      );
       const totalPaid = paymentRows.reduce((s: number, p: any) => {
         // Exclude credit accrual payments (pure credit sales)
         if (p.mode === "Credit" && p.subType === "Accrual") {
@@ -344,7 +347,7 @@ export default function CustomerDetailsScreen() {
         <View
           style={{
             backgroundColor: theme.colors.primary,
-            paddingTop: 20,
+            paddingTop: Math.max(insets.top, 16),
             paddingBottom: 40,
             paddingHorizontal: 16,
           }}

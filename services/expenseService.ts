@@ -13,6 +13,7 @@ export interface ExpenseRecord {
   towards: string;
   mode: string; // legacy display: Cash | UPI | Credit | Split
   remarks: string | null;
+  expenseDate: string;
   createdAt: string;
 }
 
@@ -107,6 +108,7 @@ class ExpenseService {
       towards: e.towards,
       mode: e.mode,
       remarks: e.remarks,
+  expenseDate: e.expenseDate,
       createdAt: e.createdAt,
       settlements: settlements.map((s) => ({
         id: s.id,

@@ -461,6 +461,93 @@ class PaymentService {
     }));
   }
 
+  // Enriched view: sums Cash/UPI + AdvanceUse (and clearance) per bill/receipt so UI can show full paid amounts
+  async getCustomerPaymentHistoryEnriched(customerId: string): Promise<
+    Array<{
+      id: string; // receiptId or synthetic id per bill
+      billId: string | null;
+      receiptId: string | null;
+      amountPaid: number; // includes AdvanceUse
+      mode: string; // Receipt mode or "Clearance"/"Bill"
+      remarks: string | null;
+      createdAt: string;
+    }>
+  > {
+    if (!db) throw new Error("Database not initialized");
+
+    // Start from receipts to aggregate paid per bill/receipt
+    const receipts = (await db.getAllAsync(
+      `SELECT * FROM receipts WHERE customerId = ? ORDER BY createdAt DESC`,
+      [customerId]
+    )) as any[];
+    const enriched: any[] = [];
+    for (const r of receipts) {
+      // Cash/UPI from payments (exclude Credit accrual rows)
+      const pays = (await db.getAllAsync(
+        `SELECT * FROM payments WHERE (billId = ? OR (? IS NULL AND billId IS NULL AND customerId = ?)) AND (mode != 'Credit')`,
+        [r.billId, r.billId, customerId]
+      )) as any[];
+      const cashUpi = pays.reduce((s, p) => s + (p.amount || 0), 0);
+      // AdvanceUse from split meta
+      const adv = (await db.getFirstAsync(
+        `SELECT COALESCE(SUM(amount),0) as s FROM split_payments WHERE receiptId = ? AND paymentType = 'AdvanceUse'`,
+        [r.id]
+      )) as any;
+      const advanceUsed = adv?.s || 0;
+      const amountPaid = cashUpi + advanceUsed;
+      enriched.push({
+        id: r.id,
+        billId: r.billId ?? null,
+        receiptId: r.id,
+        amountPaid,
+        mode: r.billId ? r.mode : "Clearance",
+        remarks: r.remarks ?? null,
+        createdAt: r.createdAt,
+      });
+    }
+    return enriched;
+  }
+
+  // Payment history with breakdown including AdvanceUse parts per receipt
+  async getPaymentHistoryWithAdvanceParts(customerId: string): Promise<Payment[]> {
+    if (!db) throw new Error("Database not initialized");
+    const receipts = (await db.getAllAsync(
+      `SELECT id, billId, customerId, createdAt FROM receipts WHERE customerId = ? ORDER BY createdAt DESC`,
+      [customerId]
+    )) as any[];
+    const rows: Payment[] = [] as any;
+    for (const r of receipts) {
+      // Real payment rows linked to this receipt context
+      const pays = (await db.getAllAsync(
+        r.billId
+          ? `SELECT * FROM payments WHERE billId = ? ORDER BY createdAt ASC`
+          : `SELECT * FROM payments WHERE billId IS NULL AND customerId = ? AND createdAt = ? ORDER BY createdAt ASC`,
+        r.billId ? [r.billId] : [customerId, r.createdAt]
+      )) as Payment[];
+      rows.push(...pays);
+      // Add synthetic Advance rows from split meta
+      const advParts = (await db.getAllAsync(
+        `SELECT amount FROM split_payments WHERE receiptId = ? AND paymentType = 'AdvanceUse' ORDER BY createdAt ASC`,
+        [r.id]
+      )) as any[];
+      for (const a of advParts) {
+        rows.push({
+          id: uuid.v4() as string,
+          billId: r.billId ?? null,
+          customerId: r.customerId,
+          amount: a.amount || 0,
+          mode: "Advance",
+          subType: r.billId ? null : ("Clearance" as any),
+          remarks: null,
+          createdAt: r.createdAt,
+        });
+      }
+    }
+    // Order newest first
+    rows.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+    return rows;
+  }
+
   async getCompletedBillsGroupedByDate(daysWindow: number = 2): Promise<
     Record<
       string,
@@ -591,20 +678,17 @@ class PaymentService {
       [receiptId]
     )) as any[];
 
-    // Get related bill
-    const bill = (await db.getFirstAsync(
-      `
-      SELECT * FROM bills 
-      WHERE customerId = ? 
-        AND DATE(createdAt) = DATE(?)
-      ORDER BY createdAt DESC
-      LIMIT 1
-    `,
-      [receipt.customerId, receipt.createdAt]
-    )) as any;
+    // Get related bill directly via receipt.billId when available
+    let bill: any = null;
+    if (receipt.billId) {
+      bill = (await db.getFirstAsync(
+        `SELECT * FROM bills WHERE id = ?`,
+        [receipt.billId]
+      )) as any;
+    }
 
     let kots: any[] = [];
-    if (bill) {
+  if (bill) {
       // Get KOTs linked to this bill
       kots = (await db.getAllAsync(
         `
@@ -630,7 +714,7 @@ class PaymentService {
       }));
     }
 
-    return {
+  return {
       receipt,
       customer,
       kots,
@@ -967,16 +1051,32 @@ class PaymentService {
           paidTotal += p.amount || 0;
         }
       });
+      // Include advance used via split meta or infer auto-applied advance
+      let advanceUsed = 0;
+      if (row.receiptId) {
+        const adv = (await db.getFirstAsync(
+          `SELECT COALESCE(SUM(amount),0) as s FROM split_payments WHERE receiptId = ? AND paymentType = 'AdvanceUse'`,
+          [row.receiptId]
+        )) as any;
+        advanceUsed = adv?.s || 0;
+      }
+      if (!advanceUsed) {
+        // Infer auto-apply (non-split path): any remaining between total and (paid+credit) is likely advance
+        const remaining = Math.max(0, (row.total || 0) - (paidTotal + creditPortion));
+        // Only count as advance if there is a receipt (i.e., not pure credit sale)
+        if (row.receiptId) advanceUsed = remaining;
+      }
+      const paidTotalWithAdvance = paidTotal + advanceUsed;
       // Status rules:
       // - Paid: only cash/upi etc (paidTotal>0, creditPortion==0)
       // - Credit: no cash/upi, has credit (creditPortion>0 OR legacy zero-amount credit rows)
       // - Partial: both present
       // - Edge (both zero): treat as Credit if any credit row exists, else fall back to Paid
       let status: "Paid" | "Credit" | "Partial";
-      if (paidTotal > 0 && creditPortion === 0) status = "Paid";
-      else if (paidTotal === 0 && (creditPortion > 0 || hasAnyCredit))
+      if (paidTotalWithAdvance >= (row.total || 0) && creditPortion === 0) status = "Paid";
+      else if (paidTotalWithAdvance === 0 && (creditPortion > 0 || hasAnyCredit))
         status = "Credit";
-      else if (paidTotal > 0 && creditPortion > 0) status = "Partial";
+      else if (paidTotalWithAdvance > 0 && creditPortion > 0) status = "Partial";
       else status = row.receiptId ? "Paid" : "Credit";
       groups[date].bills.push({
         id: row.receiptId || row.billId, // keep id for navigation; if no receipt we use billId
@@ -988,7 +1088,7 @@ class PaymentService {
         customerName: row.customerName,
         customerContact: row.customerContact,
         total: row.total,
-        paidTotal,
+        paidTotal: paidTotalWithAdvance,
         creditPortion,
         status,
         createdAt: row.createdAt,
@@ -1016,6 +1116,13 @@ class PaymentService {
         }
         groups[date] = { date, displayDate, bills: [] };
       }
+      // Include advance used for clearance receipt via split meta
+      const adv = (await db.getFirstAsync(
+        `SELECT COALESCE(SUM(amount),0) as s FROM split_payments WHERE receiptId = ? AND paymentType = 'AdvanceUse'`,
+        [cr.receiptId]
+      )) as any;
+      const advUsed = adv?.s || 0;
+      const totalPaid = (cr.amount || 0) + advUsed;
       groups[date].bills.push({
         id: cr.receiptId,
         billId: null,
@@ -1025,8 +1132,8 @@ class PaymentService {
         customerId: cr.customerId,
         customerName: cr.customerName,
         customerContact: cr.customerContact,
-        total: cr.amount,
-        paidTotal: cr.amount,
+        total: totalPaid,
+        paidTotal: totalPaid,
         creditPortion: 0,
         status: "Clearance",
         mode: cr.mode,

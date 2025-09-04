@@ -344,6 +344,39 @@ export default function AdminSettingsScreen() {
     );
   };
 
+  // Dev-only: Hard delete all local menu items (no cloud changes)
+  const handleHardDeleteLocalMenuItems = () => {
+    if (process.env.NODE_ENV !== "development") return;
+    Alert.alert(
+      "Hard Delete Local Menu Items",
+      "This will PERMANENTLY delete all menu items from the local device database only. It will NOT change cloud data. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await menuService.clearAllMenuItems();
+              await loadTableCounts();
+              await loadMenuItems();
+              Alert.alert("Success", "All local menu items deleted (cloud unchanged)");
+            } catch (error: any) {
+              Alert.alert(
+                "Error",
+                error?.message ||
+                "Failed to delete local menu items. If items are referenced in orders, delete those first or clear all business data."
+              );
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleRunAudit = async () => {
     try {
       setAuditRunning(true);
@@ -683,6 +716,19 @@ export default function AdminSettingsScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Dev-only tools for Menu */}
+        {process.env.NODE_ENV === "development" && (
+          <View style={{ marginBottom: 24 }}>
+            <AdminCard
+              title="Hard Delete Local Menu Items"
+              description="Dev-only: Permanently delete all menu items from local DB (does not touch cloud)"
+              icon={Trash2}
+              onPress={handleHardDeleteLocalMenuItems}
+              destructive
+            />
+          </View>
+        )}
+
         {/* Database Management */}
         <Text
           style={{
@@ -856,7 +902,7 @@ export default function AdminSettingsScreen() {
                   </Text>
 
                   {auditResult.billIssues.length === 0 &&
-                  auditResult.creditIssues.length === 0 ? (
+                    auditResult.creditIssues.length === 0 ? (
                     <View style={{ paddingVertical: 4 }}>
                       <Text style={{ color: "#16a34a", fontWeight: "600" }}>
                         No issues found.

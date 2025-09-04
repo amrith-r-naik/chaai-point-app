@@ -701,15 +701,9 @@ class OrderService {
     if (!db) throw new Error("Database not initialized");
 
     try {
-      const startDate = new Date(date);
-      startDate.setHours(0, 0, 0, 0);
-
-      const endDate = new Date(date);
-      endDate.setHours(23, 59, 59, 999);
-
-      // Add billId filter if onlyActive is true
+      // Use local (IST) calendar day matching similar to other date queries
+      // Expect `date` as YYYY-MM-DD (local day). Apply +330 minutes to normalize UTC to IST.
       const billIdFilter = onlyActive ? "AND ko.billId IS NULL" : "";
-
       const result = await db.getAllAsync(
         `
         SELECT 
@@ -726,12 +720,11 @@ class OrderService {
         FROM kot_orders ko
         LEFT JOIN customers c ON ko.customerId = c.id
         WHERE ko.customerId = ? 
-        AND datetime(ko.createdAt) >= datetime(?)
-        AND datetime(ko.createdAt) <= datetime(?)
-        ${billIdFilter}
+          AND DATE(ko.createdAt, '+330 minutes') = ?
+          ${billIdFilter}
         ORDER BY ko.createdAt DESC
       `,
-        [customerId, startDate.toISOString(), endDate.toISOString()]
+        [customerId, date]
       );
 
       // Get items for each KOT

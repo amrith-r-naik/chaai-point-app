@@ -328,7 +328,7 @@ export default function AddExpenseModal({
         amount: Math.round(expenseAmount),
         towards: towards.trim(),
         remarks: remarks.trim() || null,
-        expenseDate: expenseDate.toISOString().slice(0, 10),
+        expenseDate: expenseDate.toLocaleDateString("en-CA"),
       } as const;
       if (mode === "Split") {
         const sp: { type: "Cash" | "UPI" | "Credit"; amount: number }[] = [];
@@ -400,6 +400,7 @@ export default function AddExpenseModal({
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
+      onRequestClose={handleClose}
     >
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
@@ -524,7 +525,7 @@ export default function AddExpenseModal({
               onPress={() => setShowDatePicker(true)}
             >
               <Text style={{ fontSize: 16, color: "#1e293b" }}>
-                {expenseDate.toISOString().slice(0, 10)}
+                {expenseDate.toLocaleDateString("en-CA")}
               </Text>
             </TouchableOpacity>
             {showDatePicker && (

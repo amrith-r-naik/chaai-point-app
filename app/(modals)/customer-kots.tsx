@@ -6,14 +6,15 @@ import { orderState } from "@/state/orderState";
 import { use$ } from "@legendapp/state/react";
 import { Stack, useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
 
 export default function CustomerKOTsScreen() {
   const router = useRouter();
   const selectedCustomer = use$(customerState.selectedCustomer);
   const auth = use$(authState);
-  const today = new Date().toISOString().split("T")[0];
+  // Local date in YYYY-MM-DD (e.g., en-CA locale formats as 2025-09-05)
+  const today = new Date().toLocaleDateString("en-CA");
 
   const [kots, setKots] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);

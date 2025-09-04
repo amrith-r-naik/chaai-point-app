@@ -9,7 +9,8 @@ export const ExpenseItem: React.FC<{
   expense: ExpenseListItem;
   index: number;
   onClearCredit?: (e: ExpenseListItem) => void;
-}> = ({ expense, index, onClearCredit }) => {
+  onPress?: (e: ExpenseListItem) => void;
+}> = ({ expense, index, onClearCredit, onPress }) => {
   const outstanding = expense.creditOutstanding || 0;
   const total = expense.amount || 0;
   // Display paid should include immediate + cleared credit; derive as total - outstanding, clamped to [0,total]
@@ -20,16 +21,16 @@ export const ExpenseItem: React.FC<{
   const isFullyPaid = (outstanding ?? 0) <= 0 || expense.status === "Paid";
   const dateStr = expense.expenseDate
     ? new Date(expense.expenseDate).toLocaleDateString("en-IN", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })
     : new Date(expense.createdAt).toLocaleString("en-IN", {
-        day: "numeric",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
   const statusStyles =
     expense.status === "Paid"
@@ -39,7 +40,9 @@ export const ExpenseItem: React.FC<{
         : { bg: "#FFEEF0", fg: "#BE123C" };
 
   return (
-    <View
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={() => onPress && onPress(expense)}
       style={{
         backgroundColor: "white",
         padding: 14,
@@ -216,6 +219,6 @@ export const ExpenseItem: React.FC<{
           </View>
         </View>
       )}
-    </View>
+    </TouchableOpacity>
   );
 };

@@ -173,6 +173,11 @@ async function initializeSchema() {
       CREATE INDEX IF NOT EXISTS idx_bills_createdAt ON bills(createdAt);
       CREATE INDEX IF NOT EXISTS idx_payments_createdAt ON payments(createdAt);
       CREATE INDEX IF NOT EXISTS idx_receipts_bill ON receipts(billId);
+  -- New performance indexes
+  CREATE INDEX IF NOT EXISTS idx_kot_orders_createdAt ON kot_orders(createdAt);
+  CREATE INDEX IF NOT EXISTS idx_kot_orders_customer_createdAt ON kot_orders(customerId, createdAt);
+  CREATE INDEX IF NOT EXISTS idx_kot_items_kotId ON kot_items(kotId);
+  CREATE INDEX IF NOT EXISTS idx_receipts_createdAt ON receipts(createdAt);
   CREATE INDEX IF NOT EXISTS idx_app_settings_updated ON app_settings(updatedAt);
     `);
     await db.execAsync("COMMIT");

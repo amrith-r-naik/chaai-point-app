@@ -226,6 +226,11 @@ export default function OrdersScreen() {
             renderItem={({ item }) => <OrderItem order={item} />}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 20 }}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={7}
+            removeClippedSubviews={true}
+            updateCellsBatchingPeriod={50}
           />
         )}
       </View>

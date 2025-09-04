@@ -169,14 +169,36 @@ class OrderService {
       },
     }));
 
-    // Get items for each order
-    for (const order of orders) {
-      const items = await this.getOrderItems(order.id);
-      order.items = items;
-      order.total = items.reduce(
-        (sum, item) => sum + item.priceAtTime * item.quantity,
-        0
-      );
+    // Batch fetch items to avoid N+1
+    if (orders.length) {
+      const ids = orders.map((o) => o.id);
+      const placeholders = ids.map(() => "?").join(",");
+      const rows = (await db.getAllAsync(
+        `SELECT ki.*, mi.name as itemName
+         FROM kot_items ki 
+         LEFT JOIN menu_items mi ON mi.id = ki.itemId
+         WHERE ki.kotId IN (${placeholders})`,
+        ids
+      )) as any[];
+      const byOrder: Record<string, any[]> = {};
+      for (const r of rows) {
+        (byOrder[r.kotId] ||= []).push({
+          id: r.id,
+          kotId: r.kotId,
+          itemId: r.itemId,
+          quantity: r.quantity,
+          priceAtTime: r.priceAtTime,
+          name: r.itemName,
+        });
+      }
+      for (const order of orders) {
+        const items = (byOrder[order.id] || []) as any[];
+        order.items = items as any;
+        order.total = items.reduce(
+          (sum, item) => sum + item.priceAtTime * item.quantity,
+          0
+        );
+      }
     }
 
     return orders;
@@ -185,6 +207,13 @@ class OrderService {
   async getOrdersByDate(dateISO: string): Promise<KotOrder[]> {
     if (!db) throw new Error("Database not initialized");
     // dateISO expected as YYYY-MM-DD; compare in IST using '+330 minutes'
+    // Compute IST day range [start, next)
+    const start = new Date(dateISO + "T00:00:00.000Z");
+    const startMs = start.getTime() - 5.5 * 60 * 60 * 1000; // back to UTC
+    const endMs = startMs + 24 * 60 * 60 * 1000;
+    const startUtc = new Date(startMs).toISOString();
+    const endUtc = new Date(endMs).toISOString();
+
     const result = await db.getAllAsync(
       `
       SELECT 
@@ -193,10 +222,10 @@ class OrderService {
         c.contact as customerContact
       FROM kot_orders ko
       LEFT JOIN customers c ON ko.customerId = c.id
-      WHERE DATE(ko.createdAt, '+330 minutes') = ?
+      WHERE ko.createdAt >= ? AND ko.createdAt < ?
       ORDER BY ko.createdAt DESC
     `,
-      [dateISO]
+      [startUtc, endUtc]
     );
 
     const orders: KotOrder[] = result.map((row: any) => ({
@@ -212,13 +241,35 @@ class OrderService {
       },
     }));
 
-    for (const order of orders) {
-      const items = await this.getOrderItems(order.id);
-      order.items = items;
-      order.total = items.reduce(
-        (sum, item) => sum + item.priceAtTime * item.quantity,
-        0
-      );
+    if (orders.length) {
+      const ids = orders.map((o) => o.id);
+      const placeholders = ids.map(() => "?").join(",");
+      const rows = (await db.getAllAsync(
+        `SELECT ki.*, mi.name as itemName
+         FROM kot_items ki 
+         LEFT JOIN menu_items mi ON mi.id = ki.itemId
+         WHERE ki.kotId IN (${placeholders})`,
+        ids
+      )) as any[];
+      const byOrder: Record<string, any[]> = {};
+      for (const r of rows) {
+        (byOrder[r.kotId] ||= []).push({
+          id: r.id,
+          kotId: r.kotId,
+          itemId: r.itemId,
+          quantity: r.quantity,
+          priceAtTime: r.priceAtTime,
+          name: r.itemName,
+        });
+      }
+      for (const order of orders) {
+        const items = (byOrder[order.id] || []) as any[];
+        order.items = items as any;
+        order.total = items.reduce(
+          (sum, item) => sum + item.priceAtTime * item.quantity,
+          0
+        );
+      }
     }
 
     return orders;
@@ -305,6 +356,11 @@ class OrderService {
   async createOrder(orderData: CreateOrderData): Promise<string> {
     if (!db) throw new Error("Database not initialized");
 
+    // Quick guard: avoid creating empty orders
+    if (!orderData.items || orderData.items.length === 0) {
+      throw new Error("Cannot create an order without items");
+    }
+
     // Validate that customer exists
     const customerExists = await db.getFirstAsync(
       `SELECT id FROM customers WHERE id = ?`,
@@ -317,27 +373,35 @@ class OrderService {
       );
     }
 
-    // Validate that all menu items exist, and auto-seed if using hardcoded items
-    for (const item of orderData.items) {
-      let menuItemExists = await db.getFirstAsync(
-        `SELECT id FROM menu_items WHERE id = ? AND isActive = 1`,
-        [item.itemId]
-      );
+    // Validate that all menu items exist with a single query; seed hardcoded if missing
+    const uniqueItemIds = Array.from(
+      new Set(orderData.items.map((i) => i.itemId))
+    );
+    const placeholders = uniqueItemIds.map(() => "?").join(",");
+    const existingRows = (await db.getAllAsync(
+      `SELECT id FROM menu_items WHERE isActive = 1 AND id IN (${placeholders})`,
+      uniqueItemIds
+    )) as { id: string }[];
+    const existing = new Set(existingRows.map((r) => r.id));
+    const missing = uniqueItemIds.filter((id) => !existing.has(id));
 
-      // If item doesn't exist but it's a hardcoded item (item_1, item_2, etc.), seed it
-      if (!menuItemExists && item.itemId.startsWith("item_")) {
-        await this.ensureHardcodedMenuItemExists(item.itemId);
-
-        // Check again after seeding
-        menuItemExists = await db.getFirstAsync(
-          `SELECT id FROM menu_items WHERE id = ? AND isActive = 1`,
-          [item.itemId]
-        );
+    // Auto-seed known hardcoded catalog items
+    for (const mid of missing) {
+      if (mid.startsWith("item_")) {
+        await this.ensureHardcodedMenuItemExists(mid);
       }
-
-      if (!menuItemExists) {
+    }
+    if (missing.length) {
+      // Re-check after potential seeding
+      const rows2 = (await db.getAllAsync(
+        `SELECT id FROM menu_items WHERE isActive = 1 AND id IN (${placeholders})`,
+        uniqueItemIds
+      )) as { id: string }[];
+      const exists2 = new Set(rows2.map((r) => r.id));
+      const stillMissing = uniqueItemIds.filter((id) => !exists2.has(id));
+      if (stillMissing.length) {
         throw new Error(
-          `Menu item with ID ${item.itemId} does not exist or is inactive`
+          `Some menu items don't exist or are inactive: ${stillMissing.join(", ")}`
         );
       }
     }
@@ -365,17 +429,21 @@ class OrderService {
         [orderId, kotNumber, orderData.customerId, createdAt]
       );
 
-      // Create the KOT items
-      for (const item of orderData.items) {
-        const itemId = `kotitem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        await db!.runAsync(
-          `
-          INSERT INTO kot_items (id, kotId, itemId, quantity, priceAtTime, createdAt)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `,
-          [itemId, orderId, item.itemId, item.quantity, item.price, createdAt]
-        );
+      // Create all KOT items in one roundtrip
+      const valuesSql: string[] = [];
+      const params: any[] = [];
+      for (const it of orderData.items) {
+        const kid = `kotitem_${Date.now()}_${Math.random()
+          .toString(36)
+          .substr(2, 9)}`;
+        valuesSql.push("(?, ?, ?, ?, ?, ?)");
+        params.push(kid, orderId, it.itemId, it.quantity, it.price, createdAt);
       }
+      await db!.runAsync(
+        `INSERT INTO kot_items (id, kotId, itemId, quantity, priceAtTime, createdAt)
+         VALUES ${valuesSql.join(",")}`,
+        params
+      );
     });
     try {
       const { signalChange } = await import("@/state/appEvents");

@@ -66,13 +66,13 @@ export async function seedTestData() {
     );
 
     await db.runAsync(
-      `INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime) 
-       VALUES ('item_1_1', 'order1', 'item1', 2, 1500)`
+      `INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime, createdAt) 
+       VALUES ('item_1_1', 'order1', 'item1', 2, 1500, datetime('now'))`
     );
 
     await db.runAsync(
-      `INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime) 
-       VALUES ('item_1_2', 'order1', 'item2', 1, 2000)`
+      `INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime, createdAt) 
+       VALUES ('item_1_2', 'order1', 'item2', 1, 2000, datetime('now'))`
     );
 
     // Order 2
@@ -83,13 +83,13 @@ export async function seedTestData() {
     );
 
     await db.runAsync(
-      `INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime) 
-       VALUES ('item_2_1', 'order2', 'item3', 1, 5000)`
+      `INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime, createdAt) 
+       VALUES ('item_2_1', 'order2', 'item3', 1, 5000, datetime('now'))`
     );
 
     await db.runAsync(
-      `INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime) 
-       VALUES ('item_2_2', 'order2', 'item1', 3, 1500)`
+      `INSERT OR IGNORE INTO kot_items (id, kotId, itemId, quantity, priceAtTime, createdAt) 
+       VALUES ('item_2_2', 'order2', 'item1', 3, 1500, datetime('now'))`
     );
 
     // Add some expenses
@@ -182,6 +182,7 @@ export async function recreateDatabase() {
         itemId TEXT NOT NULL,
         quantity INTEGER NOT NULL,
         priceAtTime INTEGER NOT NULL,
+        createdAt TEXT NOT NULL,
         FOREIGN KEY (kotId) REFERENCES kot_orders(id),
         FOREIGN KEY (itemId) REFERENCES menu_items(id)
       );
@@ -485,9 +486,16 @@ export async function seedTestOrders() {
       for (const item of order.items) {
         const itemId = `kotitem_${order.id}_${item.itemId}`;
         await db.runAsync(
-          `INSERT INTO kot_items (id, kotId, itemId, quantity, priceAtTime)
-           VALUES (?, ?, ?, ?, ?)`,
-          [itemId, order.id, item.itemId, item.quantity, item.price]
+          `INSERT INTO kot_items (id, kotId, itemId, quantity, priceAtTime, createdAt)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            itemId,
+            order.id,
+            item.itemId,
+            item.quantity,
+            item.price,
+            order.createdAt,
+          ]
         );
       }
     }

@@ -370,10 +370,10 @@ class OrderService {
         const itemId = `kotitem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         await db!.runAsync(
           `
-          INSERT INTO kot_items (id, kotId, itemId, quantity, priceAtTime)
-          VALUES (?, ?, ?, ?, ?)
+          INSERT INTO kot_items (id, kotId, itemId, quantity, priceAtTime, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?)
         `,
-          [itemId, orderId, item.itemId, item.quantity, item.price]
+          [itemId, orderId, item.itemId, item.quantity, item.price, createdAt]
         );
       }
     });

@@ -40,6 +40,7 @@ export default function CustomerDetailsScreen() {
 
   const [billHistory, setBillHistory] = useState<any[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [advanceLedger, setAdvanceLedger] = useState<any[]>([]);
   const [stats, setStats] = useState<CustomerStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -69,10 +70,12 @@ export default function CustomerDetailsScreen() {
       const billCount = bills.length;
       const lastBillAt = bills[0]?.createdAt || null;
       const advBal = await advanceService.getBalance(String(customerId));
+      const advLedger = await advanceService.getLedger(String(customerId), 50);
       setStats({ totalPaid, billCount, creditBalance, lastBillAt });
       setBillHistory(bills);
       setPaymentHistory(paymentRows);
       setAdvanceBalance(advBal);
+      setAdvanceLedger(advLedger);
     } catch (error) {
       console.error("Error loading customer data:", error);
       Alert.alert("Error", "Failed to load customer data");
@@ -314,6 +317,43 @@ export default function CustomerDetailsScreen() {
           </View>
         </View>
       </TouchableOpacity>
+    );
+  };
+
+  const renderAdvanceRow = (e: any) => {
+    const color = e.entryType === 'Add' ? '#065f46' : e.entryType === 'Apply' ? '#1d4ed8' : '#b91c1c';
+    const bg = e.entryType === 'Add' ? '#ecfdf5' : e.entryType === 'Apply' ? '#eff6ff' : '#fee2e2';
+    return (
+      <View
+        key={e.id}
+        style={{
+          backgroundColor: 'white',
+          borderRadius: 10,
+          padding: 12,
+          marginBottom: 8,
+          borderWidth: 1,
+          borderColor: '#f3f4f6',
+        }}
+      >
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View>
+            <Text style={{ fontWeight: '700', color: theme.colors.text }}>
+              {e.entryType} ₹{e.amount}
+            </Text>
+            <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 }}>
+              {formatDate(e.createdAt)}
+            </Text>
+            {e.remarks ? (
+              <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 }}>
+                {e.remarks}
+              </Text>
+            ) : null}
+          </View>
+          <View style={{ backgroundColor: bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color }}>{e.entryType}</Text>
+          </View>
+        </View>
+      </View>
     );
   };
 
@@ -793,6 +833,35 @@ export default function CustomerDetailsScreen() {
               </View>
             ) : (
               <View>{paymentHistory.slice(0, 15).map(renderPaymentRow)}</View>
+            )}
+          </View>
+
+          {/* Advance History */}
+          <View
+            style={{
+              backgroundColor: "white",
+              borderRadius: 16,
+              padding: 20,
+              marginBottom: 40,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 8,
+              elevation: 4,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <Wallet size={20} color={theme.colors.text} />
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.colors.text }}>
+                Advance History
+              </Text>
+            </View>
+            {advanceLedger.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingVertical: 24 }}>
+                <Text style={{ color: theme.colors.textSecondary }}>No advance entries</Text>
+              </View>
+            ) : (
+              <View>{advanceLedger.slice(0, 20).map(renderAdvanceRow)}</View>
             )}
           </View>
         </View>

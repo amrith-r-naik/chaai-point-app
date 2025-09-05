@@ -1,11 +1,12 @@
-import { SplitPayment, SplitEntryType } from "@/types/payment";
+import { SplitEntryType, SplitPayment } from "@/types/payment";
 
-export const paymentTypes: ("Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAdd")[] = [
+export const paymentTypes: ("Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAddCash" | "AdvanceAddUPI")[] = [
   "Cash",
   "UPI",
   "Credit",
   "AdvanceUse",
-  "AdvanceAdd",
+  "AdvanceAddCash",
+  "AdvanceAddUPI",
 ];
 
 export class SplitPaymentManager {
@@ -33,18 +34,18 @@ export class SplitPaymentManager {
 
   static addSplitPayment(
     splitPayments: SplitPayment[],
-    type: "Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAdd",
+    type: "Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAddCash" | "AdvanceAddUPI",
     amount: number
   ): SplitPayment[] {
-    // AdvanceAdd is not counted against bill credit; it stands alone and doesn't reduce Credit
-    if (type === "AdvanceAdd") {
+    // AdvanceAddCash/AdvanceAddUPI are not counted against bill credit; they stand alone and don't reduce Credit
+    if (type === "AdvanceAddCash" || type === "AdvanceAddUPI") {
       const updated: SplitPayment[] = [...splitPayments];
-      // Merge with existing AdvanceAdd if present
-      const existingIndex = updated.findIndex(p => p.type === "AdvanceAdd");
+      // Merge with existing of same advance-add type if present
+      const existingIndex = updated.findIndex(p => p.type === type);
       if (existingIndex !== -1) {
         updated[existingIndex] = { ...updated[existingIndex], amount: updated[existingIndex].amount + amount };
       } else {
-        updated.push({ id: Date.now().toString(), type: "AdvanceAdd", amount });
+        updated.push({ id: Date.now().toString(), type: type as SplitEntryType, amount });
       }
       return updated;
     }
@@ -115,8 +116,8 @@ export class SplitPaymentManager {
     // Remove the split
     const updatedSplitPayments = splitPayments.filter(payment => payment.id !== id);
 
-    // If removing AdvanceAdd, nothing to restore in credit
-    if (splitToRemove.type === 'AdvanceAdd') {
+    // If removing AdvanceAddCash/UPI, nothing to restore in credit
+    if (splitToRemove.type === 'AdvanceAddCash' || splitToRemove.type === 'AdvanceAddUPI') {
       return updatedSplitPayments;
     }
     
@@ -142,7 +143,7 @@ export class SplitPaymentManager {
   static validateSplitTotal(splitPayments: SplitPayment[], totalAmount: number): boolean {
     // Only count Cash/UPI/AdvanceUse towards bill total; ignore AdvanceAdd
     const splitTotal = splitPayments
-      .filter(p => p.type === 'Cash' || p.type === 'UPI' || p.type === 'AdvanceUse' || p.type === 'Credit')
+  .filter(p => p.type === 'Cash' || p.type === 'UPI' || p.type === 'AdvanceUse' || p.type === 'Credit')
       .reduce((sum, payment) => sum + payment.amount, 0);
     return Math.abs(splitTotal - totalAmount) < 0.01;
   }

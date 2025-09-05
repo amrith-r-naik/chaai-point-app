@@ -51,11 +51,11 @@ export const SplitPaymentList: React.FC<SplitPaymentListProps> = ({
           Total: ₹
           {splitPayments.reduce((sum, p) => sum + p.amount, 0).toFixed(2)}
         </Text>
-    <TouchableOpacity onPress={onAddSplit}>
+        <TouchableOpacity onPress={onAddSplit}>
           <Text
             style={{
-      fontSize: 14,
-      color: "#2563eb",
+              fontSize: 14,
+              color: "#2563eb",
               fontWeight: "500",
             }}
           >
@@ -90,7 +90,13 @@ export const SplitPaymentList: React.FC<SplitPaymentListProps> = ({
                   fontWeight: payment.type === "Credit" ? "600" : "500",
                 }}
               >
-                {(payment.type === 'AdvanceUse' ? 'Use Advance' : payment.type === 'AdvanceAdd' ? 'Add to Advance' : payment.type)}: ₹{payment.amount.toFixed(2)}
+                {(payment.type === 'AdvanceUse'
+                  ? 'Use Advance'
+                  : payment.type === 'AdvanceAddCash'
+                    ? 'Add to Advance (Cash)'
+                    : payment.type === 'AdvanceAddUPI'
+                      ? 'Add to Advance (UPI)'
+                      : payment.type)}: ₹{payment.amount.toFixed(2)}
               </Text>
             </View>
             {payment.type !== "Credit" && (

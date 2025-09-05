@@ -25,6 +25,7 @@ export default function AdvanceModal() {
   const [remarks, setRemarks] = useState("");
   const [balance, setBalance] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [addType, setAddType] = useState<"Cash" | "UPI">("Cash");
   const activeMode: Mode = (mode as Mode) || "add";
 
   useEffect(() => {
@@ -33,7 +34,7 @@ export default function AdvanceModal() {
       try {
         const b = await advanceService.getBalance(String(customerId));
         setBalance(b);
-      } catch {}
+      } catch { }
     })();
   }, [customerId]);
 
@@ -49,8 +50,11 @@ export default function AdvanceModal() {
     setSubmitting(true);
     try {
       if (activeMode === "add") {
+        const r = remarks?.trim();
+        const modeTag = addType === 'Cash' ? '[Cash]' : '[UPI]';
+        const combined = r ? `${modeTag} ${r}` : modeTag;
         await advanceService.addAdvance(String(customerId), n, {
-          remarks: remarks || undefined,
+          remarks: combined,
         });
       } else if (activeMode === "apply") {
         await advanceService.applyAdvance(String(customerId), n, {
@@ -114,6 +118,29 @@ export default function AdvanceModal() {
               <Text style={{ fontWeight: "700" }}>{customerName}</Text>
             </Text>
           ) : null}
+          {activeMode === 'add' && (
+            <View style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' }}>
+              <Text style={{ color: '#64748b', marginBottom: 8 }}>Payment Mode</Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {(['Cash', 'UPI'] as const).map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    onPress={() => setAddType(t)}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 8,
+                      backgroundColor: addType === t ? '#111827' : '#f3f4f6',
+                      borderWidth: 1,
+                      borderColor: addType === t ? '#111827' : '#e5e7eb',
+                    }}
+                  >
+                    <Text style={{ color: addType === t ? 'white' : '#111827', fontWeight: '600', fontSize: 12 }}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
           <View
             style={{
               backgroundColor: "white",

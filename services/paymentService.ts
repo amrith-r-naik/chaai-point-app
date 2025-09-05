@@ -165,7 +165,7 @@ class PaymentService {
           } else if (part.type === "AdvanceUse") {
             // Treat as paid portion towards bill (advance wallet deduction)
             paidPortion += part.amount;
-          } else if (part.type === "AdvanceAdd") {
+          } else if (part.type === "AdvanceAddCash" || part.type === "AdvanceAddUPI") {
             // Does not affect bill portions; handled separately after receipt/bill creation
           } else {
             paidPortion += part.amount;
@@ -224,13 +224,13 @@ class PaymentService {
             );
             continue; // no payments row
           }
-          if (part.type === "AdvanceAdd") {
+  if (part.type === "AdvanceAddCash" || part.type === "AdvanceAddUPI") {
             // Add extra to advance wallet
             await advanceService.addAdvance(
               paymentData.customerId,
               part.amount,
               {
-                remarks: `Extra paid during bill ${bill.billNumber}`,
+        remarks: `Extra paid during bill ${bill.billNumber} (${part.type === 'AdvanceAddCash' ? 'Cash' : part.type === 'AdvanceAddUPI' ? 'UPI' : 'Other'})`,
                 inTransaction: true,
               }
             );
@@ -767,15 +767,19 @@ class PaymentService {
   ): Promise<{ receipt: Receipt; paidTotal: number }> {
     if (!db) throw new Error("Database not initialized");
     await this.ensureSchemaUpgrades();
-    // Validate: allow Cash/UPI and AdvanceUse; sum of Cash/UPI must be > 0
+    // Validate: allow Cash/UPI and AdvanceUse; total cleared (Cash/UPI + AdvanceUse) must be > 0
     const invalid = splits.some(
-      (s) => s.type === "Credit" || s.type === "AdvanceAdd" || s.amount <= 0
+      (s) => s.type === "Credit" || s.type === "AdvanceAddCash" || s.type === "AdvanceAddUPI" || s.amount <= 0
     );
     if (invalid) throw new Error("Invalid clearance splits");
     const paidTotal = splits
       .filter((s) => s.type === "Cash" || s.type === "UPI")
       .reduce((s, p) => s + p.amount, 0);
-    if (paidTotal <= 0) throw new Error("Clearance amount must be > 0");
+    const advanceUsedPre = splits
+      .filter((s) => s.type === "AdvanceUse")
+      .reduce((s, p) => s + p.amount, 0);
+    const totalCleared = paidTotal + advanceUsedPre;
+    if (totalCleared <= 0) throw new Error("Clearance amount must be > 0");
 
     const now = new Date().toISOString();
     // Assign a local provisional receipt number unique for the year
@@ -789,7 +793,7 @@ class PaymentService {
       receiptNo,
       customerId,
       billId: null,
-      amount: paidTotal,
+      amount: totalCleared,
       mode: splits.length > 1 ? "Split" : splits[0].type,
       remarks: remarks ?? "Credit Clearance",
       createdAt: now,

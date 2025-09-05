@@ -37,7 +37,7 @@ export default function PaymentScreen() {
         try {
           const bal = await advanceService.getBalance(String(customerId));
           setAdvanceBalance(bal || 0);
-        } catch {}
+        } catch { }
       }
     })();
   }, [customerId]);
@@ -49,8 +49,8 @@ export default function PaymentScreen() {
     newSplitType,
     newSplitAmount,
     splitModalScreen,
-  creditAmount,
-  advanceUseCap,
+    creditAmount,
+    advanceUseCap,
     setShowSplitPayment,
     setSplitModalScreen,
     setNewSplitType,
@@ -69,27 +69,27 @@ export default function PaymentScreen() {
     icon: React.ReactNode;
     color: string;
   }[] = [
-    {
-      type: "Cash",
-      label: "Cash Payment",
-      icon: <DollarSign size={24} color="#16a34a" />,
-      color: "#16a34a",
-    },
-    {
-      type: "UPI",
-      label: "UPI Payment",
-      icon: <QrCode size={24} color="#2563eb" />,
-      color: "#2563eb",
-    },
-    {
-      type: "Split",
-      label: "Split Payment",
-      icon: <Split size={24} color="#7c3aed" />,
-      color: "#7c3aed",
-    },
-    // Only show Credit in normal payment flow
-    ...(!isClearance
-      ? [
+      {
+        type: "Cash",
+        label: "Cash Payment",
+        icon: <DollarSign size={24} color="#16a34a" />,
+        color: "#16a34a",
+      },
+      {
+        type: "UPI",
+        label: "UPI Payment",
+        icon: <QrCode size={24} color="#2563eb" />,
+        color: "#2563eb",
+      },
+      {
+        type: "Split",
+        label: "Split Payment",
+        icon: <Split size={24} color="#7c3aed" />,
+        color: "#7c3aed",
+      },
+      // Only show Credit in normal payment flow
+      ...(!isClearance
+        ? [
           {
             type: "Credit" as PaymentType,
             label: "Credit",
@@ -97,8 +97,8 @@ export default function PaymentScreen() {
             color: "#f59e0b",
           },
         ]
-      : []),
-  ];
+        : []),
+    ];
 
   const handleProceed = async () => {
     if (!validatePayment()) {
@@ -109,7 +109,7 @@ export default function PaymentScreen() {
       }
       return;
     }
-  if (isClearance) {
+    if (isClearance) {
       try {
         // Only Cash/UPI or Split with those; proceed via service
         const splits =
@@ -345,7 +345,13 @@ export default function PaymentScreen() {
                     color: theme.colors.text,
                   }}
                 >
-                  {payment.type === 'AdvanceUse' ? 'Use Advance' : payment.type === 'AdvanceAdd' ? 'Add to Advance' : payment.type}
+                  {payment.type === 'AdvanceUse'
+                    ? 'Use Advance'
+                    : payment.type === 'AdvanceAddCash'
+                      ? 'Add to Advance (Cash)'
+                      : payment.type === 'AdvanceAddUPI'
+                        ? 'Add to Advance (UPI)'
+                        : payment.type}
                 </Text>
                 <Text
                   style={{
@@ -413,14 +419,14 @@ export default function PaymentScreen() {
       <SplitPaymentModal
         visible={showSplitPayment}
         screen={splitModalScreen}
-  splitPayments={splitPayments}
-  creditAmount={creditAmount}
-  advanceUseCap={advanceUseCap}
-  advanceBalance={advanceBalance}
+        splitPayments={splitPayments}
+        creditAmount={creditAmount}
+        advanceUseCap={advanceUseCap}
+        advanceBalance={advanceBalance}
         canProceed={
           !isClearance || (selectedPaymentType === "Split" && validatePayment())
         }
-  newSplitType={newSplitType}
+        newSplitType={newSplitType}
         newSplitAmount={newSplitAmount}
         onScreenChange={setSplitModalScreen}
         onSplitTypeChange={setNewSplitType}

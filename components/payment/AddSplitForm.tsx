@@ -5,12 +5,12 @@ import React from "react";
 import { Text, TextInput, TouchableOpacity, View } from "react-native";
 
 interface AddSplitFormProps {
-  newSplitType: "Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAdd";
+  newSplitType: "Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAddCash" | "AdvanceAddUPI";
   newSplitAmount: string;
   creditAmount: number;
   advanceUseCap?: number;
   advanceBalance?: number;
-  onSplitTypeChange: (type: "Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAdd") => void;
+  onSplitTypeChange: (type: "Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAddCash" | "AdvanceAddUPI") => void;
   onAmountChange: (amount: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
@@ -30,7 +30,7 @@ export const AddSplitForm: React.FC<AddSplitFormProps> = ({
   const isValidAmount = () => {
     const amount = parseFloat(newSplitAmount);
     if (isNaN(amount) || amount <= 0) return false;
-    if (newSplitType === "AdvanceAdd") return true; // no cap here
+    if (newSplitType === "AdvanceAddCash" || newSplitType === "AdvanceAddUPI") return true; // no cap here
     if (newSplitType === "AdvanceUse") {
       return amount <= Math.max(0, advanceUseCap);
     }
@@ -81,27 +81,27 @@ export const AddSplitForm: React.FC<AddSplitFormProps> = ({
           {paymentTypes
             .filter(type => type !== "Credit")
             .map((type) => (
-            <TouchableOpacity
-              key={type}
-              onPress={() => onSplitTypeChange(type)}
-              style={{
-                paddingHorizontal: 16,
-                paddingVertical: 8,
-                borderRadius: 8,
-                backgroundColor: newSplitType === type ? "black" : "#f3f4f6",
-                borderWidth: 1,
-                borderColor: newSplitType === type ? "black" : "#e5e7eb",
-              }}
-            >
-              <Text style={{
-                color: newSplitType === type ? "white" : theme.colors.text,
-                fontSize: 12,
-                fontWeight: "500",
-              }}>
-                {type === 'AdvanceUse' ? 'Use Advance' : type === 'AdvanceAdd' ? 'Add to Advance' : type}
-              </Text>
-            </TouchableOpacity>
-          ))}
+              <TouchableOpacity
+                key={type}
+                onPress={() => onSplitTypeChange(type)}
+                style={{
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                  borderRadius: 8,
+                  backgroundColor: newSplitType === type ? "black" : "#f3f4f6",
+                  borderWidth: 1,
+                  borderColor: newSplitType === type ? "black" : "#e5e7eb",
+                }}
+              >
+                <Text style={{
+                  color: newSplitType === type ? "white" : theme.colors.text,
+                  fontSize: 12,
+                  fontWeight: "500",
+                }}>
+                  {type === 'AdvanceUse' ? 'Use Advance' : type === 'AdvanceAddCash' ? 'Add to Advance (Cash)' : type === 'AdvanceAddUPI' ? 'Add to Advance (UPI)' : type}
+                </Text>
+              </TouchableOpacity>
+            ))}
         </View>
       </View>
 
@@ -111,7 +111,7 @@ export const AddSplitForm: React.FC<AddSplitFormProps> = ({
           color: theme.colors.textSecondary,
           marginBottom: 8,
         }}>
-          {newSplitType === 'AdvanceAdd'
+          {newSplitType === 'AdvanceAddCash' || newSplitType === 'AdvanceAddUPI'
             ? 'Amount'
             : newSplitType === 'AdvanceUse'
               ? `Amount (Max: ₹${Math.max(0, advanceUseCap).toFixed(2)})`

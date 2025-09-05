@@ -13,11 +13,11 @@ interface SplitPaymentModalProps {
   creditAmount: number;
   advanceUseCap?: number;
   advanceBalance?: number;
-  newSplitType: "Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAdd";
+  newSplitType: "Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAddCash" | "AdvanceAddUPI";
   newSplitAmount: string;
   canProceed: boolean;
   onScreenChange: (screen: SplitModalScreen) => void;
-  onSplitTypeChange: (type: "Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAdd") => void;
+  onSplitTypeChange: (type: "Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAddCash" | "AdvanceAddUPI") => void;
   onAmountChange: (amount: string) => void;
   onAddSplit: () => void;
   onConfirmSplit: () => void;

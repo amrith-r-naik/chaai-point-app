@@ -6,7 +6,8 @@ export type SplitEntryType =
   | "UPI"
   | "Credit"
   | "AdvanceUse" // using existing advance balance towards bill
-  | "AdvanceAdd"; // extra money paid into advance wallet (not counted towards bill total)
+  | "AdvanceAddCash" // extra money paid into advance wallet via Cash (not counted towards bill total)
+  | "AdvanceAddUPI"; // extra money paid into advance wallet via UPI (not counted towards bill total)
 
 export interface SplitPayment {
   id: string;

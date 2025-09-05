@@ -59,24 +59,26 @@ class DashboardService {
   ): Promise<DashboardStats & { totalRevenue: number }> {
     if (!db) throw new Error("Database not initialized");
 
-    const today = new Date().toISOString().split("T")[0];
+  // Use local calendar day for "today" to avoid UTC shifting issues (e.g., IST)
+  const today = new Date().toLocaleDateString("en-CA");
     const filterStartDate = dateFilter?.startDate || today;
     const filterEndDate = dateFilter?.endDate || today;
 
-    // Helper to compute IST day range [startUtc, endUtc) for a given YYYY-MM-DD
+    // Helper to compute local(IST) day range [startUtc, endUtc) for a given YYYY-MM-DD
     const istRangeForDate = (dStr: string) => {
-      const startIst = new Date(dStr + "T00:00:00.000+05:30");
-      const startUtcIso = new Date(startIst.getTime() - 5.5 * 60 * 60 * 1000).toISOString();
-      const endUtcIso = new Date(startIst.getTime() - 5.5 * 60 * 60 * 1000 + 24 * 60 * 60 * 1000).toISOString();
+      // Construct the IST midnight for the date, then convert to UTC by taking the ISO string
+      const startUtcIso = new Date(dStr + "T00:00:00.000+05:30").toISOString();
+      const endUtcIso = new Date(
+        new Date(dStr + "T00:00:00.000+05:30").getTime() + 24 * 60 * 60 * 1000
+      ).toISOString();
       return { startUtcIso, endUtcIso };
     };
     // For an inclusive start/end date range, convert to a single [start, endNext) UTC range
     const rangeForInclusiveDates = (start: string, end: string) => {
-      const { startUtcIso } = istRangeForDate(start);
-      const endNextDate = new Date(new Date(end + "T00:00:00.000Z").getTime() + 24 * 60 * 60 * 1000)
-        .toISOString()
-        .slice(0, 10);
-      const { startUtcIso: endUtcIso } = istRangeForDate(endNextDate);
+      const startUtcIso = new Date(start + "T00:00:00.000+05:30").toISOString();
+      const endUtcIso = new Date(
+        new Date(end + "T00:00:00.000+05:30").getTime() + 24 * 60 * 60 * 1000
+      ).toISOString();
       return { startUtcIso, endUtcIso };
     };
     const { startUtcIso: filterStartUtc, endUtcIso: filterEndUtc } = rangeForInclusiveDates(

@@ -12,7 +12,7 @@ export const usePaymentState = ({ totalAmount, isClearance = false, advanceBalan
   const [selectedPaymentType, setSelectedPaymentType] = useState<PaymentType | null>(null);
   const [showSplitPayment, setShowSplitPayment] = useState(false);
   const [splitPayments, setSplitPayments] = useState<SplitPayment[]>([]);
-  const [newSplitType, setNewSplitType] = useState<"Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAdd">("Cash");
+  const [newSplitType, setNewSplitType] = useState<"Cash" | "UPI" | "Credit" | "AdvanceUse" | "AdvanceAddCash" | "AdvanceAddUPI">("Cash");
   const [newSplitAmount, setNewSplitAmount] = useState<string>("");
   const [splitModalScreen, setSplitModalScreen] = useState<SplitModalScreen>("list");
 
@@ -39,13 +39,13 @@ export const usePaymentState = ({ totalAmount, isClearance = false, advanceBalan
 
   const handleConfirmAddSplit = () => {
     const amount = parseFloat(newSplitAmount);
-    // For AdvanceAdd, allow any positive
-    if (newSplitType !== 'AdvanceAdd') {
+  // For AdvanceAddCash/UPI, allow any positive
+  if (newSplitType !== 'AdvanceAddCash' && newSplitType !== 'AdvanceAddUPI') {
       const max = newSplitType === 'AdvanceUse' ? Math.min(creditAmount, Math.max(0, remainingAdvanceCap)) : creditAmount;
       if (!SplitPaymentManager.validateSplitAmount(newSplitAmount, max)) {
         return;
       }
-    } else if (isNaN(amount) || amount <= 0) {
+  } else if (isNaN(amount) || amount <= 0) {
       return;
     }
 
@@ -69,12 +69,16 @@ export const usePaymentState = ({ totalAmount, isClearance = false, advanceBalan
     if (!selectedPaymentType) return false;
 
     if (selectedPaymentType === "Split") {
-      // For clearance, allow partial paid via split but require at least one non-credit part
+      // For clearance, allow AdvanceUse-only or mix; require total cleared equals outstanding
       if (isClearance) {
-        const totalMatches = SplitPaymentManager.validateSplitTotal(splitPayments, totalAmount);
-        if (!totalMatches) return false;
-        const hasPaid = splitPayments.some(p => (p.type === "Cash" || p.type === "UPI" || p.type === 'AdvanceUse') && p.amount > 0);
-        return hasPaid;
+        // In clearance mode, treat AdvanceUse as contributing towards total
+        const splitTotal = splitPayments
+          .filter(p => p.type === 'Cash' || p.type === 'UPI' || p.type === 'AdvanceUse' || p.type === 'Credit')
+          .reduce((sum, p) => sum + p.amount, 0);
+        const matches = Math.abs(splitTotal - totalAmount) < 0.01;
+        // Must have at least one contributing part (Cash/UPI/AdvanceUse or Credit remainder)
+        const hasAny = splitPayments.some(p => (p.type === 'Cash' || p.type === 'UPI' || p.type === 'AdvanceUse' || p.type === 'Credit') && p.amount > 0);
+        return matches && hasAny;
       }
       return SplitPaymentManager.validateSplitTotal(splitPayments, totalAmount);
     }

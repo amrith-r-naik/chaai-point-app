@@ -134,8 +134,6 @@ create table if not exists public.expenses (
   remarks text,
   created_at timestamptz not null default now(),
   expense_date date not null default now(),
--- Backfill expense_date for existing rows
-update public.expenses set expense_date = date_trunc('day', created_at) where expense_date is null;
   updated_at timestamptz not null default now(),
   deleted_at timestamptz,
   shop_id text not null
@@ -212,6 +210,36 @@ create index if not exists idx_customer_advances_created on public.customer_adva
 -- Backward-compat: drop payment_date if present from earlier iterations
 do $$ begin
   begin alter table public.customer_advances drop column if exists payment_date; exception when others then end;
+end $$;
+
+-- Ensure expense_date exists and is populated on existing databases (idempotent)
+do $$
+begin
+  -- Add column if it doesn't exist
+  begin
+    alter table public.expenses add column if not exists expense_date date;
+  exception when others then
+    -- ignore
+  end;
+
+  -- Set default to today (date only)
+  begin
+    alter table public.expenses alter column expense_date set default (now()::date);
+  exception when others then
+    -- ignore
+  end;
+
+  -- Backfill any NULLs using created_at day
+  update public.expenses
+    set expense_date = date_trunc('day', created_at)::date
+  where expense_date is null;
+
+  -- Enforce NOT NULL
+  begin
+    alter table public.expenses alter column expense_date set not null;
+  exception when others then
+    -- ignore (e.g., if any legacy NULLs remain)
+  end;
 end $$;
 
 -- =============================

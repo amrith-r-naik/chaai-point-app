@@ -409,6 +409,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
       typeof value === "number" &&
       (title.toLowerCase().includes("revenue") ||
         title.toLowerCase().includes("expense") ||
+        title.toLowerCase().includes("payment") ||
         title.toLowerCase().includes("profit") ||
         title.toLowerCase().includes("due") ||
         title.toLowerCase().includes("value") ||
@@ -425,6 +426,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
       typeof value === "number" &&
       (title.toLowerCase().includes("revenue") ||
         title.toLowerCase().includes("expense") ||
+        title.toLowerCase().includes("payment") ||
         title.toLowerCase().includes("profit") ||
         title.toLowerCase().includes("due") ||
         title.toLowerCase().includes("value") ||

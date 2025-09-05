@@ -233,3 +233,17 @@ npm i -D ts-node typescript
 12. Swipe right and left to navigate among active completed and all tabs of customers page
 13. DONE - In select items scree, When a category is selected and if I search something then the category should exit and search should happen in all list. and if I have searched for an item and if I select a category then the search should be cleared
 14. DONE - Remove the extra save button in add customer screen
+
+
+## The below query was added to fix the expense date column issue in Supabase
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS expense_date date;
+ALTER TABLE public.expenses ALTER COLUMN expense_date SET DEFAULT (now()::date);
+UPDATE public.expenses SET expense_date = date_trunc('day', created_at)::date WHERE expense_date IS NULL;
+ALTER TABLE public.expenses ALTER COLUMN expense_date SET NOT NULL;
+
+### Future Upgrade version features
+1. The customers names should be editable.
+2. Export the data as Report to Excel
+3. Add payment time calculation in order to check if the amount paid is more than the total billed amount, then an option to add extra amount as advance into that customer or else pay back the extra amount.
+4. Make the app speed.
+5. 

@@ -58,8 +58,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "861532b1-2c33-4a53-9de6-131945c8f2e6"
+        "projectId": "28e74ef4-6e5a-4689-bf07-012d5a857194"
       }
-    }
+    },
+    "owner": "narasimha25"
   }
 }

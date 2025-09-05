@@ -504,6 +504,140 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
         }
       }
 
+      // Drop legacy/unexpected fields that don't exist locally
+      // e.g., some older clouds had customer_advances.payment_date
+      if ((mapped as any)["payment_date"] !== undefined) {
+        delete (mapped as any)["payment_date"];
+      }
+
+      // Whitelist of allowed columns per local table to avoid inserting unknown fields
+      const allowed: Record<string, Set<string>> = {
+        customers: new Set([
+          "id",
+          "name",
+          "contact",
+          "creditBalance",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+          "shopId",
+        ]),
+        menu_items: new Set([
+          "id",
+          "name",
+          "category",
+          "price",
+          "isActive",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+          "shopId",
+        ]),
+        bills: new Set([
+          "id",
+          "billNumber",
+          "customerId",
+          "total",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+          "shopId",
+        ]),
+        kot_orders: new Set([
+          "id",
+          "kotNumber",
+          "customerId",
+          "billId",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+          "shopId",
+        ]),
+        kot_items: new Set([
+          "id",
+          "kotId",
+          "itemId",
+          "quantity",
+          "priceAtTime",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+          "shopId",
+        ]),
+        payments: new Set([
+          "id",
+          "billId",
+          "customerId",
+          "amount",
+          "mode",
+          "subType",
+          "remarks",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+          "shopId",
+        ]),
+        receipts: new Set([
+          "id",
+          "receiptNo",
+          "customerId",
+          "billId",
+          "amount",
+          "mode",
+          "remarks",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+          "shopId",
+        ]),
+        expenses: new Set([
+          "id",
+          "voucherNo",
+          "amount",
+          "towards",
+          "mode",
+          "remarks",
+          "expenseDate",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+          "shopId",
+        ]),
+        split_payments: new Set([
+          "id",
+          "receiptId",
+          "paymentType",
+          "amount",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+          "shopId",
+        ]),
+        expense_settlements: new Set([
+          "id",
+          "expenseId",
+          "paymentType",
+          "subType",
+          "amount",
+          "remarks",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+          "shopId",
+        ]),
+        customer_advances: new Set([
+          "id",
+          "customerId",
+          "entryType",
+          "amount",
+          "remarks",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+          "shopId",
+        ]),
+      } as const;
+
       // Conflict-aware: only apply cloud if newer than local
       const existing = (await db.getFirstAsync(
         `SELECT updatedAt, deletedAt FROM ${table} WHERE id = ?`,
@@ -531,13 +665,18 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
         await ensureLocalCustomer(mapped.customerId);
       }
 
-      const cols = Object.keys(mapped);
+      const cols = Object.keys(mapped).filter((c) =>
+        (allowed as any)[table]?.has(c)
+      );
+      // If any unknown keys were present, ignore them silently
+      const filtered: Record<string, any> = {};
+      for (const c of cols) filtered[c] = (mapped as any)[c];
       const placeholders = cols.map(() => "?").join(",");
       const updates = cols
         .filter((c) => c !== "id")
         .map((c) => `${c}=excluded.${c}`)
         .join(",");
-      const values = cols.map((c) => (mapped as any)[c]);
+  const values = cols.map((c) => (filtered as any)[c]);
       await db.runAsync(
         `INSERT INTO ${table} (${cols.join(",")}) VALUES (${placeholders})
          ON CONFLICT(id) DO UPDATE SET ${updates}`,

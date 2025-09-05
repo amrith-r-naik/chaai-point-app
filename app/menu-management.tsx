@@ -75,6 +75,7 @@ export default function MenuManagementScreen() {
   const [showMenuModal, setShowMenuModal] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [menuForm, setMenuForm] = useState({ name: "", category: "", price: "" });
+  const [showCustomCategory, setShowCustomCategory] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -108,7 +109,19 @@ export default function MenuManagementScreen() {
     return ordered;
   }, [items, search, category]);
 
-  const categories = useMemo(() => ["All", ...CATEGORIES.map(c => c.name)], []);
+  // Static categories + any additional categories found in items
+  const categories = useMemo(() => {
+    const staticCats = CATEGORIES.map(c => c.name);
+    const extra = Array.from(
+      new Set(
+        items
+          .map(i => i.category || "")
+          .filter(Boolean)
+          .filter(c => !staticCats.includes(c))
+      )
+    ).sort((a, b) => a.localeCompare(b));
+    return ["All", ...staticCats, ...extra];
+  }, [items]);
 
   const scrollToCategory = (cat: string) => {
     setCategory(cat);
@@ -125,11 +138,15 @@ export default function MenuManagementScreen() {
   const handleAdd = () => {
     setEditingItem(null);
     setMenuForm({ name: "", category: "", price: "" });
+    setShowCustomCategory(false);
     setShowMenuModal(true);
   };
   const handleEdit = (item: MenuItem) => {
     setEditingItem(item);
     setMenuForm({ name: item.name, category: item.category || "", price: String(item.price) });
+    // If editing an item with a non-standard category, switch to custom entry mode
+    const isStatic = !!CATEGORIES.find(c => c.name === (item.category || ""));
+    setShowCustomCategory(!isStatic && !!item.category);
     setShowMenuModal(true);
   };
   const handleDelete = (item: MenuItem) => {
@@ -268,13 +285,50 @@ export default function MenuManagementScreen() {
             <View style={{ marginBottom: 20 }}>
               <Text style={{ fontSize: 16, fontWeight: "600", color: theme.colors.text, marginBottom: 8 }}>Category *</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 4 }}>
-                {CATEGORIES.map(c => (
-                  <TouchableOpacity key={c.name} onPress={() => setMenuForm({ ...menuForm, category: c.name })} style={{ paddingHorizontal: 12, height: 34, borderRadius: 17, backgroundColor: menuForm.category === c.name ? theme.colors.primary : "#f3f4f6", borderWidth: 1, borderColor: menuForm.category === c.name ? theme.colors.primary : "#e5e7eb", alignItems: "center", justifyContent: "center", marginRight: 8, flexDirection: "row", gap: 6 }}>
-                    <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
-                    <Text style={{ fontSize: 14, color: menuForm.category === c.name ? "white" : theme.colors.text, fontWeight: menuForm.category === c.name ? "700" : "500" }}>{c.name}</Text>
-                  </TouchableOpacity>
-                ))}
+                {CATEGORIES.map(c => {
+                  const active = !showCustomCategory && menuForm.category === c.name;
+                  return (
+                    <TouchableOpacity
+                      key={c.name}
+                      onPress={() => { setMenuForm({ ...menuForm, category: c.name }); setShowCustomCategory(false); }}
+                      style={{ paddingHorizontal: 12, height: 34, borderRadius: 17, backgroundColor: active ? theme.colors.primary : "#f3f4f6", borderWidth: 1, borderColor: active ? theme.colors.primary : "#e5e7eb", alignItems: "center", justifyContent: "center", marginRight: 8, flexDirection: "row", gap: 6 }}
+                    >
+                      <Text style={{ fontSize: 16 }}>{c.emoji}</Text>
+                      <Text style={{ fontSize: 14, color: active ? "white" : theme.colors.text, fontWeight: active ? "700" : "500" }}>{c.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                {/* New custom category toggle */}
+                <TouchableOpacity
+                  onPress={() => setShowCustomCategory(s => !s)}
+                  style={{ paddingHorizontal: 12, height: 34, borderRadius: 17, backgroundColor: showCustomCategory ? theme.colors.primary : "#f3f4f6", borderWidth: 1, borderColor: showCustomCategory ? theme.colors.primary : "#e5e7eb", alignItems: "center", justifyContent: "center", marginRight: 8, flexDirection: "row", gap: 6 }}
+                >
+                  <Text style={{ fontSize: 16 }}>➕</Text>
+                  <Text style={{ fontSize: 14, color: showCustomCategory ? "white" : theme.colors.text, fontWeight: showCustomCategory ? "700" : "500" }}>New</Text>
+                </TouchableOpacity>
               </ScrollView>
+              {showCustomCategory && (
+                <View style={{ marginTop: 10 }}>
+                  <Text style={{ fontSize: 13, color: theme.colors.textSecondary, marginBottom: 6 }}>Enter new category name</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <TextInput
+                      value={menuForm.category}
+                      onChangeText={(text: string) => setMenuForm({ ...menuForm, category: text })}
+                      placeholder="e.g. Pizza, Pasta, Desserts"
+                      style={{ flex: 1, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, backgroundColor: "white" }}
+                      autoCapitalize="words"
+                    />
+                    {menuForm.category?.length > 0 && (
+                      <TouchableOpacity
+                        onPress={() => setMenuForm({ ...menuForm, category: "" })}
+                        style={{ marginLeft: 8, paddingHorizontal: 10, paddingVertical: 10 }}
+                      >
+                        <X size={18} color={theme.colors.textSecondary} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              )}
             </View>
             <View style={{ marginBottom: 20 }}>
               <Text style={{ fontSize: 16, fontWeight: "600", color: theme.colors.text, marginBottom: 8 }}>Price (₹) *</Text>

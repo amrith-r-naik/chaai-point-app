@@ -582,9 +582,9 @@ class OrderService {
       LEFT JOIN customers c ON ko.customerId = c.id
       LEFT JOIN kot_items ki ON ko.id = ki.kotId
       LEFT JOIN bills b ON ko.billId = b.id
-      LEFT JOIN receipts r ON b.customerId = r.customerId AND DATE(b.createdAt) = DATE(r.createdAt)
+      LEFT JOIN receipts r ON r.billId = b.id
       LEFT JOIN payments p ON b.id = p.billId
-      WHERE DATE(ko.createdAt) >= DATE(?)
+      WHERE ko.createdAt >= ?
       GROUP BY ko.id, ko.kotNumber, ko.customerId, ko.billId, ko.createdAt, c.name, c.contact, DATE(ko.createdAt), r.mode, p.mode
       ORDER BY ko.createdAt DESC
     `,
@@ -880,10 +880,15 @@ class OrderService {
         LEFT JOIN customers c ON ko.customerId = c.id
         LEFT JOIN kot_items ki ON ko.id = ki.kotId
         WHERE ko.billId IS NULL 
-        AND DATE(ko.createdAt) = DATE(?)
+        AND ko.createdAt >= ? AND ko.createdAt < ?
         GROUP BY ko.id, ko.kotNumber, ko.customerId, ko.createdAt, c.name
       `,
-        [targetDate]
+        (() => {
+          const d = new Date(targetDate + "T00:00:00.000+05:30");
+          const startUtc = new Date(d.getTime() - 5.5 * 3600 * 1000).toISOString();
+          const endUtc = new Date(d.getTime() - 5.5 * 3600 * 1000 + 86400000).toISOString();
+          return [startUtc, endUtc];
+        })()
       );
 
       if (activeKOTs.length === 0) {

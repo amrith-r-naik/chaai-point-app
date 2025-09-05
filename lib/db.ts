@@ -966,6 +966,31 @@ async function runMigrations() {
   } catch (e) {
     console.warn("[migrations] ensure expense_settlements failed", e);
   }
+
+  // v12 -> v13: Add read-only performance indexes
+  if (v < 13) {
+    await db!.execAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      await db!.execAsync(
+        `CREATE INDEX IF NOT EXISTS idx_receipts_customer_createdAt ON receipts(customerId, createdAt);`
+      );
+      await db!.execAsync(
+        `CREATE INDEX IF NOT EXISTS idx_payments_bill_createdAt ON payments(billId, createdAt);`
+      );
+      await db!.execAsync(
+        `CREATE INDEX IF NOT EXISTS idx_split_payments_receipt ON split_payments(receiptId);`
+      );
+      await db!.execAsync(
+        `CREATE INDEX IF NOT EXISTS idx_expenses_expenseDate ON expenses(expenseDate);`
+      );
+      await setUserVersion(13);
+      await db!.execAsync("COMMIT");
+      v = 13;
+    } catch (e) {
+      await db!.execAsync("ROLLBACK");
+      throw e;
+    }
+  }
 }
 
 // Integrity audit: verify bill totals and customer credit consistency
@@ -1115,46 +1140,53 @@ export async function nextLocalNumber(
     // seed from maxima in existing tables
     let seed = 0;
     if (name === "kot") {
-      // Compare by IST date
+      // Compare by UTC range corresponding to IST date
+      const startUtc = new Date(ist.getTime() - 5.5 * 3600 * 1000)
+        .toISOString();
+      const endUtc = new Date(ist.getTime() - 5.5 * 3600 * 1000 + 86400000)
+        .toISOString();
       const r = (await db.getFirstAsync(
         `SELECT COALESCE(MAX(kotNumber),0) as m
          FROM kot_orders
-         WHERE DATE(createdAt, '+330 minutes') = ?`,
-        [istDateKey]
+         WHERE createdAt >= ? AND createdAt < ?`,
+        [startUtc, endUtc]
       )) as any;
       seed = r?.m || 0;
     } else if (name === "bill") {
-      // Fiscal year window in IST
-      const fyStart = `${fiscalStartYear}-04-01`;
-      const fyEnd = `${fiscalStartYear + 1}-03-31`;
+      // Fiscal year window as UTC range corresponding to IST local dates
+      const fyStartIst = new Date(`${fiscalStartYear}-04-01T00:00:00.000+05:30`);
+      const fyEndNextIst = new Date(`${fiscalStartYear + 1}-04-01T00:00:00.000+05:30`);
+      const fyStartUtc = new Date(fyStartIst.getTime() - 5.5 * 3600 * 1000).toISOString();
+      const fyEndUtc = new Date(fyEndNextIst.getTime() - 5.5 * 3600 * 1000).toISOString();
       const r = (await db.getFirstAsync(
         `SELECT COALESCE(MAX(billNumber),0) as m
          FROM bills
-         WHERE DATE(createdAt, '+330 minutes') >= ?
-           AND DATE(createdAt, '+330 minutes') <= ?`,
-        [fyStart, fyEnd]
+         WHERE createdAt >= ? AND createdAt < ?`,
+        [fyStartUtc, fyEndUtc]
       )) as any;
       seed = r?.m || 0;
     } else if (name === "receipt") {
-      const fyStart = `${fiscalStartYear}-04-01`;
-      const fyEnd = `${fiscalStartYear + 1}-03-31`;
+      const fyStartIst = new Date(`${fiscalStartYear}-04-01T00:00:00.000+05:30`);
+      const fyEndNextIst = new Date(`${fiscalStartYear + 1}-04-01T00:00:00.000+05:30`);
+      const fyStartUtc = new Date(fyStartIst.getTime() - 5.5 * 3600 * 1000).toISOString();
+      const fyEndUtc = new Date(fyEndNextIst.getTime() - 5.5 * 3600 * 1000).toISOString();
       const r = (await db.getFirstAsync(
         `SELECT COALESCE(MAX(receiptNo),0) as m
          FROM receipts
-         WHERE DATE(createdAt, '+330 minutes') >= ?
-           AND DATE(createdAt, '+330 minutes') <= ?`,
-        [fyStart, fyEnd]
+         WHERE createdAt >= ? AND createdAt < ?`,
+        [fyStartUtc, fyEndUtc]
       )) as any;
       seed = r?.m || 0;
     } else if (name === "expense") {
-      const fyStart = `${fiscalStartYear}-04-01`;
-      const fyEnd = `${fiscalStartYear + 1}-03-31`;
+      const fyStartIst = new Date(`${fiscalStartYear}-04-01T00:00:00.000+05:30`);
+      const fyEndNextIst = new Date(`${fiscalStartYear + 1}-04-01T00:00:00.000+05:30`);
+      const fyStartUtc = new Date(fyStartIst.getTime() - 5.5 * 3600 * 1000).toISOString();
+      const fyEndUtc = new Date(fyEndNextIst.getTime() - 5.5 * 3600 * 1000).toISOString();
       const r = (await db.getFirstAsync(
         `SELECT COALESCE(MAX(voucherNo),0) as m
          FROM expenses
-         WHERE DATE(createdAt, '+330 minutes') >= ?
-           AND DATE(createdAt, '+330 minutes') <= ?`,
-        [fyStart, fyEnd]
+         WHERE createdAt >= ? AND createdAt < ?`,
+        [fyStartUtc, fyEndUtc]
       )) as any;
       seed = r?.m || 0;
     }

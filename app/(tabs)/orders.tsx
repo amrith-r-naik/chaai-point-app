@@ -207,17 +207,32 @@ export default function OrdersScreen() {
             <Text className="text-xl font-semibold text-gray-800 mb-2">
               No Orders Yet
             </Text>
-            <Text className="text-gray-500 text-center mb-6">
-              Start taking orders by creating your first order
-            </Text>
-            <TouchableOpacity
-              onPress={handleCreateOrder}
-              className="bg-blue-600 px-6 py-3 rounded-lg"
-            >
-              <Text className="text-white font-medium text-lg">
-                Create Order
-              </Text>
-            </TouchableOpacity>
+            {(() => {
+              const isTodaySelected =
+                toISTDateKey(selectedDate) === toISTDateKey(new Date());
+              const role = auth.user?.role?.toLowerCase?.();
+              const isAdmin = role === "admin";
+              const canCreate = isAdmin || isTodaySelected;
+              return (
+                <>
+                  <Text className="text-gray-500 text-center mb-6">
+                    {canCreate
+                      ? "Start taking orders by creating your first order"
+                      : "Order creation is available only for today's date (admins can create for other dates)."}
+                  </Text>
+                  {canCreate && (
+                    <TouchableOpacity
+                      onPress={handleCreateOrder}
+                      className="bg-blue-600 px-6 py-3 rounded-lg"
+                    >
+                      <Text className="text-white font-medium text-lg">
+                        Create Order
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              );
+            })()}
           </View>
         ) : (
           <FlatList

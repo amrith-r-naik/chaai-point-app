@@ -63,6 +63,28 @@ class DashboardService {
     const filterStartDate = dateFilter?.startDate || today;
     const filterEndDate = dateFilter?.endDate || today;
 
+    // Helper to compute IST day range [startUtc, endUtc) for a given YYYY-MM-DD
+    const istRangeForDate = (dStr: string) => {
+      const startIst = new Date(dStr + "T00:00:00.000+05:30");
+      const startUtcIso = new Date(startIst.getTime() - 5.5 * 60 * 60 * 1000).toISOString();
+      const endUtcIso = new Date(startIst.getTime() - 5.5 * 60 * 60 * 1000 + 24 * 60 * 60 * 1000).toISOString();
+      return { startUtcIso, endUtcIso };
+    };
+    // For an inclusive start/end date range, convert to a single [start, endNext) UTC range
+    const rangeForInclusiveDates = (start: string, end: string) => {
+      const { startUtcIso } = istRangeForDate(start);
+      const endNextDate = new Date(new Date(end + "T00:00:00.000Z").getTime() + 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+      const { startUtcIso: endUtcIso } = istRangeForDate(endNextDate);
+      return { startUtcIso, endUtcIso };
+    };
+    const { startUtcIso: filterStartUtc, endUtcIso: filterEndUtc } = rangeForInclusiveDates(
+      filterStartDate,
+      filterEndDate
+    );
+    const { startUtcIso: todayStartUtc, endUtcIso: todayEndUtc } = istRangeForDate(today);
+
     const [
       totalOrdersResult,
       totalReceivedResult,
@@ -82,22 +104,22 @@ class DashboardService {
       advanceRefundedResult,
       advanceOutstandingResult,
     ] = await Promise.all([
-      this.getTotalOrders(filterStartDate, filterEndDate),
-      this.gettotalReceived(filterStartDate, filterEndDate),
+  this.getTotalOrders(filterStartUtc, filterEndUtc),
+  this.gettotalReceived(filterStartUtc, filterEndUtc),
       this.getOutstandingCredit(),
-      this.getTotalExpenses(filterStartDate, filterEndDate),
-      this.getTotalOrders(today, today),
-      this.getTotalExpenses(today, today),
-      this.getCreditAccrued(filterStartDate, filterEndDate),
-      this.getCreditCleared(filterStartDate, filterEndDate),
-      this.getExpensePaid(filterStartDate, filterEndDate),
-      this.getExpenseCreditAccrued(filterStartDate, filterEndDate),
-      this.getExpenseCreditCleared(filterStartDate, filterEndDate),
+  this.getTotalExpenses(filterStartDate, filterEndDate),
+  this.getTotalOrders(todayStartUtc, todayEndUtc),
+  this.getTotalExpenses(today, today),
+  this.getCreditAccrued(filterStartUtc, filterEndUtc),
+  this.getCreditCleared(filterStartUtc, filterEndUtc),
+  this.getExpensePaid(filterStartUtc, filterEndUtc),
+  this.getExpenseCreditAccrued(filterStartUtc, filterEndUtc),
+  this.getExpenseCreditCleared(filterStartUtc, filterEndUtc),
       this.getExpenseOutstandingCredit(),
-      this.getTotalRevenue(filterStartDate, filterEndDate),
-      this.getAdvanceByType("Add", filterStartDate, filterEndDate),
-      this.getAdvanceByType("Apply", filterStartDate, filterEndDate),
-      this.getAdvanceByType("Refund", filterStartDate, filterEndDate),
+  this.getTotalRevenue(filterStartUtc, filterEndUtc),
+  this.getAdvanceByType("Add", filterStartUtc, filterEndUtc),
+  this.getAdvanceByType("Apply", filterStartUtc, filterEndUtc),
+  this.getAdvanceByType("Refund", filterStartUtc, filterEndUtc),
       this.getAdvanceOutstanding(),
     ]);
 
@@ -143,24 +165,24 @@ class DashboardService {
   }
 
   private async getTotalOrders(
-    startDate: string,
-    endDate: string
+    startUtc: string,
+    endUtc: string
   ): Promise<number> {
     if (!db) throw new Error("Database not initialized");
 
     const result = (await db.getFirstAsync(
       `SELECT COUNT(*) as count FROM kot_orders 
        WHERE (deletedAt IS NULL)
-         AND DATE(createdAt, '+330 minutes') BETWEEN ? AND ?`,
-      [startDate, endDate]
+         AND createdAt >= ? AND createdAt < ?`,
+      [startUtc, endUtc]
     )) as any;
 
     return result?.count || 0;
   }
 
   private async gettotalReceived(
-    startDate: string,
-    endDate: string
+    startUtc: string,
+    endUtc: string
   ): Promise<number> {
     if (!db) throw new Error("Database not initialized");
     // Revenue is sum of cash/upi/etc plus credit clearances (exclude Accrual)
@@ -171,16 +193,16 @@ class DashboardService {
          FROM payments p
          WHERE (p.subType IS NULL OR p.subType = 'Clearance')
            AND (p.deletedAt IS NULL)
-           AND DATE(p.createdAt, '+330 minutes') BETWEEN ? AND ?`,
-        [startDate, endDate]
+           AND p.createdAt >= ? AND p.createdAt < ?`,
+        [startUtc, endUtc]
       ),
       db.getFirstAsync(
         `SELECT COALESCE(SUM(amount),0) as total
          FROM customer_advances
          WHERE entryType = 'Apply'
            AND (deletedAt IS NULL)
-           AND DATE(createdAt, '+330 minutes') BETWEEN ? AND ?`,
-        [startDate, endDate]
+           AND createdAt >= ? AND createdAt < ?`,
+        [startUtc, endUtc]
       ),
     ]);
     const fromPayments = (payRow as any)?.revenue || 0;
@@ -197,33 +219,33 @@ class DashboardService {
   }
 
   private async getCreditAccrued(
-    startDate: string,
-    endDate: string
+    startUtc: string,
+    endUtc: string
   ): Promise<number> {
     if (!db) throw new Error("Database not initialized");
     const result = (await db.getFirstAsync(
       `
       SELECT COALESCE(SUM(amount),0) as total FROM payments 
       WHERE subType = 'Accrual' AND (deletedAt IS NULL)
-        AND DATE(createdAt, '+330 minutes') BETWEEN ? AND ?
+        AND createdAt >= ? AND createdAt < ?
     `,
-      [startDate, endDate]
+      [startUtc, endUtc]
     )) as any;
     return result?.total || 0;
   }
 
   private async getCreditCleared(
-    startDate: string,
-    endDate: string
+    startUtc: string,
+    endUtc: string
   ): Promise<number> {
     if (!db) throw new Error("Database not initialized");
     const result = (await db.getFirstAsync(
       `
       SELECT COALESCE(SUM(amount),0) as total FROM payments 
       WHERE subType = 'Clearance' AND (deletedAt IS NULL)
-        AND DATE(createdAt, '+330 minutes') BETWEEN ? AND ?
+        AND createdAt >= ? AND createdAt < ?
     `,
-      [startDate, endDate]
+      [startUtc, endUtc]
     )) as any;
     return result?.total || 0;
   }
@@ -235,10 +257,10 @@ class DashboardService {
     if (!db) throw new Error("Database not initialized");
 
     const result = (await db.getFirstAsync(
-      `SELECT COALESCE(SUM(amount), 0) as expenses 
-   FROM expenses 
-   WHERE (deletedAt IS NULL) AND date(expenseDate) BETWEEN ? AND ?`,
-      [startDate, endDate]
+    `SELECT COALESCE(SUM(amount), 0) as expenses 
+  FROM expenses 
+  WHERE (deletedAt IS NULL) AND expenseDate >= ? AND expenseDate <= ?`,
+    [startDate, endDate]
     )) as any;
 
     return result?.expenses || 0;
@@ -246,44 +268,44 @@ class DashboardService {
 
   // Expense reporting based on settlements
   private async getExpensePaid(
-    startDate: string,
-    endDate: string
+    startUtc: string,
+    endUtc: string
   ): Promise<number> {
     if (!db) throw new Error("Database not initialized");
     const row = (await db.getFirstAsync(
       `SELECT COALESCE(SUM(amount),0) as total FROM expense_settlements 
        WHERE (subType IS NULL OR subType = '' OR subType = 'Clearance')
-         AND DATE(createdAt, '+330 minutes') BETWEEN ? AND ?
+         AND createdAt >= ? AND createdAt < ?
          AND (deletedAt IS NULL)`,
-      [startDate, endDate]
+      [startUtc, endUtc]
     )) as any;
     return row?.total || 0;
   }
 
   private async getExpenseCreditAccrued(
-    startDate: string,
-    endDate: string
+    startUtc: string,
+    endUtc: string
   ): Promise<number> {
     if (!db) throw new Error("Database not initialized");
     const row = (await db.getFirstAsync(
       `SELECT COALESCE(SUM(amount),0) as total FROM expense_settlements 
-       WHERE subType = 'Accrual' AND DATE(createdAt, '+330 minutes') BETWEEN ? AND ?
+       WHERE subType = 'Accrual' AND createdAt >= ? AND createdAt < ?
          AND (deletedAt IS NULL)`,
-      [startDate, endDate]
+      [startUtc, endUtc]
     )) as any;
     return row?.total || 0;
   }
 
   private async getExpenseCreditCleared(
-    startDate: string,
-    endDate: string
+    startUtc: string,
+    endUtc: string
   ): Promise<number> {
     if (!db) throw new Error("Database not initialized");
     const row = (await db.getFirstAsync(
       `SELECT COALESCE(SUM(amount),0) as total FROM expense_settlements 
-       WHERE subType = 'Clearance' AND DATE(createdAt, '+330 minutes') BETWEEN ? AND ?
+       WHERE subType = 'Clearance' AND createdAt >= ? AND createdAt < ?
          AND (deletedAt IS NULL)`,
-      [startDate, endDate]
+      [startUtc, endUtc]
     )) as any;
     return row?.total || 0;
   }
@@ -302,6 +324,9 @@ class DashboardService {
   async getRevenueByDays(days: number = 7): Promise<RevenueByDay[]> {
     if (!db) throw new Error("Database not initialized");
 
+    // Compute UTC lower bound for the earliest IST date we want
+    const startIst = new Date(Date.now() + 5.5 * 3600 * 1000 - days * 86400000);
+    const startUtcIso = new Date(startIst.getTime() - 5.5 * 3600 * 1000).toISOString();
     const result = (await db.getAllAsync(
       `SELECT 
          DATE(ko.createdAt, '+330 minutes') as date,
@@ -312,9 +337,10 @@ class DashboardService {
        WHERE ko.billId IS NOT NULL 
          AND (ko.deletedAt IS NULL)
          AND (ki.deletedAt IS NULL OR ki.deletedAt IS NULL)
-         AND DATE(ko.createdAt, '+330 minutes') >= DATE('now', '+330 minutes', '-${days} days')
+         AND ko.createdAt >= ?
        GROUP BY DATE(ko.createdAt, '+330 minutes')
-       ORDER BY DATE(ko.createdAt, '+330 minutes') DESC`
+       ORDER BY DATE(ko.createdAt, '+330 minutes') DESC`,
+      [startUtcIso]
     )) as any[];
 
     return result.map((row) => ({
@@ -327,14 +353,14 @@ class DashboardService {
   // Advances: ledger-based metrics
   private async getAdvanceByType(
     entryType: "Add" | "Apply" | "Refund",
-    startDate: string,
-    endDate: string
+    startUtc: string,
+    endUtc: string
   ): Promise<number> {
     if (!db) throw new Error("Database not initialized");
     const row = (await db.getFirstAsync(
       `SELECT COALESCE(SUM(amount),0) as total FROM customer_advances 
-       WHERE entryType = ? AND (deletedAt IS NULL) AND date(createdAt) BETWEEN ? AND ?`,
-      [entryType, startDate, endDate]
+       WHERE entryType = ? AND (deletedAt IS NULL) AND createdAt >= ? AND createdAt < ?`,
+      [entryType, startUtc, endUtc]
     )) as any;
     return row?.total || 0;
   }
@@ -393,7 +419,7 @@ class DashboardService {
     let params: string[] = [];
 
     if (dateFilter) {
-      query += ` WHERE date(expenseDate) BETWEEN ? AND ?`;
+  query += ` WHERE expenseDate >= ? AND expenseDate <= ?`;
       params = [dateFilter.startDate, dateFilter.endDate];
     }
 
@@ -418,7 +444,7 @@ class DashboardService {
   ): Promise<ExpenseListItem[]> {
     if (!db) throw new Error("Database not initialized");
 
-    const where = dateFilter ? `WHERE date(e.expenseDate) BETWEEN ? AND ?` : "";
+  const where = dateFilter ? `WHERE e.expenseDate >= ? AND e.expenseDate <= ?` : "";
     const params: string[] = dateFilter
       ? [dateFilter.startDate, dateFilter.endDate]
       : [];
@@ -488,8 +514,13 @@ class DashboardService {
     let params: string[] = [];
 
     if (dateFilter) {
-      query += ` WHERE date(ko.createdAt) BETWEEN ? AND ?`;
-      params = [dateFilter.startDate, dateFilter.endDate];
+      // Convert inclusive IST dates to a single UTC range for index-friendly filtering
+      const startIst = new Date(dateFilter.startDate + "T00:00:00.000+05:30");
+      const endNextIst = new Date(new Date(dateFilter.endDate + "T00:00:00.000+05:30").getTime() + 86400000);
+      const startUtc = new Date(startIst.getTime() - 5.5 * 3600 * 1000).toISOString();
+      const endUtc = new Date(endNextIst.getTime() - 5.5 * 3600 * 1000).toISOString();
+      query += ` WHERE ko.createdAt >= ? AND ko.createdAt < ?`;
+      params = [startUtc, endUtc];
     }
 
     query += `
@@ -509,7 +540,7 @@ class DashboardService {
     }));
   }
 
-  async getTotalRevenue(startDate: string, endDate: string): Promise<number> {
+  async getTotalRevenue(startUtc: string, endUtc: string): Promise<number> {
     if (!db) throw new Error("Database not initialized");
     // Total billed amount: sum of all items in billed KOTs
     const result = (await db.getFirstAsync(
@@ -519,8 +550,8 @@ class DashboardService {
        WHERE ko.billId IS NOT NULL
          AND (ko.deletedAt IS NULL)
          AND (ki.deletedAt IS NULL OR ki.deletedAt IS NULL)
-         AND DATE(ko.createdAt, '+330 minutes') BETWEEN ? AND ?`,
-      [startDate, endDate]
+         AND ko.createdAt >= ? AND ko.createdAt < ?`,
+      [startUtc, endUtc]
     )) as any;
     return result?.totalRevenue || 0;
   }

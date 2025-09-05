@@ -333,6 +333,10 @@ class PaymentService {
 
     // Use provided date or today's date for filtering KOTs
     const dateToUse = targetDate || new Date().toISOString().split("T")[0];
+    const dayStartIso = `${dateToUse}T00:00:00.000Z`;
+    const nextDayStartIso = new Date(
+      new Date(dayStartIso).getTime() + 24 * 60 * 60 * 1000
+    ).toISOString();
 
     await db.runAsync(
       `
@@ -340,9 +344,9 @@ class PaymentService {
       SET billId = ? 
       WHERE customerId = ? 
         AND billId IS NULL 
-        AND DATE(createdAt) = DATE(?)
+        AND createdAt >= ? AND createdAt < ?
     `,
-      [billId, customerId, dateToUse]
+      [billId, customerId, dayStartIso, nextDayStartIso]
     );
   }
 
@@ -591,12 +595,11 @@ class PaymentService {
         b.billNumber
       FROM receipts r
       LEFT JOIN customers c ON r.customerId = c.id
-      LEFT JOIN bills b ON r.customerId = b.customerId 
-        AND DATE(r.createdAt) = DATE(b.createdAt)
-      WHERE DATE(r.createdAt) >= DATE(?)
+      LEFT JOIN bills b ON r.billId = b.id
+      WHERE r.createdAt >= ?
       ORDER BY r.createdAt DESC
     `,
-      [startDateStr]
+      [startDateStr + "T00:00:00.000Z"]
     )) as any[];
 
     const dateGroups: Record<string, any> = {};
@@ -994,10 +997,10 @@ class PaymentService {
       FROM bills b
       JOIN customers c ON b.customerId = c.id
       LEFT JOIN receipts r ON r.billId = b.id
-      WHERE DATE(b.createdAt) >= DATE(?)
+      WHERE b.createdAt >= ?
       ORDER BY b.createdAt DESC
     `,
-      [startDateStr]
+      [startDateStr + "T00:00:00.000Z"]
     )) as any[];
     // Fetch clearance-only receipts (no billId)
     const clearanceReceipts = (await db.getAllAsync(
@@ -1007,10 +1010,10 @@ class PaymentService {
       FROM receipts r
       JOIN customers c ON r.customerId = c.id
       WHERE r.billId IS NULL
-        AND DATE(r.createdAt) >= DATE(?)
+        AND r.createdAt >= ?
       ORDER BY r.createdAt DESC
     `,
-      [startDateStr]
+      [startDateStr + "T00:00:00.000Z"]
     )) as any[];
     const groups: Record<string, any> = {};
     for (const row of rows) {

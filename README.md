@@ -244,6 +244,6 @@ ALTER TABLE public.expenses ALTER COLUMN expense_date SET NOT NULL;
 ### Future Upgrade version features
 1. The customers names should be editable.
 2. Export the data as Report to Excel
-3. Add payment time calculation in order to check if the amount paid is more than the total billed amount, then an option to add extra amount as advance into that customer or else pay back the extra amount.
+3. In credit clearance flow the add to advance doesnt work rectify it.
 4. Make the app speed.
 5. 

@@ -748,6 +748,16 @@ export const syncService = {
       }
     }
     syncLog.log(`[sync] completed`);
+    try {
+      const { signalChange } = await import("@/state/appEvents");
+      // Trigger global refresh so views recompute after new data pulled
+      signalChange.orders();
+      signalChange.bills();
+      signalChange.payments();
+      signalChange.expenses();
+      signalChange.customers();
+      signalChange.any();
+    } catch {}
   },
   async resetPushCheckpoint(table?: TableName) {
     if (!db) throw new Error("DB not ready");

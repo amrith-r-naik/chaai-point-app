@@ -57,8 +57,14 @@ class PaymentService {
     const paymentsInfo = (await db.getAllAsync(
       `PRAGMA table_info(payments)`
     )) as any[];
+    const billsInfo = (await db.getAllAsync(
+      `PRAGMA table_info(bills)`
+    )) as any[];
     const receiptsHasBillId = receiptsInfo.some((c) => c.name === "billId");
     const paymentsHasSubType = paymentsInfo.some((c) => c.name === "subType");
+    const billsHasUpdatedAt = billsInfo.some((c) => c.name === "updatedAt");
+    const billsHasDeletedAt = billsInfo.some((c) => c.name === "deletedAt");
+    const billsHasShopId = billsInfo.some((c) => c.name === "shopId");
     if (!receiptsHasBillId) {
       await db.execAsync(
         `ALTER TABLE receipts ADD COLUMN billId TEXT REFERENCES bills(id);`
@@ -67,6 +73,34 @@ class PaymentService {
     if (!paymentsHasSubType) {
       await db.execAsync(`ALTER TABLE payments ADD COLUMN subType TEXT;`);
     }
+    // Bring bills table up to sync metadata parity if older installs missing columns
+    if (!billsHasUpdatedAt) {
+      await db.execAsync(`ALTER TABLE bills ADD COLUMN updatedAt TEXT;`);
+    }
+    if (!billsHasDeletedAt) {
+      await db.execAsync(`ALTER TABLE bills ADD COLUMN deletedAt TEXT;`);
+    }
+    if (!billsHasShopId) {
+      await db.execAsync(`ALTER TABLE bills ADD COLUMN shopId TEXT;`);
+    }
+    // Backfill metadata & create index/ triggers (idempotent)
+    await db.execAsync(`UPDATE bills SET updatedAt = COALESCE(updatedAt, createdAt);`);
+    await db.execAsync(`UPDATE bills SET shopId = COALESCE(shopId, 'shop_1');`);
+    await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_bills_shop_updated ON bills(shopId, updatedAt);`);
+    await db.execAsync(`
+      CREATE TRIGGER IF NOT EXISTS trg_bills_updatedAt_insert
+      AFTER INSERT ON bills
+      FOR EACH ROW
+      BEGIN
+        UPDATE bills SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now')) WHERE id = NEW.id;
+      END;`);
+    await db.execAsync(`
+      CREATE TRIGGER IF NOT EXISTS trg_bills_updatedAt
+      AFTER UPDATE ON bills
+      FOR EACH ROW
+      BEGIN
+        UPDATE bills SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now')) WHERE id = NEW.id;
+      END;`);
     this.schemaChecked = true;
   }
   // Numbers are assigned by server after sync; no local generators
@@ -96,6 +130,8 @@ class PaymentService {
     `,
       [bill.id, bill.billNumber, bill.customerId, bill.total, bill.createdAt]
     );
+  // Ensure updatedAt set immediately (especially on older schemas pre-trigger) so sync orders bill before dependent KOT linkage
+  await db!.runAsync(`UPDATE bills SET updatedAt = COALESCE(updatedAt, ?) WHERE id = ?`, [bill.createdAt, bill.id]);
     try {
       const { signalChange } = await import("@/state/appEvents");
       signalChange.bills();
@@ -330,23 +366,34 @@ class PaymentService {
     targetDate?: string
   ): Promise<void> {
     if (!db) throw new Error("Database not initialized");
+    // Fetch bill createdAt if available (but don't skip if missing to avoid leaving KOTs orphaned)
+    let billCreatedAt: string | null = null;
+    try {
+      const row = (await db.getFirstAsync(
+        `SELECT createdAt FROM bills WHERE id = ?`,
+        [billId]
+      )) as any;
+      billCreatedAt = row?.createdAt || null;
+    } catch {}
 
-    // Use provided date or today's date for filtering KOTs
     const dateToUse = targetDate || new Date().toISOString().split("T")[0];
     const dayStartIso = `${dateToUse}T00:00:00.000Z`;
     const nextDayStartIso = new Date(
       new Date(dayStartIso).getTime() + 24 * 60 * 60 * 1000
     ).toISOString();
-
+    const nowIso = new Date().toISOString();
+    // Build conditional createdAt <= billCreatedAt clause only when we have bill timestamp
+    const clauseExtra = billCreatedAt ? ` AND createdAt <= ?` : "";
+    const params = billCreatedAt
+      ? [billId, nowIso, customerId, dayStartIso, nextDayStartIso, billCreatedAt]
+      : [billId, nowIso, customerId, dayStartIso, nextDayStartIso];
     await db.runAsync(
-      `
-      UPDATE kot_orders 
-      SET billId = ? 
-      WHERE customerId = ? 
-        AND billId IS NULL 
-        AND createdAt >= ? AND createdAt < ?
-    `,
-      [billId, customerId, dayStartIso, nextDayStartIso]
+      `UPDATE kot_orders
+         SET billId = ?, updatedAt = ?
+       WHERE customerId = ?
+         AND billId IS NULL
+         AND createdAt >= ? AND createdAt < ?${clauseExtra}`,
+      params
     );
   }
 
@@ -407,14 +454,20 @@ class PaymentService {
   ): Promise<void> {
     if (!db) throw new Error("Database not initialized");
     // Column guaranteed in schema; just update
+    const nowIso = new Date().toISOString();
     await db.runAsync(
       `
       UPDATE customers 
-      SET creditBalance = COALESCE(creditBalance, 0) + ?
+      SET creditBalance = COALESCE(creditBalance, 0) + ?, updatedAt = ?
       WHERE id = ?
     `,
-      [amount, customerId]
+      [amount, nowIso, customerId]
     ); // Store direct amount (already in rupees)
+    try {
+      const { signalChange } = await import("@/state/appEvents");
+      signalChange.customers();
+      signalChange.any();
+    } catch {}
   }
 
   async getCustomerCreditBalance(customerId: string): Promise<number> {
@@ -849,9 +902,9 @@ class PaymentService {
       }
       await db!.runAsync(
         `
-        UPDATE customers SET creditBalance = COALESCE(creditBalance,0) - ? WHERE id = ?
+  UPDATE customers SET creditBalance = COALESCE(creditBalance,0) - ?, updatedAt = ? WHERE id = ?
       `,
-        [paidTotal + advanceUsed, customerId]
+  [paidTotal + advanceUsed, now, customerId]
       );
 
       // Store split meta for UI
@@ -882,9 +935,9 @@ class PaymentService {
       // Decrement customer credit (store negative increment)
       await db!.runAsync(
         `
-        UPDATE customers SET creditBalance = COALESCE(creditBalance,0) - ? WHERE id = ?
+  UPDATE customers SET creditBalance = COALESCE(creditBalance,0) - ?, updatedAt = ? WHERE id = ?
       `,
-        [amount, customerId]
+  [amount, new Date().toISOString(), customerId]
       );
       const payment: Payment = {
         id: uuid.v4() as string,

@@ -423,10 +423,10 @@ class OrderService {
 
       await db!.runAsync(
         `
-        INSERT INTO kot_orders (id, kotNumber, customerId, createdAt)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO kot_orders (id, kotNumber, customerId, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?)
       `,
-        [orderId, kotNumber, orderData.customerId, createdAt]
+        [orderId, kotNumber, orderData.customerId, createdAt, createdAt]
       );
 
       // Create all KOT items in one roundtrip

@@ -25,9 +25,8 @@ import {
   IndianRupee,
   LogOut,
   Settings,
-  ShoppingCart,
   TrendingDown,
-  TrendingUp,
+  TrendingUp
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -822,11 +821,11 @@ export default function HomeScreen() {
 
             <View style={styles.metricsRow}>
               <MetricCard
-                title="Orders"
-                value={stats?.totalOrders || 0}
-                icon={<ShoppingCart size={20} color={theme.colors.primary} />}
+                title="Cash Received"
+                value={stats?.cashReceived || 0}
+                icon={<BanknoteArrowDown size={20} color={theme.colors.primary} />}
                 iconBg={theme.colors.primaryLight}
-                subtitle="Total orders"
+                subtitle="Cash payments"
               />
               <MetricCard
                 title="Expenses"
@@ -848,15 +847,13 @@ export default function HomeScreen() {
                 subtitle="Customer credit"
               />
               <MetricCard
-                title="Payment Received"
-                value={stats?.totalReceived || 0}
-                icon={
-                  <BanknoteArrowDown size={20} color={theme.colors.success} />
-                }
+                title="UPI Received"
+                value={stats?.upiReceived || 0}
+                icon={<BanknoteArrowDown size={20} color={theme.colors.success} />}
                 iconBg={theme.colors.successLight}
                 valueColor={theme.colors.success}
                 featured={true}
-                subtitle="Total received"
+                subtitle="UPI payments"
               />
             </View>
 

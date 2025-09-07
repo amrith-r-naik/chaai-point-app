@@ -1,6 +1,7 @@
 import { theme } from "@/constants/theme";
 import { advanceService } from "@/services/advanceService";
 import { paymentService } from "@/services/paymentService";
+import { appEvents } from "@/state/appEvents";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
 import { router, useLocalSearchParams } from "expo-router";
@@ -46,6 +47,8 @@ export default function CustomerDetailsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [advanceBalance, setAdvanceBalance] = useState<number | null>(null);
   const auth = use$(authState);
+  // Subscribe to global change counters so this screen auto-refreshes after sync
+  const events = use$(appEvents);
   const insets = useSafeAreaInsets();
 
   const loadCustomerData = useCallback(async () => {
@@ -88,6 +91,17 @@ export default function CustomerDetailsScreen() {
   useEffect(() => {
     loadCustomerData();
   }, [loadCustomerData]);
+
+  // Refresh when any global mutation (including pulled sync data) occurs while screen is visible
+  useEffect(() => {
+    if (!customerId || !auth.isDbReady) return;
+    // Debounce rapid bursts: basic microtask delay
+    const t = setTimeout(() => {
+      loadCustomerData();
+    }, 50);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events.anyVersion, events.customersVersion]);
 
   // Removed per-order filtering for minimal version
 

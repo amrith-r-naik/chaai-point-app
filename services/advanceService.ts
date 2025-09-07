@@ -61,7 +61,7 @@ class AdvanceService {
   ): Promise<AdvanceEntry> {
     if (!db) throw new Error("Database not initialized");
     if (amount <= 0) throw new Error("Amount must be positive");
-    const nowIso = new Date().toISOString();
+  const nowIso = new Date().toISOString();
     const entry: AdvanceEntry = {
       id: uuid.v4() as string,
       customerId,
@@ -72,8 +72,8 @@ class AdvanceService {
     };
     const insert = async () => {
       await db!.runAsync(
-        `INSERT INTO customer_advances (id, customerId, entryType, amount, remarks, createdAt, shopId)
-             VALUES (?, ?, ?, ?, ?, ?, 'shop_1')`,
+        `INSERT INTO customer_advances (id, customerId, entryType, amount, remarks, createdAt, updatedAt, shopId)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'shop_1')`,
         [
           entry.id,
           entry.customerId,
@@ -81,6 +81,7 @@ class AdvanceService {
           entry.amount,
           entry.remarks,
           entry.createdAt,
+          nowIso,
         ]
       );
     };
@@ -109,7 +110,7 @@ class AdvanceService {
     const balance = await this.getBalance(customerId);
     if (amount > balance)
       throw new Error("Insufficient advance balance to apply");
-    const nowIso = new Date().toISOString();
+  const nowIso = new Date().toISOString();
     const remark =
       opts?.remarks ??
       (opts?.context?.billId ? `Applied to bill ${opts.context.billId}` : null);
@@ -123,8 +124,8 @@ class AdvanceService {
     };
     const insert = async () => {
       await db!.runAsync(
-        `INSERT INTO customer_advances (id, customerId, entryType, amount, remarks, createdAt, shopId)
-             VALUES (?, ?, ?, ?, ?, ?, 'shop_1')`,
+        `INSERT INTO customer_advances (id, customerId, entryType, amount, remarks, createdAt, updatedAt, shopId)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'shop_1')`,
         [
           entry.id,
           entry.customerId,
@@ -132,6 +133,7 @@ class AdvanceService {
           entry.amount,
           entry.remarks,
           entry.createdAt,
+          nowIso,
         ]
       );
     };
@@ -155,7 +157,7 @@ class AdvanceService {
     const balance = await this.getBalance(customerId);
     if (amount > balance)
       throw new Error("Insufficient advance balance to refund");
-    const nowIso = new Date().toISOString();
+  const nowIso = new Date().toISOString();
     const entry: AdvanceEntry = {
       id: uuid.v4() as string,
       customerId,
@@ -166,8 +168,8 @@ class AdvanceService {
     };
     const insert = async () => {
       await db!.runAsync(
-        `INSERT INTO customer_advances (id, customerId, entryType, amount, remarks, createdAt, shopId)
-             VALUES (?, ?, ?, ?, ?, ?, 'shop_1')`,
+        `INSERT INTO customer_advances (id, customerId, entryType, amount, remarks, createdAt, updatedAt, shopId)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'shop_1')`,
         [
           entry.id,
           entry.customerId,
@@ -175,6 +177,7 @@ class AdvanceService {
           entry.amount,
           entry.remarks,
           entry.createdAt,
+          nowIso,
         ]
       );
     };

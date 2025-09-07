@@ -1,12 +1,13 @@
 import { db } from "../lib/db";
 
 export interface DashboardStats {
-  totalOrders: number;
-  totalReceived: number; // Sum of paid portions (non-credit) from KOTs whose bills have any paid component
+  cashReceived: number; // Sum of payments in Cash (Clearance + direct) + Advance usage treated as cash equivalent? (business rule: only pure cash)
+  upiReceived: number;  // Sum of payments in UPI (Clearance + direct)
+  totalReceived: number; // Retained for profit calc (cash+upi+advance usage)
   outstandingCredit: number; // SUM(customers.creditBalance)
   totalExpenses: number;
   profit: number;
-  todayOrders: number;
+  // Removed todayOrders & totalOrders per new requirement
   todayExpenses: number;
   creditAccrued?: number; // total credit granted in filter window
   creditCleared?: number; // total credit cleared in filter window
@@ -88,11 +89,9 @@ class DashboardService {
     const { startUtcIso: todayStartUtc, endUtcIso: todayEndUtc } = istRangeForDate(today);
 
     const [
-      totalOrdersResult,
       totalReceivedResult,
       outstandingCreditResult,
       totalExpensesResult,
-      todayOrdersResult,
       todayExpensesResult,
       creditAccruedResult,
       creditClearedResult,
@@ -106,11 +105,9 @@ class DashboardService {
       advanceRefundedResult,
       advanceOutstandingResult,
     ] = await Promise.all([
-  this.getTotalOrders(filterStartUtc, filterEndUtc),
   this.gettotalReceived(filterStartUtc, filterEndUtc),
       this.getOutstandingCredit(),
   this.getTotalExpenses(filterStartDate, filterEndDate),
-  this.getTotalOrders(todayStartUtc, todayEndUtc),
   this.getTotalExpenses(today, today),
   this.getCreditAccrued(filterStartUtc, filterEndUtc),
   this.getCreditCleared(filterStartUtc, filterEndUtc),
@@ -125,7 +122,6 @@ class DashboardService {
       this.getAdvanceOutstanding(),
     ]);
 
-    const totalOrders = totalOrdersResult;
     const totalReceived = totalReceivedResult;
     const outstandingCredit = outstandingCreditResult;
     const creditAccrued = creditAccruedResult;
@@ -133,7 +129,6 @@ class DashboardService {
     const totalExpenses = totalExpensesResult;
     const profit = totalReceived - totalExpenses;
 
-    const todayOrders = todayOrdersResult;
     const todayExpenses = todayExpensesResult;
     const advanceAdded = advanceAddedResult;
     const advanceUsed = advanceUsedResult;
@@ -142,13 +137,16 @@ class DashboardService {
       (advanceAdded || 0) - (advanceUsed || 0) - (advanceRefunded || 0);
     const advanceOutstanding = advanceOutstandingResult;
 
+    // Derive cash & upi portions (excluding credit accrual). Advance usage currently blended into totalReceived only.
+    const { cashPortion, upiPortion } = await this.getCashAndUpiSplit(filterStartUtc, filterEndUtc);
+
     return {
-      totalOrders,
+      cashReceived: cashPortion,
+      upiReceived: upiPortion,
       totalReceived,
       outstandingCredit,
       totalExpenses,
       profit,
-      todayOrders,
       todayExpenses,
       creditAccrued,
       creditCleared,
@@ -166,50 +164,37 @@ class DashboardService {
     };
   }
 
-  private async getTotalOrders(
-    startUtc: string,
-    endUtc: string
-  ): Promise<number> {
-    if (!db) throw new Error("Database not initialized");
-
-    const result = (await db.getFirstAsync(
-      `SELECT COUNT(*) as count FROM kot_orders 
-       WHERE (deletedAt IS NULL)
-         AND createdAt >= ? AND createdAt < ?`,
-      [startUtc, endUtc]
-    )) as any;
-
-    return result?.count || 0;
-  }
+  // Removed getTotalOrders per new dashboard requirement
 
   private async gettotalReceived(
     startUtc: string,
     endUtc: string
   ): Promise<number> {
     if (!db) throw new Error("Database not initialized");
-    // Revenue is sum of cash/upi/etc plus credit clearances (exclude Accrual)
-    // PLUS advance usage (customer_advances Apply) since those settle bills/credit without a payment row.
-    const [payRow, advRow] = await Promise.all([
-      db.getFirstAsync(
-        `SELECT COALESCE(SUM(p.amount),0) as revenue
+    // New definition: only Cash + UPI + Credit (accrual & clearance) payments.
+    const payRow = await db.getFirstAsync(
+      `SELECT COALESCE(SUM(p.amount),0) as revenue
          FROM payments p
-         WHERE (p.subType IS NULL OR p.subType = 'Clearance')
+         WHERE p.mode IN ('Cash','UPI','Credit')
            AND (p.deletedAt IS NULL)
            AND p.createdAt >= ? AND p.createdAt < ?`,
-        [startUtc, endUtc]
-      ),
-      db.getFirstAsync(
-        `SELECT COALESCE(SUM(amount),0) as total
-         FROM customer_advances
-         WHERE entryType = 'Apply'
-           AND (deletedAt IS NULL)
-           AND createdAt >= ? AND createdAt < ?`,
-        [startUtc, endUtc]
-      ),
-    ]);
-    const fromPayments = (payRow as any)?.revenue || 0;
-    const fromAdvanceUse = (advRow as any)?.total || 0;
-    return fromPayments + fromAdvanceUse;
+      [startUtc, endUtc]
+    );
+    return (payRow as any)?.revenue || 0;
+  }
+
+  private async getCashAndUpiSplit(startUtc: string, endUtc: string): Promise<{ cashPortion: number; upiPortion: number }> {
+    if (!db) throw new Error("Database not initialized");
+    const row = (await db.getFirstAsync(
+      `SELECT 
+         COALESCE(SUM(CASE WHEN mode = 'Cash' AND (subType IS NULL OR subType='Clearance') THEN amount ELSE 0 END),0) as cash,
+         COALESCE(SUM(CASE WHEN mode = 'UPI'  AND (subType IS NULL OR subType='Clearance') THEN amount ELSE 0 END),0) as upi
+       FROM payments 
+       WHERE (deletedAt IS NULL)
+         AND createdAt >= ? AND createdAt < ?`,
+      [startUtc, endUtc]
+    )) as any;
+    return { cashPortion: row?.cash || 0, upiPortion: row?.upi || 0 };
   }
 
   private async getOutstandingCredit(): Promise<number> {

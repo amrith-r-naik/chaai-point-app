@@ -816,6 +816,51 @@ async function runMigrations() {
     }
   }
 
+  // v12 -> v13: Ensure kot_orders & kot_items have sync metadata (shopId, deletedAt, updatedAt) + triggers
+  if (v < 13) {
+    await db!.execAsync("BEGIN IMMEDIATE TRANSACTION");
+    try {
+      const ensureMeta = async (table: string) => {
+        const cols = (await db!.getAllAsync(`PRAGMA table_info(${table})`)) as any[];
+        const hasShop = cols.some(c => c.name === 'shopId');
+        const hasDeleted = cols.some(c => c.name === 'deletedAt');
+        const hasUpdated = cols.some(c => c.name === 'updatedAt');
+        if (!hasShop) await db!.execAsync(`ALTER TABLE ${table} ADD COLUMN shopId TEXT;`);
+        if (!hasDeleted) await db!.execAsync(`ALTER TABLE ${table} ADD COLUMN deletedAt TEXT;`);
+        if (!hasUpdated) await db!.execAsync(`ALTER TABLE ${table} ADD COLUMN updatedAt TEXT;`);
+        // Backfill defaults
+        await db!.execAsync(`UPDATE ${table} SET shopId = COALESCE(shopId, 'shop_1');`);
+        await db!.execAsync(`UPDATE ${table} SET updatedAt = COALESCE(updatedAt, createdAt);`);
+        // Bump updatedAt to now so previously unsynced legacy rows get pushed
+        await db!.execAsync(`UPDATE ${table} SET updatedAt = DATETIME('now') WHERE updatedAt IS NOT NULL;`);
+        // Index & triggers
+        await db!.execAsync(`CREATE INDEX IF NOT EXISTS idx_${table}_shop_updated ON ${table}(shopId, updatedAt);`);
+        await db!.execAsync(`
+          CREATE TRIGGER IF NOT EXISTS trg_${table}_updatedAt_insert
+          AFTER INSERT ON ${table}
+          FOR EACH ROW
+          BEGIN
+            UPDATE ${table} SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now')) WHERE id = NEW.id;
+          END;`);
+        await db!.execAsync(`
+          CREATE TRIGGER IF NOT EXISTS trg_${table}_updatedAt
+          AFTER UPDATE ON ${table}
+          FOR EACH ROW
+          BEGIN
+            UPDATE ${table} SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now')) WHERE id = NEW.id;
+          END;`);
+      };
+      await ensureMeta('kot_orders');
+      await ensureMeta('kot_items');
+      await setUserVersion(13);
+      await db!.execAsync('COMMIT');
+      v = 13;
+    } catch (e) {
+      await db!.execAsync('ROLLBACK');
+      throw e;
+    }
+  }
+
   // Defensive: Ensure customer_advances exists even if user_version is already high (older DBs may have skipped v9)
   try {
     const exists = (await db!.getAllAsync(

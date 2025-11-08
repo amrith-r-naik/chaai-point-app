@@ -26,7 +26,7 @@ import {
   LogOut,
   Settings,
   TrendingDown,
-  TrendingUp
+  TrendingUp,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -501,7 +501,8 @@ export default function HomeScreen() {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
-  const [syncRunning, setSyncRunning] = useState(false);
+  const [pushRunning, setPushRunning] = useState(false);
+  const [pullRunning, setPullRunning] = useState(false);
   const [backupRunning, setBackupRunning] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [latestBackup, setLatestBackup] = useState<{ name: string } | null>(
@@ -567,19 +568,36 @@ export default function HomeScreen() {
     ]);
   };
 
-  const handleSyncNow = async () => {
+  const handlePushToCloud = async () => {
     try {
-      setSyncRunning(true);
+      setPushRunning(true);
       await openDatabase();
-      await syncService.syncAll();
+      await syncService.pushLocalChanges();
       const ts = await syncService.getLastSyncAt();
       if (ts) setLastSyncAt(ts);
-      Alert.alert("Sync", "Sync completed");
+      Alert.alert("Push Complete", "Local data pushed to cloud successfully");
     } catch (e: any) {
-      console.error("[sync] manual sync failed", e);
-      Alert.alert("Sync failed", e?.message || String(e));
+      console.error("[sync] push failed", e);
+      Alert.alert("Push Failed", e?.message || String(e));
     } finally {
-      setSyncRunning(false);
+      setPushRunning(false);
+    }
+  };
+
+  const handlePullFromCloud = async () => {
+    try {
+      setPullRunning(true);
+      await openDatabase();
+      await syncService.pullCloudChanges();
+      const ts = await syncService.getLastSyncAt();
+      if (ts) setLastSyncAt(ts);
+      Alert.alert("Pull Complete", "Cloud data synced to local successfully");
+      loadDashboardData(); // Refresh dashboard after pull
+    } catch (e: any) {
+      console.error("[sync] pull failed", e);
+      Alert.alert("Pull Failed", e?.message || String(e));
+    } finally {
+      setPullRunning(false);
     }
   };
 
@@ -823,7 +841,9 @@ export default function HomeScreen() {
               <MetricCard
                 title="Cash Received"
                 value={stats?.cashReceived || 0}
-                icon={<BanknoteArrowDown size={20} color={theme.colors.primary} />}
+                icon={
+                  <BanknoteArrowDown size={20} color={theme.colors.primary} />
+                }
                 iconBg={theme.colors.primaryLight}
                 subtitle="Cash payments"
               />
@@ -849,7 +869,9 @@ export default function HomeScreen() {
               <MetricCard
                 title="UPI Received"
                 value={stats?.upiReceived || 0}
-                icon={<BanknoteArrowDown size={20} color={theme.colors.success} />}
+                icon={
+                  <BanknoteArrowDown size={20} color={theme.colors.success} />
+                }
                 iconBg={theme.colors.successLight}
                 valueColor={theme.colors.success}
                 featured={true}
@@ -886,32 +908,57 @@ export default function HomeScreen() {
               </Text>
             </View>
             <Text style={{ color: "#6b7280", marginBottom: 12 }}>
-              Sync your data to the cloud and create a manual backup of your
-              local database.
+              Push local changes to cloud or pull cloud data to your device.
             </Text>
             <View style={{ flexDirection: "row", gap: 12 }}>
               <TouchableOpacity
-                onPress={handleSyncNow}
-                disabled={syncRunning}
+                onPress={handlePushToCloud}
+                disabled={pushRunning || pullRunning}
                 style={{
-                  backgroundColor: syncRunning
-                    ? "#9CA3AF"
-                    : theme.colors.primary,
+                  backgroundColor:
+                    pushRunning || pullRunning ? "#9CA3AF" : "#10B981",
                   paddingVertical: 12,
                   paddingHorizontal: 16,
                   borderRadius: 8,
                   flexDirection: "row",
                   alignItems: "center",
+                  flex: 1,
+                  justifyContent: "center",
                 }}
               >
-                {syncRunning ? (
+                {pushRunning ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <Text style={{ color: "white", fontWeight: "600" }}>
-                    Sync now
+                    ↑ Push
                   </Text>
                 )}
               </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handlePullFromCloud}
+                disabled={pushRunning || pullRunning}
+                style={{
+                  backgroundColor:
+                    pushRunning || pullRunning ? "#9CA3AF" : "#3B82F6",
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 8,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  flex: 1,
+                  justifyContent: "center",
+                }}
+              >
+                {pullRunning ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ color: "white", fontWeight: "600" }}>
+                    ↓ Pull
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+            <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
               <TouchableOpacity
                 onPress={handleBackupDb}
                 disabled={backupRunning}
@@ -923,6 +970,9 @@ export default function HomeScreen() {
                   borderWidth: 1,
                   borderColor: "#e5e7eb",
                   opacity: backupRunning ? 0.6 : 1,
+                  flex: 1,
+                  justifyContent: "center",
+                  alignItems: "center",
                 }}
               >
                 {backupRunning ? (

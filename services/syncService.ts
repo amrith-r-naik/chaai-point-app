@@ -676,7 +676,7 @@ async function applyPulled(table: TableName, rows: RowMap[]) {
         .filter((c) => c !== "id")
         .map((c) => `${c}=excluded.${c}`)
         .join(",");
-  const values = cols.map((c) => (filtered as any)[c]);
+      const values = cols.map((c) => (filtered as any)[c]);
       await db.runAsync(
         `INSERT INTO ${table} (${cols.join(",")}) VALUES (${placeholders})
          ON CONFLICT(id) DO UPDATE SET ${updates}`,
@@ -759,6 +759,80 @@ export const syncService = {
       signalChange.any();
     } catch {}
   },
+
+  async pullCloudChanges() {
+    if (!isSupabaseConfigured) {
+      console.warn("[sync] Skipping pull: Supabase not configured");
+      return;
+    }
+    syncLog.log(`[sync] pull-only starting`);
+    for (const table of TABLES) {
+      try {
+        const { lastPullAt } = await getSyncCheckpoint(table);
+        syncLog.log(`[sync][cloud] pull`, { table, since: lastPullAt });
+        const pulled = await pullCloud(table, lastPullAt);
+        await applyPulled(table, pulled.rows);
+        if (pulled.maxUpdatedAt)
+          await setSyncCheckpoint(table, { lastPullAt: pulled.maxUpdatedAt });
+      } catch (e) {
+        console.error(`[sync] pull failed for ${table}`, e);
+        syncLog.log(`[sync] pull error`, { table, error: String(e) });
+        throw e;
+      }
+    }
+    syncLog.log(`[sync] pull-only completed`);
+    try {
+      const { signalChange } = await import("@/state/appEvents");
+      signalChange.orders();
+      signalChange.bills();
+      signalChange.payments();
+      signalChange.expenses();
+      signalChange.customers();
+      signalChange.any();
+    } catch {}
+  },
+
+  async pushLocalChanges() {
+    if (!isSupabaseConfigured) {
+      console.warn("[sync] Skipping push: Supabase not configured");
+      return;
+    }
+    syncLog.log(`[sync] push-only starting`);
+    for (const table of TABLES) {
+      try {
+        const { lastPushAt } = await getSyncCheckpoint(table);
+        syncLog.log(`[sync][cloud] push`, { table, since: lastPushAt });
+        const toPush = await fetchLocalChanges(table, lastPushAt);
+        const pushed = await upsertCloud(table, toPush);
+        if (pushed.maxUpdatedAt) {
+          await setSyncCheckpoint(table, { lastPushAt: pushed.maxUpdatedAt });
+        } else if (toPush.length > 0) {
+          const localMax = toPush
+            .map((r) =>
+              normalizeTsString(
+                r.updatedAt || r.deletedAt || r.createdAt || null
+              )
+            )
+            .filter((s): s is string => !!s)
+            .sort()
+            .at(-1) as string | undefined;
+          if (localMax) {
+            syncLog.log(`[sync][cloud] advance lastPushAt without send`, {
+              table,
+              localMax,
+            });
+            await setSyncCheckpoint(table, { lastPushAt: localMax });
+          }
+        }
+      } catch (e) {
+        console.error(`[sync] push failed for ${table}`, e);
+        syncLog.log(`[sync] push error`, { table, error: String(e) });
+        throw e;
+      }
+    }
+    syncLog.log(`[sync] push-only completed`);
+  },
+
   async resetPushCheckpoint(table?: TableName) {
     if (!db) throw new Error("DB not ready");
     if (table) {

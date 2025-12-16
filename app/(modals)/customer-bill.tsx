@@ -109,7 +109,7 @@ export default function CustomerBillScreen() {
         0
       );
 
-      // TODO: Calculate tax and discount (you can adjust these rates)
+      // To calculate tax and discount (you can adjust these rates)
       const taxRate = 0.0; // 5% tax
       const tax = subtotal * taxRate;
       const discount = 0; // No discount for now

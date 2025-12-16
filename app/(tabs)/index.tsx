@@ -6,7 +6,6 @@ import { useFocusRefresh } from "@/hooks/useFocusRefresh";
 import { useScreenPerformance } from "@/hooks/useScreenPerformance";
 import { openDatabase } from "@/lib/db";
 import { logoutUser } from "@/services/authService";
-import { backupService } from "@/services/backupService";
 import {
   dashboardService,
   DashboardStats,
@@ -523,11 +522,8 @@ export default function HomeScreen() {
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [pushRunning, setPushRunning] = useState(false);
   const [pullRunning, setPullRunning] = useState(false);
-  const [backupRunning, setBackupRunning] = useState(false);
-  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
-  const [latestBackup, setLatestBackup] = useState<{ name: string } | null>(
-    null
-  );
+  const [lastPushTime, setLastPushTime] = useState<string | null>(null);
+  const [lastPullTime, setLastPullTime] = useState<string | null>(null);
 
   const getDateFilter = React.useCallback((): DateFilterOptions => {
     // Use local calendar day to avoid UTC shift issues
@@ -607,8 +603,19 @@ export default function HomeScreen() {
       setPushRunning(true);
       await openDatabase();
       await syncService.pushLocalChanges();
-      const ts = await syncService.getLastSyncAt();
-      if (ts) setLastSyncAt(ts);
+      // Load latest checkpoint times
+      console.log("[dashboard] Reloading checkpoints after push...");
+      const checkpoints = await syncService.getAllSyncCheckpoints();
+      console.log("[dashboard] Loaded checkpoints:", checkpoints);
+      if (checkpoints.length > 0) {
+        const lastPush = checkpoints
+          .map((c) => c.lastPushAt)
+          .filter(Boolean)
+          .sort()
+          .at(-1);
+        console.log("[dashboard] Latest push time:", lastPush);
+        if (lastPush) setLastPushTime(lastPush);
+      }
       Alert.alert("Push Complete", "Local data pushed to cloud successfully");
     } catch (e: any) {
       console.error("[sync] push failed", e);
@@ -623,8 +630,19 @@ export default function HomeScreen() {
       setPullRunning(true);
       await openDatabase();
       await syncService.pullCloudChanges();
-      const ts = await syncService.getLastSyncAt();
-      if (ts) setLastSyncAt(ts);
+      // Load latest checkpoint times
+      console.log("[dashboard] Reloading checkpoints after pull...");
+      const checkpoints = await syncService.getAllSyncCheckpoints();
+      console.log("[dashboard] Loaded checkpoints:", checkpoints);
+      if (checkpoints.length > 0) {
+        const lastPull = checkpoints
+          .map((c) => c.lastPullAt)
+          .filter(Boolean)
+          .sort()
+          .at(-1);
+        console.log("[dashboard] Latest pull time:", lastPull);
+        if (lastPull) setLastPullTime(lastPull);
+      }
       Alert.alert("Pull Complete", "Cloud data synced to local successfully");
       loadDashboardData(); // Refresh dashboard after pull
     } catch (e: any) {
@@ -635,34 +653,42 @@ export default function HomeScreen() {
     }
   }, [loadDashboardData]);
 
-  const handleBackupDb = useCallback(async () => {
-    try {
-      setBackupRunning(true);
-      await openDatabase();
-      const res = await backupService.backupNow();
-      setLatestBackup({
-        name: res.objectPath.split("/").pop() || res.objectPath,
-      });
-      Alert.alert("Backup", `Backup uploaded: ${res.objectPath}`);
-    } catch (e: any) {
-      console.error("[backup] failed", e);
-      Alert.alert("Backup failed", e?.message || String(e));
-    } finally {
-      setBackupRunning(false);
-    }
-  }, []);
-
   // Load last sync and latest backup on mount
   useEffect(() => {
     (async () => {
       try {
         await openDatabase();
-        const ts = await syncService.getLastSyncAt();
-        if (ts) setLastSyncAt(ts);
-        const latest = await backupService.getLatestBackup();
-        if (latest) setLatestBackup({ name: latest.name });
+        // Load individual push/pull times
+        console.log("[dashboard] Loading sync times on mount...");
+        const checkpoints = await syncService.getAllSyncCheckpoints();
+        console.log(
+          "[dashboard] Checkpoints loaded on mount:",
+          checkpoints.length
+        );
+        if (checkpoints.length > 0) {
+          const lastPush = checkpoints
+            .map((c) => c.lastPushAt)
+            .filter(Boolean)
+            .sort()
+            .at(-1);
+          const lastPull = checkpoints
+            .map((c) => c.lastPullAt)
+            .filter(Boolean)
+            .sort()
+            .at(-1);
+          console.log(
+            "[dashboard] Parsed times - push:",
+            lastPush,
+            "pull:",
+            lastPull
+          );
+          if (lastPush) setLastPushTime(lastPush);
+          if (lastPull) setLastPullTime(lastPull);
+        } else {
+          console.log("[dashboard] No checkpoints found on mount");
+        }
       } catch (e) {
-        console.warn("[sync] failed to load last sync time", e);
+        console.warn("[dashboard] failed to load sync times", e);
       }
     })();
   }, []);
@@ -944,89 +970,79 @@ export default function HomeScreen() {
               Push local changes to cloud or pull cloud data to your device.
             </Text>
             <View style={{ flexDirection: "row", gap: 12 }}>
-              <TouchableOpacity
-                onPress={handlePushToCloud}
-                disabled={pushRunning || pullRunning}
-                style={{
-                  backgroundColor:
-                    pushRunning || pullRunning ? "#9CA3AF" : "#10B981",
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                  borderRadius: 8,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  flex: 1,
-                  justifyContent: "center",
-                }}
-              >
-                {pushRunning ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={{ color: "white", fontWeight: "600" }}>
-                    ↑ Push
+              <View style={{ flex: 1 }}>
+                <TouchableOpacity
+                  onPress={handlePushToCloud}
+                  disabled={pushRunning || pullRunning}
+                  style={{
+                    backgroundColor:
+                      pushRunning || pullRunning ? "#9CA3AF" : "#10B981",
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    borderRadius: 8,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {pushRunning ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={{ color: "white", fontWeight: "600" }}>
+                      ↑ Push
+                    </Text>
+                  )}
+                </TouchableOpacity>
+                {lastPushTime && (
+                  <Text
+                    style={{
+                      marginTop: 4,
+                      fontSize: 11,
+                      color: "#6b7280",
+                      textAlign: "center",
+                    }}
+                  >
+                    {new Date(lastPushTime).toLocaleString()}
                   </Text>
                 )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handlePullFromCloud}
-                disabled={pushRunning || pullRunning}
-                style={{
-                  backgroundColor:
-                    pushRunning || pullRunning ? "#9CA3AF" : "#3B82F6",
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                  borderRadius: 8,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  flex: 1,
-                  justifyContent: "center",
-                }}
-              >
-                {pullRunning ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={{ color: "white", fontWeight: "600" }}>
-                    ↓ Pull
+              </View>
+              <View style={{ flex: 1 }}>
+                <TouchableOpacity
+                  onPress={handlePullFromCloud}
+                  disabled={pushRunning || pullRunning}
+                  style={{
+                    backgroundColor:
+                      pushRunning || pullRunning ? "#9CA3AF" : "#3B82F6",
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    borderRadius: 8,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {pullRunning ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={{ color: "white", fontWeight: "600" }}>
+                      ↓ Pull
+                    </Text>
+                  )}
+                </TouchableOpacity>
+                {lastPullTime && (
+                  <Text
+                    style={{
+                      marginTop: 4,
+                      fontSize: 11,
+                      color: "#6b7280",
+                      textAlign: "center",
+                    }}
+                  >
+                    {new Date(lastPullTime).toLocaleString()}
                   </Text>
                 )}
-              </TouchableOpacity>
+              </View>
             </View>
-            <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
-              <TouchableOpacity
-                onPress={handleBackupDb}
-                disabled={backupRunning}
-                style={{
-                  backgroundColor: "#fff",
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: "#e5e7eb",
-                  opacity: backupRunning ? 0.6 : 1,
-                  flex: 1,
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                {backupRunning ? (
-                  <ActivityIndicator />
-                ) : (
-                  <Text style={{ color: "#111827", fontWeight: "600" }}>
-                    Backup DB
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-            {lastSyncAt && (
-              <Text style={{ marginTop: 8, color: "#6b7280" }}>
-                Last sync: {new Date(lastSyncAt).toLocaleString()}
-              </Text>
-            )}
-            {latestBackup && (
-              <Text style={{ marginTop: 4, color: "#6b7280" }}>
-                Latest backup: {latestBackup.name}
-              </Text>
-            )}
           </View>
 
           {user?.role === "admin" && (

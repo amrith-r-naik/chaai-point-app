@@ -73,6 +73,17 @@ async function resetCustomerCheckpoints() {
   await syncService.resetPullCheckpoint("customers");
 }
 
+async function deleteTestCustomer(id: string) {
+  // Delete from local
+  if (!db) throw new Error("DB not ready");
+  await db.runAsync("DELETE FROM customers WHERE id = ?", [id]);
+
+  // Delete from cloud
+  const { error } = await supabase.from("customers").delete().eq("id", id);
+  if (error)
+    console.warn(`Failed to delete test customer ${id} from cloud:`, error);
+}
+
 export async function runCloudWinsTest(): Promise<TestResult> {
   const id = "diag_customer_cloudwins";
   try {
@@ -249,6 +260,18 @@ export async function runAllSyncDiagnostics() {
   results.push(await runLocalDeleteTest());
   results.push(await runIdempotentSyncTest());
   results.push(await runBackupTest());
+
+  // Cleanup test data
+  try {
+    await deleteTestCustomer("diag_customer_cloudwins");
+    await deleteTestCustomer("diag_customer_localwins");
+    await deleteTestCustomer("diag_customer_clouddelete");
+    await deleteTestCustomer("diag_customer_localdelete");
+    await deleteTestCustomer("diag_customer_idem");
+  } catch (e) {
+    console.warn("Failed to cleanup test customers:", e);
+  }
+
   return results;
 }
 

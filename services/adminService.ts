@@ -108,6 +108,24 @@ class AdminService {
       await db.runAsync(`DELETE FROM ${tableName}`);
       await db.runAsync(`PRAGMA foreign_keys = ON`);
 
+      // Reset sync checkpoints for this table so next push will sync the cleared state
+      if (tableName === "sync_state") {
+        console.log(`Sync state cleared - all checkpoints reset`);
+      } else if (
+        tableName !== "app_settings" &&
+        tableName !== "local_counters"
+      ) {
+        // Reset checkpoints for business data tables
+        const { syncService } = await import("@/services/syncService");
+        try {
+          await syncService.resetPullCheckpoint(tableName as any);
+          await syncService.resetPushCheckpoint(tableName as any);
+          console.log(`Reset sync checkpoints for ${tableName}`);
+        } catch (e) {
+          console.warn(`Could not reset checkpoints for ${tableName}:`, e);
+        }
+      }
+
       console.log(`Table ${tableName} cleared successfully`);
     } catch (error) {
       // Make sure to re-enable foreign keys even if there's an error
@@ -162,6 +180,54 @@ class AdminService {
       console.error("Error getting table counts:", error);
       throw error;
     }
+  }
+
+  // Clear cloud data to match local cleared state
+  async clearCloudData(): Promise<void> {
+    const { supabase } = await import("@/lib/supabase");
+    const tables = [
+      "split_payments",
+      "expense_settlements",
+      "customer_advances",
+      "kot_items",
+      "expenses",
+      "payments",
+      "receipts",
+      "kot_orders",
+      "bills",
+      "customers",
+      "menu_items",
+    ];
+
+    let cleared = 0;
+    for (const table of tables) {
+      try {
+        // First, get count of existing records
+        const { count: existingCount } = await supabase
+          .from(table)
+          .select("*", { count: "exact", head: true });
+
+        if (existingCount && existingCount > 0) {
+          // Delete using a condition that matches all records
+          const { error } = await supabase
+            .from(table)
+            .delete()
+            .not("id", "is", null);
+
+          if (error) {
+            console.error(`Error clearing cloud ${table}:`, error);
+          } else {
+            console.log(`Cleared ${existingCount} records from cloud ${table}`);
+            cleared += existingCount;
+          }
+        } else {
+          console.log(`Cloud ${table} is already empty`);
+        }
+      } catch (e) {
+        console.error(`Failed to clear cloud ${table}:`, e);
+      }
+    }
+    console.log(`Total cloud records cleared: ${cleared}`);
   }
 
   // Setup demo data

@@ -70,17 +70,20 @@ async function setSyncCheckpoint(
   values: { lastPushAt?: string | null; lastPullAt?: string | null }
 ) {
   if (!db) throw new Error("DB not ready");
+  console.log(`[syncService] setSyncCheckpoint for ${table}:`, values);
   const current = await getSyncCheckpoint(table);
   const next = {
     lastPushAt: values.lastPushAt ?? current.lastPushAt,
     lastPullAt: values.lastPullAt ?? current.lastPullAt,
   };
+  console.log(`[syncService] Saving checkpoint for ${table}:`, next);
   await db.runAsync(
     `INSERT INTO sync_state (tableName, lastPushAt, lastPullAt)
      VALUES (?, ?, ?)
      ON CONFLICT(tableName) DO UPDATE SET lastPushAt=excluded.lastPushAt, lastPullAt=excluded.lastPullAt`,
     [table, next.lastPushAt, next.lastPullAt]
   );
+  console.log(`[syncService] Checkpoint saved for ${table}`);
 }
 
 async function fetchLocalChanges(
@@ -720,8 +723,10 @@ export const syncService = {
         syncLog.log(`[sync][cloud] push`, { table, since: lastPushAt });
         const toPush = await fetchLocalChanges(table, lastPushAt);
         const pushed = await upsertCloud(table, toPush);
+        // Determine push checkpoint
+        let pushCheckpoint: string | undefined;
         if (pushed.maxUpdatedAt) {
-          await setSyncCheckpoint(table, { lastPushAt: pushed.maxUpdatedAt });
+          pushCheckpoint = pushed.maxUpdatedAt;
         } else if (toPush.length > 0) {
           // Nothing sent (server newer/equal). Avoid resending same candidates next run.
           const localMax = toPush
@@ -738,9 +743,12 @@ export const syncService = {
               table,
               localMax,
             });
-            await setSyncCheckpoint(table, { lastPushAt: localMax });
+            pushCheckpoint = localMax;
           }
         }
+        // Always save checkpoint, even if no local changes
+        const finalPushCheckpoint = pushCheckpoint || new Date().toISOString();
+        await setSyncCheckpoint(table, { lastPushAt: finalPushCheckpoint });
         syncLog.log(`[sync] table end`, { table });
       } catch (e) {
         console.error(`[sync] table sync failed for ${table}`, e);
@@ -773,8 +781,9 @@ export const syncService = {
         syncLog.log(`[sync][cloud] pull`, { table, since: lastPullAt });
         const pulled = await pullCloud(table, lastPullAt);
         await applyPulled(table, pulled.rows);
-        if (pulled.maxUpdatedAt)
-          await setSyncCheckpoint(table, { lastPullAt: pulled.maxUpdatedAt });
+        // Always save checkpoint, even if no data pulled
+        const pullCheckpoint = pulled.maxUpdatedAt || new Date().toISOString();
+        await setSyncCheckpoint(table, { lastPullAt: pullCheckpoint });
       } catch (e) {
         console.error(`[sync] pull failed for ${table}`, e);
         syncLog.log(`[sync] pull error`, { table, error: String(e) });
@@ -808,8 +817,10 @@ export const syncService = {
         syncLog.log(`[sync][cloud] push`, { table, since: lastPushAt });
         const toPush = await fetchLocalChanges(table, lastPushAt);
         const pushed = await upsertCloud(table, toPush);
+        // Determine push checkpoint
+        let pushCheckpoint: string | undefined;
         if (pushed.maxUpdatedAt) {
-          await setSyncCheckpoint(table, { lastPushAt: pushed.maxUpdatedAt });
+          pushCheckpoint = pushed.maxUpdatedAt;
         } else if (toPush.length > 0) {
           const localMax = toPush
             .map((r) =>
@@ -825,9 +836,12 @@ export const syncService = {
               table,
               localMax,
             });
-            await setSyncCheckpoint(table, { lastPushAt: localMax });
+            pushCheckpoint = localMax;
           }
         }
+        // Always save checkpoint, even if no local changes
+        const finalPushCheckpoint = pushCheckpoint || new Date().toISOString();
+        await setSyncCheckpoint(table, { lastPushAt: finalPushCheckpoint });
       } catch (e) {
         console.error(`[sync] push failed for ${table}`, e);
         syncLog.log(`[sync] push error`, { table, error: String(e) });
@@ -869,5 +883,20 @@ export const syncService = {
       `SELECT MAX(COALESCE(lastPullAt, lastPushAt)) as ts FROM sync_state`
     )) as any;
     return row?.ts || null;
+  },
+
+  async getAllSyncCheckpoints(): Promise<
+    Array<{
+      tableName: string;
+      lastPushAt: string | null;
+      lastPullAt: string | null;
+    }>
+  > {
+    if (!db) throw new Error("DB not ready");
+    const rows = (await db.getAllAsync(
+      `SELECT tableName, lastPushAt, lastPullAt FROM sync_state ORDER BY tableName ASC`
+    )) as any[];
+    console.log("[syncService] getAllSyncCheckpoints returned:", rows);
+    return rows;
   },
 };

@@ -272,9 +272,32 @@ export default function AdminSettingsScreen() {
               setLoading(true);
               await adminService.clearAllTables();
               await loadTableCounts();
+
+              // Ask if user wants to clear cloud data too
               Alert.alert(
-                "Success",
-                "All business data cleared successfully. User accounts preserved."
+                "Clear Cloud Data?",
+                "Local data has been cleared and sync checkpoints reset. Do you want to clear cloud data as well? If yes, cloud will be cleared. If no, next PULL will restore data from cloud.",
+                [
+                  { text: "Keep Cloud Data", style: "cancel" },
+                  {
+                    text: "Clear Cloud Too",
+                    style: "destructive",
+                    onPress: async () => {
+                      try {
+                        setLoading(true);
+                        await adminService.clearCloudData();
+                        Alert.alert(
+                          "Success",
+                          "Cloud data cleared successfully"
+                        );
+                      } catch (error) {
+                        Alert.alert("Error", `Failed to clear cloud: ${error}`);
+                      } finally {
+                        setLoading(false);
+                      }
+                    },
+                  },
+                ]
               );
             } catch (error) {
               Alert.alert("Error", `Failed to clear data: ${error}`);
@@ -307,6 +330,32 @@ export default function AdminSettingsScreen() {
               );
             } catch (error) {
               Alert.alert("Error", `Failed to setup demo data: ${error}`);
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleAddDemoMenuItems = () => {
+    Alert.alert(
+      "Add Sample Menu Items",
+      "This will insert standard menu items (Tea, Coffee, Snacks, etc.) into the database. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Add",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await menuService.addDemoMenuItems();
+              await loadTableCounts();
+              await loadMenuItems();
+              Alert.alert("Success", "Sample menu items added successfully");
+            } catch (error) {
+              Alert.alert("Error", `Failed to add sample menu items: ${error}`);
             } finally {
               setLoading(false);
             }
@@ -810,6 +859,7 @@ export default function AdminSettingsScreen() {
               paddingHorizontal: 20,
               borderRadius: 12,
               ...theme.shadows.sm,
+              marginBottom: 12,
             }}
           >
             <Settings size={20} color="white" />
@@ -822,6 +872,35 @@ export default function AdminSettingsScreen() {
               }}
             >
               Manage Menu Items
+            </Text>
+          </TouchableOpacity>
+
+          {/* Add Sample Menu Items Button */}
+          <TouchableOpacity
+            onPress={handleAddDemoMenuItems}
+            disabled={loading}
+            style={{
+              backgroundColor: "#10B981",
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              borderRadius: 12,
+              ...theme.shadows.sm,
+              opacity: loading ? 0.6 : 1,
+            }}
+          >
+            <Settings size={18} color="white" />
+            <Text
+              style={{
+                color: "white",
+                fontSize: 14,
+                fontWeight: "600",
+                marginLeft: 8,
+              }}
+            >
+              Add Sample Menu Items
             </Text>
           </TouchableOpacity>
         </View>

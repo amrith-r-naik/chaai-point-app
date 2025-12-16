@@ -241,7 +241,9 @@ export default function AdminSettingsScreen() {
   if (!isReady) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: "#f9fafb" }}>
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <View
+          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+        >
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={{ marginTop: 12, color: theme.colors.textSecondary }}>
             Loading settings...

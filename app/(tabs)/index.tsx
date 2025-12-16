@@ -604,16 +604,13 @@ export default function HomeScreen() {
       await openDatabase();
       await syncService.pushLocalChanges();
       // Load latest checkpoint times
-      console.log("[dashboard] Reloading checkpoints after push...");
       const checkpoints = await syncService.getAllSyncCheckpoints();
-      console.log("[dashboard] Loaded checkpoints:", checkpoints);
       if (checkpoints.length > 0) {
         const lastPush = checkpoints
           .map((c) => c.lastPushAt)
           .filter(Boolean)
           .sort()
           .at(-1);
-        console.log("[dashboard] Latest push time:", lastPush);
         if (lastPush) setLastPushTime(lastPush);
       }
       Alert.alert("Push Complete", "Local data pushed to cloud successfully");
@@ -631,16 +628,13 @@ export default function HomeScreen() {
       await openDatabase();
       await syncService.pullCloudChanges();
       // Load latest checkpoint times
-      console.log("[dashboard] Reloading checkpoints after pull...");
       const checkpoints = await syncService.getAllSyncCheckpoints();
-      console.log("[dashboard] Loaded checkpoints:", checkpoints);
       if (checkpoints.length > 0) {
         const lastPull = checkpoints
           .map((c) => c.lastPullAt)
           .filter(Boolean)
           .sort()
           .at(-1);
-        console.log("[dashboard] Latest pull time:", lastPull);
         if (lastPull) setLastPullTime(lastPull);
       }
       Alert.alert("Pull Complete", "Cloud data synced to local successfully");
@@ -659,12 +653,7 @@ export default function HomeScreen() {
       try {
         await openDatabase();
         // Load individual push/pull times
-        console.log("[dashboard] Loading sync times on mount...");
         const checkpoints = await syncService.getAllSyncCheckpoints();
-        console.log(
-          "[dashboard] Checkpoints loaded on mount:",
-          checkpoints.length
-        );
         if (checkpoints.length > 0) {
           const lastPush = checkpoints
             .map((c) => c.lastPushAt)
@@ -676,16 +665,8 @@ export default function HomeScreen() {
             .filter(Boolean)
             .sort()
             .at(-1);
-          console.log(
-            "[dashboard] Parsed times - push:",
-            lastPush,
-            "pull:",
-            lastPull
-          );
           if (lastPush) setLastPushTime(lastPush);
           if (lastPull) setLastPullTime(lastPull);
-        } else {
-          console.log("[dashboard] No checkpoints found on mount");
         }
       } catch (e) {
         console.warn("[dashboard] failed to load sync times", e);

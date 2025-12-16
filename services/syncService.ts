@@ -70,20 +70,17 @@ async function setSyncCheckpoint(
   values: { lastPushAt?: string | null; lastPullAt?: string | null }
 ) {
   if (!db) throw new Error("DB not ready");
-  console.log(`[syncService] setSyncCheckpoint for ${table}:`, values);
   const current = await getSyncCheckpoint(table);
   const next = {
     lastPushAt: values.lastPushAt ?? current.lastPushAt,
     lastPullAt: values.lastPullAt ?? current.lastPullAt,
   };
-  console.log(`[syncService] Saving checkpoint for ${table}:`, next);
   await db.runAsync(
     `INSERT INTO sync_state (tableName, lastPushAt, lastPullAt)
      VALUES (?, ?, ?)
      ON CONFLICT(tableName) DO UPDATE SET lastPushAt=excluded.lastPushAt, lastPullAt=excluded.lastPullAt`,
     [table, next.lastPushAt, next.lastPullAt]
   );
-  console.log(`[syncService] Checkpoint saved for ${table}`);
 }
 
 async function fetchLocalChanges(
@@ -896,7 +893,6 @@ export const syncService = {
     const rows = (await db.getAllAsync(
       `SELECT tableName, lastPushAt, lastPullAt FROM sync_state ORDER BY tableName ASC`
     )) as any[];
-    console.log("[syncService] getAllSyncCheckpoints returned:", rows);
     return rows;
   },
 };

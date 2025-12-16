@@ -197,7 +197,8 @@ ItemRow.displayName = "ItemRow";
 // ---- Main Component ----
 export default function SelectItemsModal() {
   const router = useRouter();
-  const order$ = use$(orderState);
+  // Granular state subscription for optimized re-renders
+  const selectedItems = use$(orderState.selectedItems);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [recentItems, setRecentItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -329,21 +330,21 @@ export default function SelectItemsModal() {
   // Category quantity map
   const categoryQuantities = useMemo(() => {
     const map: Record<string, number> = {};
-    order$.selectedItems.forEach((si) => {
+    selectedItems.forEach((si) => {
       const cat = si.item.category || "Uncategorized";
       map[cat] = (map[cat] || 0) + si.quantity;
     });
     return map;
-  }, [order$.selectedItems]);
+  }, [selectedItems]);
 
   // Quantity map for O(1) lookup per row (avoids .find on each render)
   const quantityMap = useMemo(() => {
     const m: Record<string, number> = {};
-    order$.selectedItems.forEach((si) => {
+    selectedItems.forEach((si) => {
       m[si.item.id] = si.quantity;
     });
     return m;
-  }, [order$.selectedItems]);
+  }, [selectedItems]);
 
   const getQty = (id: string) => quantityMap[id] || 0;
   const setQty = (item: MenuItem, qty: number) => {
@@ -360,8 +361,8 @@ export default function SelectItemsModal() {
     orderState.selectedItems.set(list);
   };
 
-  const totalItems = order$.selectedItems.reduce((t, s) => t + s.quantity, 0);
-  const totalAmount = order$.selectedItems.reduce(
+  const totalItems = selectedItems.reduce((t, s) => t + s.quantity, 0);
+  const totalAmount = selectedItems.reduce(
     (t, s) => t + s.quantity * s.item.price,
     0
   );
@@ -837,7 +838,7 @@ export default function SelectItemsModal() {
             />
           )}
         </View>
-        {order$.selectedItems.length > 0 && (
+        {selectedItems.length > 0 && (
           <View
             style={{
               position: "absolute",
@@ -936,7 +937,7 @@ export default function SelectItemsModal() {
                 borderTopLeftRadius: 18,
                 borderTopRightRadius: 18,
                 maxHeight: "70%",
-                paddingBottom: order$.selectedItems.length ? 90 : 24,
+                paddingBottom: selectedItems.length ? 90 : 24,
                 paddingHorizontal: 14,
                 paddingTop: 10,
               }}
@@ -982,7 +983,7 @@ export default function SelectItemsModal() {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ paddingBottom: 16 }}
               >
-                {order$.selectedItems.map((si) => (
+                {selectedItems.map((si) => (
                   <View
                     key={si.item.id}
                     style={{
@@ -1086,7 +1087,7 @@ export default function SelectItemsModal() {
                     </TouchableOpacity>
                   </View>
                 ))}
-                {order$.selectedItems.length === 0 && (
+                {selectedItems.length === 0 && (
                   <View style={{ paddingVertical: 30, alignItems: "center" }}>
                     <Text
                       style={{

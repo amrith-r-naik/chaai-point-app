@@ -15,8 +15,10 @@ export default function CustomerFormScreen() {
   const [nameError, setNameError] = useState("");
   const [contactError, setContactError] = useState("");
 
-  const customerStateData = use$(customerState);
-  const customer = customerStateData.selectedCustomer;
+  // Granular state subscriptions for optimized re-renders
+  const customer = use$(customerState.selectedCustomer);
+  const customerLoading = use$(customerState.loading);
+  const customerError = use$(customerState.error);
   const isEditing = !!customer;
 
   useEffect(() => {
@@ -97,7 +99,7 @@ export default function CustomerFormScreen() {
   };
 
   const handleClose = () => {
-    if (customerStateData.loading) return;
+    if (customerLoading) return;
 
     // Reset selection state
     customerState.selectedCustomer.set(null);
@@ -158,7 +160,7 @@ export default function CustomerFormScreen() {
                   value={name}
                   onChangeText={setName}
                   onBlur={() => validateName(name)}
-                  editable={!customerStateData.loading}
+                  editable={!customerLoading}
                 />
                 {nameError ? (
                   <Text
@@ -179,7 +181,7 @@ export default function CustomerFormScreen() {
                   onChangeText={setContact}
                   onBlur={() => validateContact(contact)}
                   keyboardType="phone-pad"
-                  editable={!customerStateData.loading}
+                  editable={!customerLoading}
                 />
                 {contactError ? (
                   <Text
@@ -219,7 +221,7 @@ export default function CustomerFormScreen() {
             </View>
 
             {/* Error Display */}
-            {customerStateData.error ? (
+            {customerError ? (
               <View
                 style={{
                   backgroundColor: "#fef2f2",
@@ -237,7 +239,7 @@ export default function CustomerFormScreen() {
                     fontWeight: "500",
                   }}
                 >
-                  {customerStateData.error}
+                  {customerError}
                 </Text>
               </View>
             ) : null}
@@ -259,7 +261,7 @@ export default function CustomerFormScreen() {
                   borderRadius: 12,
                   alignItems: "center",
                 }}
-                disabled={customerStateData.loading}
+                disabled={customerLoading}
               >
                 <Text
                   style={{
@@ -276,15 +278,15 @@ export default function CustomerFormScreen() {
                 onPress={handleSubmit}
                 style={{
                   flex: 1,
-                  backgroundColor: customerStateData.loading
+                  backgroundColor: customerLoading
                     ? theme.colors.borderLight
                     : theme.colors.primary,
                   paddingVertical: 16,
                   borderRadius: 12,
                   alignItems: "center",
-                  opacity: customerStateData.loading ? 0.6 : 1,
+                  opacity: customerLoading ? 0.6 : 1,
                 }}
-                disabled={customerStateData.loading}
+                disabled={customerLoading}
               >
                 <Text
                   style={{
@@ -293,7 +295,7 @@ export default function CustomerFormScreen() {
                     fontSize: 16,
                   }}
                 >
-                  {customerStateData.loading
+                  {customerLoading
                     ? "Saving..."
                     : isEditing
                       ? "Update Customer"

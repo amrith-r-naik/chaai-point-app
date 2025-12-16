@@ -146,25 +146,27 @@ function CustomerItem({
 
 export default function SelectCustomerScreen() {
   const router = useRouter();
-  const customerStateData = use$(customerState);
-  const auth = use$(authState);
-  const order$ = use$(orderState);
+  // Granular state subscriptions for optimized re-renders
+  const customers = use$(customerState.customers);
+  const customerLoading = use$(customerState.loading);
+  const isDbReady = use$(authState.isDbReady);
+  const selectedCustomerId = use$(orderState.selectedCustomerId);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    if (auth.isDbReady) {
+    if (isDbReady) {
       const task = InteractionManager.runAfterInteractions(() => {
         loadCustomers();
       });
       return () => task?.cancel?.();
     }
-  }, [auth.isDbReady]);
+  }, [isDbReady]);
 
   // Reload customers when screen comes back into focus (e.g., after adding a new customer)
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      if (auth.isDbReady) {
+      if (isDbReady) {
         const task = InteractionManager.runAfterInteractions(() => {
           if (!cancelled) loadCustomers();
         });
@@ -174,7 +176,7 @@ export default function SelectCustomerScreen() {
         };
       }
       return () => {};
-    }, [auth.isDbReady])
+    }, [isDbReady])
   );
 
   const loadCustomers = async () => {
@@ -199,7 +201,7 @@ export default function SelectCustomerScreen() {
     router.push("/(modals)/customer-form");
   };
 
-  const filteredCustomers = customerStateData.customers.filter(
+  const filteredCustomers = customers.filter(
     (customer) =>
       customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (customer.contact && customer.contact.includes(searchQuery))
@@ -304,7 +306,7 @@ export default function SelectCustomerScreen() {
 
           {/* Customer List */}
           <View style={{ flex: 1 }}>
-            {customerStateData.loading ? (
+            {customerLoading ? (
               <View
                 style={{
                   flex: 1,
@@ -391,7 +393,7 @@ export default function SelectCustomerScreen() {
                   <CustomerItem
                     customer={item}
                     onSelect={handleSelectCustomer}
-                    isSelected={order$.selectedCustomerId === item.id}
+                    isSelected={selectedCustomerId === item.id}
                   />
                 )}
                 showsVerticalScrollIndicator={false}

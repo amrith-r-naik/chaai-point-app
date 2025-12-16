@@ -19,7 +19,9 @@ import {
 } from "react-native";
 
 export default function LoginScreen() {
-  const auth = use$(authState);
+  // Granular state subscriptions for optimized re-renders
+  const authLoading = use$(authState.loading);
+  const authError = use$(authState.error);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [emailError, setEmailError] = useState("");
@@ -214,9 +216,9 @@ export default function LoginScreen() {
           </View>
 
           {/* Error Message */}
-          {auth.error ? (
+          {authError ? (
             <View className="bg-red-50 border border-red-200 rounded-lg p-4 mt-6">
-              <Text className="text-red-700 text-center">{auth.error}</Text>
+              <Text className="text-red-700 text-center">{authError}</Text>
             </View>
           ) : null}
 
@@ -227,15 +229,15 @@ export default function LoginScreen() {
           >
             <TouchableOpacity
               className={`py-4 rounded-full items-center justify-center ${
-                auth.loading || !isFormValid ? "bg-gray-300" : "bg-black"
+                authLoading || !isFormValid ? "bg-gray-300" : "bg-black"
               }`}
               onPress={onLogin}
               onPressIn={handleButtonPressIn}
               onPressOut={handleButtonPressOut}
-              disabled={auth.loading || !isFormValid}
+              disabled={authLoading || !isFormValid}
               activeOpacity={0.8}
             >
-              {auth.loading ? (
+              {authLoading ? (
                 <View className="flex-row items-center">
                   <ActivityIndicator size="small" color="white" />
                   <Text className="text-white font-semibold ml-2">
@@ -245,9 +247,7 @@ export default function LoginScreen() {
               ) : (
                 <Text
                   className={`font-semibold text-lg ${
-                    auth.loading || !isFormValid
-                      ? "text-gray-500"
-                      : "text-white"
+                    authLoading || !isFormValid ? "text-gray-500" : "text-white"
                   }`}
                 >
                   Sign In

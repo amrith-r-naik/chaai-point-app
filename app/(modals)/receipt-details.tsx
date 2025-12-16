@@ -22,10 +22,11 @@ export default function ReceiptDetailsScreen() {
   const [billDetails, setBillDetails] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const auth = use$(authState);
+  // Granular state subscription for optimized re-renders
+  const isDbReady = use$(authState.isDbReady);
 
   const loadBillDetails = useCallback(async () => {
-    if (!receiptId || !auth.isDbReady) return;
+    if (!receiptId || !isDbReady) return;
 
     try {
       setLoading(true);
@@ -44,7 +45,7 @@ export default function ReceiptDetailsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [receiptId, auth.isDbReady]);
+  }, [receiptId, isDbReady]);
 
   useEffect(() => {
     loadBillDetails();

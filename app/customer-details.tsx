@@ -24,7 +24,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 interface CustomerStats {
   totalPaid: number;
@@ -46,13 +49,14 @@ export default function CustomerDetailsScreen() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [advanceBalance, setAdvanceBalance] = useState<number | null>(null);
-  const auth = use$(authState);
+  // Granular state subscription for optimized re-renders
+  const isDbReady = use$(authState.isDbReady);
   // Subscribe to global change counters so this screen auto-refreshes after sync
   const events = use$(appEvents);
   const insets = useSafeAreaInsets();
 
   const loadCustomerData = useCallback(async () => {
-    if (!customerId || !auth.isDbReady) return;
+    if (!customerId || !isDbReady) return;
 
     try {
       setLoading(true);
@@ -60,9 +64,8 @@ export default function CustomerDetailsScreen() {
         await paymentService.getCustomerCreditBalance(customerId);
       const bills =
         await paymentService.getCustomerBillsWithPayments(customerId);
-      const paymentRows = await paymentService.getPaymentHistoryWithAdvanceParts(
-        customerId
-      );
+      const paymentRows =
+        await paymentService.getPaymentHistoryWithAdvanceParts(customerId);
       const totalPaid = paymentRows.reduce((s: number, p: any) => {
         // Exclude credit accrual payments (pure credit sales)
         if (p.mode === "Credit" && p.subType === "Accrual") {
@@ -86,7 +89,7 @@ export default function CustomerDetailsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [customerId, auth.isDbReady]);
+  }, [customerId, isDbReady]);
 
   useEffect(() => {
     loadCustomerData();
@@ -94,7 +97,7 @@ export default function CustomerDetailsScreen() {
 
   // Refresh when any global mutation (including pulled sync data) occurs while screen is visible
   useEffect(() => {
-    if (!customerId || !auth.isDbReady) return;
+    if (!customerId || !isDbReady) return;
     // Debounce rapid bursts: basic microtask delay
     const t = setTimeout(() => {
       loadCustomerData();
@@ -335,36 +338,73 @@ export default function CustomerDetailsScreen() {
   };
 
   const renderAdvanceRow = (e: any) => {
-    const color = e.entryType === 'Add' ? '#065f46' : e.entryType === 'Apply' ? '#1d4ed8' : '#b91c1c';
-    const bg = e.entryType === 'Add' ? '#ecfdf5' : e.entryType === 'Apply' ? '#eff6ff' : '#fee2e2';
+    const color =
+      e.entryType === "Add"
+        ? "#065f46"
+        : e.entryType === "Apply"
+          ? "#1d4ed8"
+          : "#b91c1c";
+    const bg =
+      e.entryType === "Add"
+        ? "#ecfdf5"
+        : e.entryType === "Apply"
+          ? "#eff6ff"
+          : "#fee2e2";
     return (
       <View
         key={e.id}
         style={{
-          backgroundColor: 'white',
+          backgroundColor: "white",
           borderRadius: 10,
           padding: 12,
           marginBottom: 8,
           borderWidth: 1,
-          borderColor: '#f3f4f6',
+          borderColor: "#f3f4f6",
         }}
       >
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <View>
-            <Text style={{ fontWeight: '700', color: theme.colors.text }}>
+            <Text style={{ fontWeight: "700", color: theme.colors.text }}>
               {e.entryType} ₹{e.amount}
             </Text>
-            <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 }}>
+            <Text
+              style={{
+                fontSize: 12,
+                color: theme.colors.textSecondary,
+                marginTop: 2,
+              }}
+            >
               {formatDate(e.createdAt)}
             </Text>
             {e.remarks ? (
-              <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 }}>
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: theme.colors.textSecondary,
+                  marginTop: 4,
+                }}
+              >
                 {e.remarks}
               </Text>
             ) : null}
           </View>
-          <View style={{ backgroundColor: bg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', color }}>{e.entryType}</Text>
+          <View
+            style={{
+              backgroundColor: bg,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+              borderRadius: 12,
+            }}
+          >
+            <Text style={{ fontSize: 12, fontWeight: "700", color }}>
+              {e.entryType}
+            </Text>
           </View>
         </View>
       </View>
@@ -530,13 +570,27 @@ export default function CustomerDetailsScreen() {
                 borderLeftColor: "#d97706",
               }}
             >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+              >
                 <Wallet size={24} color="#d97706" />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: "#92400e", fontWeight: "700", fontSize: 16 }}>
+                  <Text
+                    style={{
+                      color: "#92400e",
+                      fontWeight: "700",
+                      fontSize: 16,
+                    }}
+                  >
                     Outstanding Credit
                   </Text>
-                  <Text style={{ color: "#d97706", fontSize: 24, fontWeight: "bold" }}>
+                  <Text
+                    style={{
+                      color: "#d97706",
+                      fontSize: 24,
+                      fontWeight: "bold",
+                    }}
+                  >
                     {formatCurrency(stats.creditBalance || 0)}
                   </Text>
                 </View>
@@ -545,7 +599,9 @@ export default function CustomerDetailsScreen() {
                   onPress={handleCreditClearance}
                   style={{
                     backgroundColor:
-                      !stats.creditBalance || stats.creditBalance <= 0 ? "#e5e7eb" : "#d97706",
+                      !stats.creditBalance || stats.creditBalance <= 0
+                        ? "#e5e7eb"
+                        : "#d97706",
                     paddingHorizontal: 12,
                     paddingVertical: 6,
                     borderRadius: 8,
@@ -553,7 +609,10 @@ export default function CustomerDetailsScreen() {
                 >
                   <Text
                     style={{
-                      color: !stats.creditBalance || stats.creditBalance <= 0 ? "#9ca3af" : "white",
+                      color:
+                        !stats.creditBalance || stats.creditBalance <= 0
+                          ? "#9ca3af"
+                          : "white",
                       fontWeight: "600",
                       fontSize: 12,
                     }}
@@ -737,7 +796,9 @@ export default function CustomerDetailsScreen() {
                 style={{
                   flex: 1,
                   backgroundColor:
-                    !advanceBalance || advanceBalance <= 0 ? "#e5e7eb" : "#dc2626",
+                    !advanceBalance || advanceBalance <= 0
+                      ? "#e5e7eb"
+                      : "#dc2626",
                   paddingVertical: 10,
                   borderRadius: 10,
                   alignItems: "center",
@@ -745,7 +806,10 @@ export default function CustomerDetailsScreen() {
               >
                 <Text
                   style={{
-                    color: !advanceBalance || advanceBalance <= 0 ? "#9ca3af" : "white",
+                    color:
+                      !advanceBalance || advanceBalance <= 0
+                        ? "#9ca3af"
+                        : "white",
                     fontWeight: "800",
                   }}
                 >
@@ -864,15 +928,30 @@ export default function CustomerDetailsScreen() {
               elevation: 4,
             }}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 16,
+              }}
+            >
               <Wallet size={20} color={theme.colors.text} />
-              <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.colors.text }}>
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: "bold",
+                  color: theme.colors.text,
+                }}
+              >
                 Advance History
               </Text>
             </View>
             {advanceLedger.length === 0 ? (
-              <View style={{ alignItems: 'center', paddingVertical: 24 }}>
-                <Text style={{ color: theme.colors.textSecondary }}>No advance entries</Text>
+              <View style={{ alignItems: "center", paddingVertical: 24 }}>
+                <Text style={{ color: theme.colors.textSecondary }}>
+                  No advance entries
+                </Text>
               </View>
             ) : (
               <View>{advanceLedger.slice(0, 20).map(renderAdvanceRow)}</View>

@@ -11,7 +11,9 @@ import "./global.css";
 export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
-  const auth = use$(authState);
+  // Granular state subscriptions for optimized re-renders
+  const user = use$(authState.user);
+  const isInitialized = use$(authState.isInitialized);
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -43,23 +45,23 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (!auth.isInitialized) return;
+    if (!isInitialized) return;
 
     const inAuthGroup = segments[0] === "(auth)";
 
-    if (auth.user && inAuthGroup) {
+    if (user && inAuthGroup) {
       // User is signed in but viewing auth screens, redirect to home
       router.replace("/" as any);
-    } else if (!auth.user && !inAuthGroup) {
+    } else if (!user && !inAuthGroup) {
       // User is not signed in but not viewing auth screens, redirect to login
       router.replace("/(auth)/login");
     }
-  }, [auth.user, auth.isInitialized, segments, router]);
+  }, [user, isInitialized, segments, router]);
 
   // Auto-sync removed - using manual Push/Pull only
 
   // Show loading screen while initializing
-  if (!auth.isInitialized) {
+  if (!isInitialized) {
     return (
       <View className="flex-1 justify-center items-center bg-white">
         <Text className="text-lg text-gray-600 mb-2">Initializing...</Text>

@@ -11,8 +11,11 @@ import { orderState } from "../../state/orderState";
 
 export default function CreateOrderScreen() {
   const router = useRouter();
-  const orderStateData = use$(orderState);
-  const customerStateData = use$(customerState);
+  // Granular state subscriptions for optimized re-renders
+  const selectedCustomerId = use$(orderState.selectedCustomerId);
+  const selectedItems = use$(orderState.selectedItems);
+  const isCreatingOrder = use$(orderState.isCreatingOrder);
+  const customers = use$(customerState.customers);
   const { customerId: presetCustomerId } = useLocalSearchParams<{
     customerId?: string;
   }>();
@@ -37,10 +40,7 @@ export default function CreateOrderScreen() {
   };
 
   const handlePlaceOrder = async () => {
-    if (
-      !orderStateData.selectedCustomerId ||
-      orderStateData.selectedItems.length === 0
-    ) {
+    if (!selectedCustomerId || selectedItems.length === 0) {
       return;
     }
 
@@ -48,8 +48,8 @@ export default function CreateOrderScreen() {
       orderState.isCreatingOrder.set(true);
 
       const orderData = {
-        customerId: orderStateData.selectedCustomerId,
-        items: orderStateData.selectedItems.map((selectedItem) => ({
+        customerId: selectedCustomerId,
+        items: selectedItems.map((selectedItem) => ({
           itemId: selectedItem.item.id,
           quantity: selectedItem.quantity,
           price: selectedItem.item.price,
@@ -113,14 +113,12 @@ export default function CreateOrderScreen() {
   };
 
   const getSelectedCustomer = () => {
-    if (!orderStateData.selectedCustomerId) return null;
-    return customerStateData.customers.find(
-      (c) => c.id === orderStateData.selectedCustomerId
-    );
+    if (!selectedCustomerId) return null;
+    return customers.find((c) => c.id === selectedCustomerId);
   };
 
   const getTotalAmount = () => {
-    return orderStateData.selectedItems.reduce(
+    return selectedItems.reduce(
       (total, item) => total + item.item.price * item.quantity,
       0
     );
@@ -299,8 +297,7 @@ export default function CreateOrderScreen() {
                   borderRadius: 16,
                 }}
               >
-                {/* TODO: change icon to pencil and text to edit items if orderStateData.selectedItems.length > 0 */}
-                {orderStateData.selectedItems.length > 0 ? (
+                {selectedItems.length > 0 ? (
                   <>
                     <Pencil size={16} color={theme.colors.primary} />
                     <Text
@@ -332,14 +329,14 @@ export default function CreateOrderScreen() {
               </TouchableOpacity>
             </View>
 
-            {orderStateData.selectedItems.length > 0 ? (
+            {selectedItems.length > 0 ? (
               <View>
-                {orderStateData.selectedItems.map((selectedItem, index) => (
+                {selectedItems.map((selectedItem, index) => (
                   <View
                     key={`${selectedItem.item.id}-${index}`}
                     style={{
                       borderBottomWidth:
-                        index < orderStateData.selectedItems.length - 1 ? 1 : 0,
+                        index < selectedItems.length - 1 ? 1 : 0,
                       borderBottomColor: "#f3f4f6",
                       paddingVertical: 12,
                     }}
@@ -471,15 +468,11 @@ export default function CreateOrderScreen() {
           <TouchableOpacity
             onPress={handlePlaceOrder}
             disabled={
-              !selectedCustomer ||
-              orderStateData.selectedItems.length === 0 ||
-              orderStateData.isCreatingOrder
+              !selectedCustomer || selectedItems.length === 0 || isCreatingOrder
             }
             style={{
               backgroundColor:
-                selectedCustomer &&
-                orderStateData.selectedItems.length > 0 &&
-                !orderStateData.isCreatingOrder
+                selectedCustomer && selectedItems.length > 0 && !isCreatingOrder
                   ? theme.colors.primary
                   : "#d1d5db",
               paddingVertical: 16,
@@ -488,9 +481,7 @@ export default function CreateOrderScreen() {
               shadowColor: theme.colors.primary,
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity:
-                selectedCustomer &&
-                orderStateData.selectedItems.length > 0 &&
-                !orderStateData.isCreatingOrder
+                selectedCustomer && selectedItems.length > 0 && !isCreatingOrder
                   ? 0.3
                   : 0,
               shadowRadius: 8,
@@ -501,17 +492,15 @@ export default function CreateOrderScreen() {
               style={{
                 color:
                   selectedCustomer &&
-                  orderStateData.selectedItems.length > 0 &&
-                  !orderStateData.isCreatingOrder
+                  selectedItems.length > 0 &&
+                  !isCreatingOrder
                     ? "white"
                     : "#9ca3af",
                 fontWeight: "600",
                 fontSize: 18,
               }}
             >
-              {orderStateData.isCreatingOrder
-                ? "Placing Order..."
-                : "Place Order"}
+              {isCreatingOrder ? "Placing Order..." : "Place Order"}
             </Text>
           </TouchableOpacity>
         </View>

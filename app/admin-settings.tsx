@@ -39,7 +39,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function AdminSettingsScreen() {
-  const auth = use$(authState);
+  // Granular state subscription for optimized re-renders
+  const user = use$(authState.user);
   const [loading, setLoading] = useState(false);
   const [tableCounts, setTableCounts] = useState<Record<string, number>>({});
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -86,7 +87,7 @@ export default function AdminSettingsScreen() {
 
   useEffect(() => {
     // Auth required
-    if (!auth.user) {
+    if (!user) {
       router.replace("/(auth)/login");
       return;
     }
@@ -96,7 +97,7 @@ export default function AdminSettingsScreen() {
     loadSettings();
     loadWalStatus();
     // Sync & Backup state removed here; handled on Dashboard
-  }, [auth.user]);
+  }, [user]);
 
   const loadWalStatus = async () => {
     try {
@@ -141,7 +142,7 @@ export default function AdminSettingsScreen() {
   };
 
   // Show access denied screen for unauthenticated users
-  if (!auth.user) {
+  if (!user) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: "#f9fafb" }}>
         <View

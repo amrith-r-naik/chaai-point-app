@@ -2,7 +2,6 @@
 import { use$ } from "@legendapp/state/react";
 import { Stack, useRouter } from "expo-router";
 import { ArrowLeft, Calendar, User } from "lucide-react-native";
-import React from "react";
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { theme } from "../../constants/theme";
@@ -10,7 +9,8 @@ import { orderState } from "../../state/orderState";
 
 export default function OrderDetailsScreen() {
   const router = useRouter();
-  const state = use$(orderState);
+  // Granular state subscription for optimized re-renders
+  const selectedOrder = use$(orderState.selectedOrder);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -24,7 +24,7 @@ export default function OrderDetailsScreen() {
     );
   };
 
-  if (!state.selectedOrder) {
+  if (!selectedOrder) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: "#f9fafb" }}>
         <Stack.Screen
@@ -75,7 +75,7 @@ export default function OrderDetailsScreen() {
     );
   }
 
-  const order = state.selectedOrder;
+  const order = selectedOrder;
 
   return (
     <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>

@@ -491,7 +491,8 @@ const MetricCard: React.FC<MetricCardProps> = ({
 // FilterButton removed (no longer needed with date-range picker)
 
 export default function HomeScreen() {
-  const auth = use$(authState);
+  // Granular state subscriptions for optimized re-renders
+  const user = use$(authState.user);
   const insets = useSafeAreaInsets();
 
   // Track screen performance
@@ -660,7 +661,7 @@ export default function HomeScreen() {
     return "Good Evening";
   };
 
-  if (!auth.user) {
+  if (!user) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.surface }}>
         <Loading message="Loading your dashboard..." />
@@ -1012,7 +1013,7 @@ export default function HomeScreen() {
             )}
           </View>
 
-          {auth.user?.role === "admin" && (
+          {user?.role === "admin" && (
             <View style={styles.adminCard}>
               <View style={styles.adminContent}>
                 <View style={styles.adminText}>

@@ -7,12 +7,20 @@ import { use$ } from "@legendapp/state/react";
 import { Stack, useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export default function CustomerKOTsScreen() {
   const router = useRouter();
   const selectedCustomer = use$(customerState.selectedCustomer);
-  const auth = use$(authState);
+  // Granular state subscription for optimized re-renders
+  const isDbReady = use$(authState.isDbReady);
   // Local date in YYYY-MM-DD (e.g., en-CA locale formats as 2025-09-05)
   const today = new Date().toLocaleDateString("en-CA");
 
@@ -23,18 +31,22 @@ export default function CustomerKOTsScreen() {
 
   // Fetch KOTs for the selected customer and date
   const fetchKOTs = useCallback(async () => {
-    if (!selectedCustomer?.id || !auth.isDbReady) return;
+    if (!selectedCustomer?.id || !isDbReady) return;
     setLoading(true);
     setError("");
     try {
-      const result = await orderService.getCustomerKOTsForDate(selectedCustomer.id, today, true);
+      const result = await orderService.getCustomerKOTsForDate(
+        selectedCustomer.id,
+        today,
+        true
+      );
       setKots(result);
     } catch (err: any) {
       setError(err.message || "Failed to load KOTs");
     } finally {
       setLoading(false);
     }
-  }, [selectedCustomer?.id, today, auth.isDbReady]);
+  }, [selectedCustomer?.id, today, isDbReady]);
 
   useEffect(() => {
     fetchKOTs();
@@ -97,13 +109,23 @@ export default function CustomerKOTsScreen() {
 
   // Use kot.totalAmount if present, otherwise calculate from items
   const getKOTTotal = (kot: any) => {
-    if (typeof kot.totalAmount === 'number' && isFinite(kot.totalAmount) && kot.totalAmount > 0) {
+    if (
+      typeof kot.totalAmount === "number" &&
+      isFinite(kot.totalAmount) &&
+      kot.totalAmount > 0
+    ) {
       return kot.totalAmount;
     }
     if (Array.isArray(kot.items)) {
       return kot.items.reduce((sum: number, item: any) => {
-        const price = typeof item.price === 'number' && isFinite(item.price) ? item.price : 0;
-        const qty = typeof item.quantity === 'number' && isFinite(item.quantity) ? item.quantity : 0;
+        const price =
+          typeof item.price === "number" && isFinite(item.price)
+            ? item.price
+            : 0;
+        const qty =
+          typeof item.quantity === "number" && isFinite(item.quantity)
+            ? item.quantity
+            : 0;
         return sum + price * qty;
       }, 0);
     }
@@ -116,7 +138,7 @@ export default function CustomerKOTsScreen() {
     <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
       <Stack.Screen
         options={{
-          title: `${selectedCustomer?.name || 'Customer'}'s KOTs`,
+          title: `${selectedCustomer?.name || "Customer"}'s KOTs`,
           headerStyle: {
             backgroundColor: "white",
           },
@@ -142,17 +164,21 @@ export default function CustomerKOTsScreen() {
       />
 
       <View style={{ flex: 1 }}>
-        <View style={{
-          backgroundColor: "white",
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          borderBottomWidth: 1,
-          borderBottomColor: "#f3f4f6"
-        }}>
-          <Text style={{
-            fontSize: 14,
-            color: theme.colors.textSecondary
-          }}>
+        <View
+          style={{
+            backgroundColor: "white",
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            borderBottomWidth: 1,
+            borderBottomColor: "#f3f4f6",
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 14,
+              color: theme.colors.textSecondary,
+            }}
+          >
             {new Date(today).toLocaleDateString("en-IN", {
               weekday: "long",
               year: "numeric",
@@ -162,26 +188,41 @@ export default function CustomerKOTsScreen() {
           </Text>
         </View>
         {loading && !refreshing ? (
-          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <View
+            style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+          >
             <ActivityIndicator size="large" color="#2563eb" />
-            <Text style={{ color: theme.colors.textSecondary, marginTop: 8 }}>Loading KOTs...</Text>
+            <Text style={{ color: theme.colors.textSecondary, marginTop: 8 }}>
+              Loading KOTs...
+            </Text>
           </View>
         ) : error ? (
-          <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 16 }}>
+          <View
+            style={{
+              flex: 1,
+              justifyContent: "center",
+              alignItems: "center",
+              paddingHorizontal: 16,
+            }}
+          >
             <Text style={{ fontSize: 48, marginBottom: 16 }}>⚠️</Text>
-            <Text style={{
-              fontSize: 20,
-              fontWeight: "600",
-              color: theme.colors.text,
-              marginBottom: 8
-            }}>
+            <Text
+              style={{
+                fontSize: 20,
+                fontWeight: "600",
+                color: theme.colors.text,
+                marginBottom: 8,
+              }}
+            >
               Something went wrong
             </Text>
-            <Text style={{
-              color: theme.colors.textSecondary,
-              textAlign: "center",
-              marginBottom: 16
-            }}>
+            <Text
+              style={{
+                color: theme.colors.textSecondary,
+                textAlign: "center",
+                marginBottom: 16,
+              }}
+            >
               {error}
             </Text>
             <TouchableOpacity
@@ -193,24 +234,37 @@ export default function CustomerKOTsScreen() {
                 borderRadius: 8,
               }}
             >
-              <Text style={{ color: "white", fontWeight: "500" }}>Try Again</Text>
+              <Text style={{ color: "white", fontWeight: "500" }}>
+                Try Again
+              </Text>
             </TouchableOpacity>
           </View>
         ) : kots.length === 0 ? (
-          <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 16 }}>
+          <View
+            style={{
+              flex: 1,
+              justifyContent: "center",
+              alignItems: "center",
+              paddingHorizontal: 16,
+            }}
+          >
             <Text style={{ fontSize: 48, marginBottom: 16 }}>📋</Text>
-            <Text style={{
-              fontSize: 20,
-              fontWeight: "600",
-              color: theme.colors.text,
-              marginBottom: 8
-            }}>
+            <Text
+              style={{
+                fontSize: 20,
+                fontWeight: "600",
+                color: theme.colors.text,
+                marginBottom: 8,
+              }}
+            >
               No KOTs Found
             </Text>
-            <Text style={{
-              color: theme.colors.textSecondary,
-              textAlign: "center"
-            }}>
+            <Text
+              style={{
+                color: theme.colors.textSecondary,
+                textAlign: "center",
+              }}
+            >
               No kitchen orders found for {selectedCustomer?.name} on this date.
             </Text>
           </View>
@@ -251,28 +305,40 @@ export default function CustomerKOTsScreen() {
                       borderBottomColor: "#f3f4f6",
                     }}
                   >
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
                       <View>
-                        <Text style={{
-                          fontSize: 18,
-                          fontWeight: "600",
-                          color: theme.colors.text
-                        }}>
+                        <Text
+                          style={{
+                            fontSize: 18,
+                            fontWeight: "600",
+                            color: theme.colors.text,
+                          }}
+                        >
                           {kot.kotNumber}
                         </Text>
-                        <Text style={{
-                          color: theme.colors.textSecondary,
-                          fontSize: 14,
-                          marginTop: 2,
-                        }}>
+                        <Text
+                          style={{
+                            color: theme.colors.textSecondary,
+                            fontSize: 14,
+                            marginTop: 2,
+                          }}
+                        >
                           {formatTime(kot.createdAt)}
                         </Text>
                       </View>
-                      <Text style={{
-                        color: theme.colors.text,
-                        fontWeight: "700",
-                        fontSize: 18
-                      }}>
+                      <Text
+                        style={{
+                          color: theme.colors.text,
+                          fontWeight: "700",
+                          fontSize: 18,
+                        }}
+                      >
                         ₹{getKOTTotal(kot).toFixed(2)}
                       </Text>
                     </View>
@@ -286,40 +352,52 @@ export default function CustomerKOTsScreen() {
 
       {/* Bill Now Button */}
       {kots.length > 0 && (
-        <View style={{
-          backgroundColor: "white",
-          borderTopWidth: 1,
-          borderTopColor: "#f3f4f6",
-          paddingHorizontal: 16,
-          paddingVertical: 16,
-        }}>
-          <View style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 16
-          }}>
+        <View
+          style={{
+            backgroundColor: "white",
+            borderTopWidth: 1,
+            borderTopColor: "#f3f4f6",
+            paddingHorizontal: 16,
+            paddingVertical: 16,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 16,
+            }}
+          >
             <View>
-              <Text style={{ color: theme.colors.textSecondary, fontSize: 14 }}>Total Amount</Text>
-              <Text style={{
-                fontSize: 24,
-                fontWeight: "700",
-                color: theme.colors.text
-              }}>
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 14 }}>
+                Total Amount
+              </Text>
+              <Text
+                style={{
+                  fontSize: 24,
+                  fontWeight: "700",
+                  color: theme.colors.text,
+                }}
+              >
                 ₹{totalAmount.toFixed(2)}
               </Text>
             </View>
-            <View style={{
-              backgroundColor: "#ecfdf5",
-              paddingHorizontal: 12,
-              paddingVertical: 4,
-              borderRadius: 20,
-            }}>
-              <Text style={{
-                color: "#059669",
-                fontSize: 14,
-                fontWeight: "500"
-              }}>
+            <View
+              style={{
+                backgroundColor: "#ecfdf5",
+                paddingHorizontal: 12,
+                paddingVertical: 4,
+                borderRadius: 20,
+              }}
+            >
+              <Text
+                style={{
+                  color: "#059669",
+                  fontSize: 14,
+                  fontWeight: "500",
+                }}
+              >
                 {kots.length} KOT{kots.length !== 1 ? "s" : ""}
               </Text>
             </View>
@@ -335,12 +413,14 @@ export default function CustomerKOTsScreen() {
               justifyContent: "center",
             }}
           >
-            <Text style={{
-              color: "white",
-              fontWeight: "600",
-              fontSize: 18,
-              marginRight: 8
-            }}>
+            <Text
+              style={{
+                color: "white",
+                fontWeight: "600",
+                fontSize: 18,
+                marginRight: 8,
+              }}
+            >
               BILL NOW
             </Text>
             <Text style={{ color: "white", fontSize: 18 }}>→</Text>

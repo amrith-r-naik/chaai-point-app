@@ -222,8 +222,13 @@ export default function CustomersScreen() {
   const [completedBills, setCompletedBills] = useState<any>({});
   const [allSummaries, setAllSummaries] = useState<any[]>([]);
   const [isProcessingEOD, setIsProcessingEOD] = useState(false);
-  const customerStateData = use$(customerState);
-  const auth = use$(authState);
+
+  // Granular subscriptions - only re-render when specific fields change
+  const customers = use$(customerState.customers);
+  const customerLoading = use$(customerState.loading);
+  const customerError = use$(customerState.error);
+  const isDbReady = use$(authState.isDbReady);
+
   const router = useRouter();
   const ev = use$(appEvents);
 
@@ -239,29 +244,29 @@ export default function CustomersScreen() {
 
   const loadOrdersData = useCallback(async () => {
     try {
-      if (!auth.isDbReady) return;
+      if (!isDbReady) return;
 
       const ordersGrouped = await orderService.getOrdersGroupedByDate();
       setDateGroups(ordersGrouped);
     } catch (error) {
       console.error("Error loading orders data:", error);
     }
-  }, [auth.isDbReady]);
+  }, [isDbReady]);
 
   const loadCompletedBillsData = useCallback(async () => {
     try {
-      if (!auth.isDbReady) return;
+      if (!isDbReady) return;
 
       const billsGrouped = await paymentService.getBillsGroupedByDate();
       setCompletedBills(billsGrouped);
     } catch (error) {
       console.error("Error loading completed bills data:", error);
     }
-  }, [auth.isDbReady]);
+  }, [isDbReady]);
 
   const loadCustomersWithStats = useCallback(async () => {
     try {
-      if (!auth.isDbReady) return [];
+      if (!isDbReady) return [];
       // Minimal summary: bills & credit only (orders detail removed for performance)
       const summaries = await getCustomersSummary();
       if (searchQuery.trim()) {
@@ -277,11 +282,11 @@ export default function CustomersScreen() {
       console.error("Error loading customer summaries:", e);
       return [];
     }
-  }, [searchQuery, auth.isDbReady]);
+  }, [searchQuery, isDbReady]);
 
   const loadCustomers = useCallback(async () => {
     try {
-      if (!auth.isDbReady) return;
+      if (!isDbReady) return;
 
       customerState.loading.set(true);
       customerState.error.set("");
@@ -297,7 +302,7 @@ export default function CustomersScreen() {
         setAllSummaries(customersWithStats);
       } else {
         // Load customers and orders data in parallel for other tabs
-        const [customers] = await Promise.all([
+        const [customersData] = await Promise.all([
           searchQuery.trim()
             ? searchCustomers(searchQuery.trim())
             : getAllCustomers(),
@@ -305,7 +310,7 @@ export default function CustomersScreen() {
           loadCompletedBillsData(),
         ]);
 
-        customerState.customers.set(customers);
+        customerState.customers.set(customersData);
       }
     } catch (error: any) {
       customerState.error.set(error.message || "Failed to load customers");
@@ -315,7 +320,7 @@ export default function CustomersScreen() {
     }
   }, [
     searchQuery,
-    auth.isDbReady,
+    isDbReady,
     activeTab,
     loadOrdersData,
     loadCompletedBillsData,
@@ -521,7 +526,7 @@ export default function CustomersScreen() {
   // Use focus-aware refresh - consolidated from multiple useEffects
   useFocusRefresh(
     useCallback(() => {
-      if (!auth.isDbReady) return;
+      if (!isDbReady) return;
 
       const currentVersion =
         ev.ordersVersion +
@@ -537,7 +542,7 @@ export default function CustomersScreen() {
         loadOrdersData();
       }
     }, [
-      auth.isDbReady,
+      isDbReady,
       ev.ordersVersion,
       ev.billsVersion,
       ev.paymentsVersion,
@@ -609,7 +614,7 @@ export default function CustomersScreen() {
 
     if (activeTab === "all") {
       // For "All" tab, show all customers regardless of orders
-      return customerStateData.customers.filter((customer: any) => {
+      return customers.filter((customer: any) => {
         if (searchQuery.trim()) {
           return (
             customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1157,19 +1162,19 @@ export default function CustomersScreen() {
 
       {/* Content */}
       <View className="flex-1">
-        {customerStateData.loading && !refreshing ? (
+        {customerLoading && !refreshing ? (
           <View className="flex-1 justify-center items-center">
             <ActivityIndicator size="large" color="#2563eb" />
             <Text className="text-gray-600 mt-2">Loading customers...</Text>
           </View>
-        ) : customerStateData.error ? (
+        ) : customerError ? (
           <View className="flex-1 justify-center items-center px-4">
             <Text className="text-6xl mb-4">⚠️</Text>
             <Text className="text-xl font-semibold text-gray-700 mb-2">
               Something went wrong
             </Text>
             <Text className="text-gray-500 text-center mb-4">
-              {customerStateData.error}
+              {customerError}
             </Text>
             <TouchableOpacity
               onPress={loadCustomers}

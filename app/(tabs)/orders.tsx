@@ -90,8 +90,12 @@ function OrderItem({ order }: { order: KotOrder }) {
 }
 
 export default function OrdersScreen() {
-  const state = use$(orderState);
-  const auth = use$(authState);
+  // Granular subscriptions - only re-render when specific fields change
+  const orders = use$(orderState.orders);
+  const isLoading = use$(orderState.isLoading);
+  const error = use$(orderState.error);
+  const isDbReady = use$(authState.isDbReady);
+  const userRole = use$(authState.user)?.role;
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [showPicker, setShowPicker] = useState(false);
@@ -126,7 +130,7 @@ export default function OrdersScreen() {
   // Use focus-aware refresh with 5-second minimum interval
   useFocusRefresh(
     useCallback(() => {
-      if (auth.isDbReady) {
+      if (isDbReady) {
         const currentVersion = ev.ordersVersion + ev.anyVersion;
         // Only reload if version changed or first load
         if (currentVersion !== lastVersionRef.current) {
@@ -134,16 +138,16 @@ export default function OrdersScreen() {
           loadOrders();
         }
       }
-    }, [auth.isDbReady, ev.ordersVersion, ev.anyVersion, loadOrders]),
+    }, [isDbReady, ev.ordersVersion, ev.anyVersion, loadOrders]),
     { minInterval: 3000, dependencies: [selectedDate] }
   );
 
   // Load on date change
   useEffect(() => {
-    if (auth.isDbReady) {
+    if (isDbReady) {
       loadOrders();
     }
-  }, [auth.isDbReady, selectedDate, loadOrders]);
+  }, [isDbReady, selectedDate, loadOrders]);
 
   const handleCreateOrder = () => {
     // Reset order state before navigation
@@ -152,7 +156,7 @@ export default function OrdersScreen() {
     router.push("/(modals)/create-order");
   };
 
-  if (!auth.isDbReady) {
+  if (!isDbReady) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50">
         <View className="flex-1 justify-center items-center">
@@ -204,13 +208,13 @@ export default function OrdersScreen() {
 
       {/* Content */}
       <View className="flex-1 px-4 pt-4">
-        {state.isLoading ? (
+        {isLoading ? (
           <View className="flex-1 justify-center items-center">
             <Text className="text-gray-500">Loading orders...</Text>
           </View>
-        ) : state.error ? (
+        ) : error ? (
           <View className="flex-1 justify-center items-center">
-            <Text className="text-red-500 mb-4">{state.error}</Text>
+            <Text className="text-red-500 mb-4">{error}</Text>
             <TouchableOpacity
               onPress={loadOrders}
               className="bg-blue-500 px-4 py-2 rounded-lg"
@@ -218,7 +222,7 @@ export default function OrdersScreen() {
               <Text className="text-white font-medium">Retry</Text>
             </TouchableOpacity>
           </View>
-        ) : state.orders.length === 0 ? (
+        ) : orders.length === 0 ? (
           <View className="flex-1 justify-center items-center">
             <Text className="text-6xl mb-4">📋</Text>
             <Text className="text-xl font-semibold text-gray-800 mb-2">
@@ -227,7 +231,7 @@ export default function OrdersScreen() {
             {(() => {
               const isTodaySelected =
                 toISTDateKey(selectedDate) === toISTDateKey(new Date());
-              const role = auth.user?.role?.toLowerCase?.();
+              const role = userRole?.toLowerCase?.();
               const isAdmin = role === "admin";
               const canCreate = isAdmin || isTodaySelected;
               return (
@@ -253,7 +257,7 @@ export default function OrdersScreen() {
           </View>
         ) : (
           <FlatList
-            data={state.orders}
+            data={orders}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => <OrderItem order={item} />}
             showsVerticalScrollIndicator={false}

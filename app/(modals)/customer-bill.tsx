@@ -45,12 +45,13 @@ export default function CustomerBillScreen() {
   const [bill, setBill] = useState<Bill | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const auth = use$(authState);
+  // Granular state subscription for optimized re-renders
+  const isDbReady = use$(authState.isDbReady);
 
   // Server assigns bill number; do not generate locally
 
   const loadCustomerBill = useCallback(async () => {
-    if (!customerId || !auth.isDbReady) return;
+    if (!customerId || !isDbReady) return;
 
     try {
       setLoading(true);
@@ -125,7 +126,7 @@ export default function CustomerBillScreen() {
     } finally {
       setLoading(false);
     }
-  }, [customerId, customerName, date, auth.isDbReady]);
+  }, [customerId, customerName, date, isDbReady]);
 
   useEffect(() => {
     loadCustomerBill();

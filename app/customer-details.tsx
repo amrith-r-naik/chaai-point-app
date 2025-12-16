@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  InteractionManager,
   RefreshControl,
   ScrollView,
   Text,
@@ -46,7 +47,7 @@ export default function CustomerDetailsScreen() {
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [advanceLedger, setAdvanceLedger] = useState<any[]>([]);
   const [stats, setStats] = useState<CustomerStats | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start true for deferred loading
   const [refreshing, setRefreshing] = useState(false);
   const [advanceBalance, setAdvanceBalance] = useState<number | null>(null);
   // Granular state subscription for optimized re-renders
@@ -91,8 +92,12 @@ export default function CustomerDetailsScreen() {
     }
   }, [customerId, isDbReady]);
 
+  // Defer initial data load until after navigation animation completes
   useEffect(() => {
-    loadCustomerData();
+    const task = InteractionManager.runAfterInteractions(() => {
+      loadCustomerData();
+    });
+    return () => task.cancel();
   }, [loadCustomerData]);
 
   // Refresh when any global mutation (including pulled sync data) occurs while screen is visible

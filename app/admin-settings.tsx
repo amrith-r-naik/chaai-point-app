@@ -29,6 +29,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  InteractionManager,
   Modal,
   ScrollView,
   Text,
@@ -42,6 +43,8 @@ export default function AdminSettingsScreen() {
   // Granular state subscription for optimized re-renders
   const user = use$(authState.user);
   const [loading, setLoading] = useState(false);
+  // Defer heavy content rendering until after navigation completes
+  const [isReady, setIsReady] = useState(false);
   const [tableCounts, setTableCounts] = useState<Record<string, number>>({});
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [showMenuModal, setShowMenuModal] = useState(false);
@@ -92,10 +95,16 @@ export default function AdminSettingsScreen() {
       return;
     }
 
-    loadTableCounts();
-    loadMenuItems();
-    loadSettings();
-    loadWalStatus();
+    // Defer heavy data loading until after navigation animation completes
+    const task = InteractionManager.runAfterInteractions(() => {
+      setIsReady(true);
+      loadTableCounts();
+      loadMenuItems();
+      loadSettings();
+      loadWalStatus();
+    });
+
+    return () => task.cancel();
     // Sync & Backup state removed here; handled on Dashboard
   }, [user]);
 
@@ -223,6 +232,20 @@ export default function AdminSettingsScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show loading state while heavy content is being prepared
+  if (!isReady) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: "#f9fafb" }}>
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={{ marginTop: 12, color: theme.colors.textSecondary }}>
+            Loading settings...
+          </Text>
         </View>
       </SafeAreaView>
     );

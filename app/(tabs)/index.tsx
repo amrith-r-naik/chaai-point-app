@@ -830,89 +830,89 @@ export default function HomeScreen() {
           {loading ? (
             <DashboardSkeleton />
           ) : (
-          <View style={styles.metricsGrid}>
-            <View style={styles.metricsRow}>
-              <MetricCard
-                title="Revenue"
-                value={stats?.totalRevenue || 0}
-                icon={<IndianRupee size={20} color={theme.colors.success} />}
-                iconBg={theme.colors.successLight}
-                valueColor={theme.colors.success}
-                featured={true}
-                subtitle="Total billed amount"
-              />
-              <MetricCard
-                title="Profit"
-                value={stats?.profit || 0}
-                icon={
-                  <TrendingUp
-                    size={20}
-                    color={
-                      stats && stats.profit >= 0
-                        ? theme.colors.success
-                        : theme.colors.error
-                    }
-                  />
-                }
-                iconBg={
-                  stats && stats.profit >= 0
-                    ? theme.colors.successLight
-                    : "#fef2f2"
-                }
-                valueColor={
-                  stats && stats.profit >= 0
-                    ? theme.colors.success
-                    : theme.colors.error
-                }
-                featured={true}
-                subtitle="Net earnings"
-              />
-            </View>
+            <View style={styles.metricsGrid}>
+              <View style={styles.metricsRow}>
+                <MetricCard
+                  title="Revenue"
+                  value={stats?.totalRevenue || 0}
+                  icon={<IndianRupee size={20} color={theme.colors.success} />}
+                  iconBg={theme.colors.successLight}
+                  valueColor={theme.colors.success}
+                  featured={true}
+                  subtitle="Total billed amount"
+                />
+                <MetricCard
+                  title="Profit"
+                  value={stats?.profit || 0}
+                  icon={
+                    <TrendingUp
+                      size={20}
+                      color={
+                        stats && stats.profit >= 0
+                          ? theme.colors.success
+                          : theme.colors.error
+                      }
+                    />
+                  }
+                  iconBg={
+                    stats && stats.profit >= 0
+                      ? theme.colors.successLight
+                      : "#fef2f2"
+                  }
+                  valueColor={
+                    stats && stats.profit >= 0
+                      ? theme.colors.success
+                      : theme.colors.error
+                  }
+                  featured={true}
+                  subtitle="Net earnings"
+                />
+              </View>
 
-            <View style={styles.metricsRow}>
-              <MetricCard
-                title="Cash Received"
-                value={stats?.cashReceived || 0}
-                icon={
-                  <BanknoteArrowDown size={20} color={theme.colors.primary} />
-                }
-                iconBg={theme.colors.primaryLight}
-                subtitle="Cash payments"
-              />
-              <MetricCard
-                title="Expenses"
-                value={stats?.totalExpenses || 0}
-                icon={<TrendingDown size={20} color={theme.colors.error} />}
-                iconBg="#fef2f2"
-                valueColor={theme.colors.error}
-                subtitle="Total costs"
-              />
-            </View>
+              <View style={styles.metricsRow}>
+                <MetricCard
+                  title="Cash Received"
+                  value={stats?.cashReceived || 0}
+                  icon={
+                    <BanknoteArrowDown size={20} color={theme.colors.primary} />
+                  }
+                  iconBg={theme.colors.primaryLight}
+                  subtitle="Cash payments"
+                />
+                <MetricCard
+                  title="Expenses"
+                  value={stats?.totalExpenses || 0}
+                  icon={<TrendingDown size={20} color={theme.colors.error} />}
+                  iconBg="#fef2f2"
+                  valueColor={theme.colors.error}
+                  subtitle="Total costs"
+                />
+              </View>
 
-            <View style={styles.metricsRow}>
-              <MetricCard
-                title="Outstanding Credit"
-                value={stats?.outstandingCredit || 0}
-                icon={<AlertCircle size={20} color={theme.colors.warning} />}
-                iconBg={theme.colors.warningLight}
-                valueColor={theme.colors.warning}
-                subtitle="Customer credit"
-              />
-              <MetricCard
-                title="UPI Received"
-                value={stats?.upiReceived || 0}
-                icon={
-                  <BanknoteArrowDown size={20} color={theme.colors.success} />
-                }
-                iconBg={theme.colors.successLight}
-                valueColor={theme.colors.success}
-                featured={true}
-                subtitle="UPI payments"
-              />
-            </View>
+              <View style={styles.metricsRow}>
+                <MetricCard
+                  title="Outstanding Credit"
+                  value={stats?.outstandingCredit || 0}
+                  icon={<AlertCircle size={20} color={theme.colors.warning} />}
+                  iconBg={theme.colors.warningLight}
+                  valueColor={theme.colors.warning}
+                  subtitle="Customer credit"
+                />
+                <MetricCard
+                  title="UPI Received"
+                  value={stats?.upiReceived || 0}
+                  icon={
+                    <BanknoteArrowDown size={20} color={theme.colors.success} />
+                  }
+                  iconBg={theme.colors.successLight}
+                  valueColor={theme.colors.success}
+                  featured={true}
+                  subtitle="UPI payments"
+                />
+              </View>
 
-            {/* Advance metric cards removed as per request */}
-          </View>
+              {/* Advance metric cards removed as per request */}
+            </View>
           )}
 
           {/* Unbilled Orders Card removed */}

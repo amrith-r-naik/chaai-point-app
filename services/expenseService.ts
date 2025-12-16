@@ -1,5 +1,6 @@
 import { db, nextLocalNumber, withTransaction } from "@/lib/db";
 import { SplitPayment } from "@/types/payment";
+import { invalidateRelatedCaches } from "@/utils/cache";
 import uuid from "react-native-uuid";
 
 type ExpenseSplit = Pick<SplitPayment, "type" | "amount"> & {
@@ -108,7 +109,7 @@ class ExpenseService {
       towards: e.towards,
       mode: e.mode,
       remarks: e.remarks,
-  expenseDate: e.expenseDate,
+      expenseDate: e.expenseDate,
       createdAt: e.createdAt,
       settlements: settlements.map((s) => ({
         id: s.id,
@@ -203,6 +204,8 @@ class ExpenseService {
         const { signalChange } = await import("@/state/appEvents");
         signalChange.expenses();
         signalChange.any();
+        // Invalidate related caches
+        invalidateRelatedCaches.afterExpenseChange();
       } catch {}
       return { expenseId: id };
     });
@@ -253,6 +256,8 @@ class ExpenseService {
         const { signalChange } = await import("@/state/appEvents");
         signalChange.expenses();
         signalChange.any();
+        // Invalidate related caches
+        invalidateRelatedCaches.afterExpenseChange();
       } catch {}
     });
   }

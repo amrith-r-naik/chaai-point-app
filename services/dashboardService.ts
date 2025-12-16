@@ -1,30 +1,7 @@
 import { db } from "../lib/db";
+import { appCache, CACHE_TTL, cacheKeys } from "../utils/cache";
 
-// Dashboard stats cache with short TTL (10 seconds)
-class DashboardCache {
-  private cache = new Map<string, { data: any; timestamp: number }>();
-  private ttl = 10000; // 10 seconds
-
-  get(key: string): any | null {
-    const cached = this.cache.get(key);
-    if (!cached) return null;
-    if (Date.now() - cached.timestamp > this.ttl) {
-      this.cache.delete(key);
-      return null;
-    }
-    return cached.data;
-  }
-
-  set(key: string, data: any): void {
-    this.cache.set(key, { data, timestamp: Date.now() });
-  }
-
-  clear(): void {
-    this.cache.clear();
-  }
-}
-
-const dashboardCache = new DashboardCache();
+// Legacy dashboard cache replaced by shared appCache
 
 export interface DashboardStats {
   cashReceived: number; // Sum of payments in Cash (Clearance + direct) + Advance usage treated as cash equivalent? (business rule: only pure cash)
@@ -83,7 +60,7 @@ export interface RevenueByDay {
 class DashboardService {
   // Clear cache when data changes
   clearCache(): void {
-    dashboardCache.clear();
+    appCache.invalidatePrefix("dashboard:");
     console.log("[CACHE] Cleared dashboard cache");
   }
 
@@ -97,9 +74,12 @@ class DashboardService {
     const filterStartDate = dateFilter?.startDate || today;
     const filterEndDate = dateFilter?.endDate || today;
 
-    // Check cache
-    const cacheKey = `stats:${filterStartDate}:${filterEndDate}`;
-    const cached = dashboardCache.get(cacheKey);
+    // Check cache using shared appCache
+    const cacheKey = cacheKeys.dashboard(filterStartDate, filterEndDate);
+    const cached = appCache.get<DashboardStats & { totalRevenue: number }>(
+      cacheKey,
+      CACHE_TTL.SHORT
+    );
     if (cached) {
       return cached;
     }
@@ -204,8 +184,8 @@ class DashboardService {
       advanceOutstanding,
     };
 
-    // Cache the result
-    dashboardCache.set(cacheKey, result);
+    // Cache the result using shared appCache
+    appCache.set(cacheKey, result);
     return result;
   }
 

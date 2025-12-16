@@ -1,5 +1,5 @@
 import AddExpenseModal from "@/app/(modals)/add-expense";
-import { ListItemSkeleton, Loading, Typography } from "@/components/ui";
+import { ListItemSkeleton, Typography } from "@/components/ui";
 import { theme } from "@/constants/theme";
 import { useFocusRefresh } from "@/hooks/useFocusRefresh";
 import {

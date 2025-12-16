@@ -1,5 +1,11 @@
 import { db } from "@/lib/db";
 import { authState } from "@/state/authState";
+import {
+  appCache,
+  CACHE_TTL,
+  cacheKeys,
+  invalidateRelatedCaches,
+} from "@/utils/cache";
 import uuid from "react-native-uuid";
 
 export interface Customer {
@@ -11,6 +17,13 @@ export interface Customer {
 }
 
 export async function getAllCustomers(): Promise<Customer[]> {
+  // Check cache first
+  const cacheKey = cacheKeys.customers();
+  const cached = appCache.get<Customer[]>(cacheKey, CACHE_TTL.MEDIUM);
+  if (cached) {
+    return cached;
+  }
+
   try {
     if (!db) throw new Error("Database not initialized");
 
@@ -29,6 +42,8 @@ export async function getAllCustomers(): Promise<Customer[]> {
       SELECT * FROM customers ORDER BY name ASC
     `)) as Customer[];
 
+    // Cache the result
+    appCache.set(cacheKey, customers);
     return customers;
   } catch (error) {
     console.error("Error fetching customers:", error);
@@ -48,6 +63,22 @@ export async function getCustomersSummary(): Promise<
     lastBillAt: string | null;
   }[]
 > {
+  // Check cache first
+  const cacheKey = cacheKeys.customersSummary();
+  type SummaryType = {
+    id: string;
+    name: string;
+    contact?: string;
+    creditBalance: number;
+    billCount: number;
+    totalBilled: number;
+    lastBillAt: string | null;
+  }[];
+  const cached = appCache.get<SummaryType>(cacheKey, CACHE_TTL.SHORT);
+  if (cached) {
+    return cached;
+  }
+
   try {
     if (!db) throw new Error("Database not initialized");
 
@@ -82,7 +113,7 @@ export async function getCustomersSummary(): Promise<
       ORDER BY c.name ASC
     `)) as any[];
 
-    return rows.map((r) => ({
+    const result = rows.map((r) => ({
       id: r.id,
       name: r.name,
       contact: r.contact || undefined,
@@ -91,6 +122,10 @@ export async function getCustomersSummary(): Promise<
       totalBilled: r.totalBilled || 0,
       lastBillAt: r.lastBillAt || null,
     }));
+
+    // Cache the result
+    appCache.set(cacheKey, result);
+    return result;
   } catch (error) {
     console.error("Error fetching customer summaries:", error);
     return [];
@@ -123,6 +158,8 @@ export async function createCustomer(
         customer.updatedAt,
       ]
     );
+    // Invalidate customer cache
+    invalidateRelatedCaches.afterCustomerChange();
     try {
       const { signalChange } = await import("@/state/appEvents");
       signalChange.customers();
@@ -158,6 +195,8 @@ export async function updateCustomer(
     if (!customer) {
       throw new Error("Customer not found after update");
     }
+    // Invalidate customer cache
+    invalidateRelatedCaches.afterCustomerChange();
     try {
       const { signalChange } = await import("@/state/appEvents");
       signalChange.customers();
@@ -190,6 +229,8 @@ export async function deleteCustomer(id: string): Promise<void> {
       [new Date().toISOString(), id]
     );
     await db.runAsync(`DELETE FROM customers WHERE id = ?`, [id]);
+    // Invalidate customer cache
+    invalidateRelatedCaches.afterCustomerChange();
     try {
       const { signalChange } = await import("@/state/appEvents");
       signalChange.customers();

@@ -2,6 +2,7 @@ import { db, withTransaction } from "@/lib/db";
 import { advanceService } from "@/services/advanceService";
 import { settingsService } from "@/services/settingsService";
 import { SplitPayment } from "@/types/payment";
+import { invalidateRelatedCaches } from "@/utils/cache";
 import uuid from "react-native-uuid";
 
 export interface Bill {
@@ -365,6 +366,8 @@ class PaymentService {
         signalChange.bills();
         signalChange.orders();
         signalChange.any();
+        // Invalidate related caches across services
+        invalidateRelatedCaches.afterPayment();
       } catch {}
       return { receipt, bill, paidPortion, creditPortion };
     });

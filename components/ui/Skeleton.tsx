@@ -66,11 +66,7 @@ export const MetricCardSkeleton: React.FC<{ featured?: boolean }> = ({
 }) => {
   return (
     <View
-      style={[
-        styles.metricCard,
-        featured && styles.featuredCard,
-        { flex: 1 },
-      ]}
+      style={[styles.metricCard, featured && styles.featuredCard, { flex: 1 }]}
     >
       <View style={styles.metricHeader}>
         <Skeleton width={80} height={14} />

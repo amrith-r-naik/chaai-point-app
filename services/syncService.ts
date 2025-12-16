@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { syncLog } from "@/services/syncLog";
+import { invalidateRelatedCaches } from "@/utils/cache";
 
 type TableName =
   | "customers"
@@ -790,6 +791,9 @@ export const syncService = {
       signalChange.customers();
       signalChange.any();
     } catch {}
+
+    // Clear all caches after sync to ensure fresh data
+    invalidateRelatedCaches.afterSync();
   },
 
   async pushLocalChanges() {

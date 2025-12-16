@@ -1,4 +1,5 @@
 // services/orderService.ts
+import { invalidateRelatedCaches } from "@/utils/cache";
 import { withQueryPerf } from "@/utils/performanceMonitor";
 import { db, withTransaction } from "../lib/db";
 import { menuService } from "./menuService";
@@ -691,6 +692,8 @@ class OrderService {
       signalChange.any();
       // Clear query cache when order is created
       this.clearCache();
+      // Also invalidate related caches across services
+      invalidateRelatedCaches.afterOrderChange();
     } catch {}
     return orderId;
   }

@@ -1,6 +1,5 @@
 // services/orderService.ts
 import { invalidateRelatedCaches } from "@/utils/cache";
-import { withQueryPerf } from "@/utils/performanceMonitor";
 import { db, withTransaction } from "../lib/db";
 import { menuService } from "./menuService";
 
@@ -324,10 +323,8 @@ class OrderService {
     const startUtc = new Date(startMs).toISOString();
     const endUtc = new Date(endMs).toISOString();
 
-    const result = await withQueryPerf(
-      () =>
-        db!.getAllAsync(
-          `
+    const result = await db!.getAllAsync(
+      `
       SELECT 
         ko.*,
         c.name as customerName,
@@ -337,9 +334,6 @@ class OrderService {
       WHERE ko.createdAt >= ? AND ko.createdAt < ?
       ORDER BY ko.createdAt DESC
     `,
-          [startUtc, endUtc]
-        ),
-      `getOrdersByDate [${dateISO}]`,
       [startUtc, endUtc]
     );
 
@@ -374,15 +368,10 @@ class OrderService {
       if (uncachedIds.length > 0) {
         const placeholders = uncachedIds.map(() => "?").join(",");
 
-        const rows = (await withQueryPerf(
-          () =>
-            db!.getAllAsync(
-              `SELECT ki.id, ki.kotId, ki.itemId, ki.quantity, ki.priceAtTime
+        const rows = (await db!.getAllAsync(
+          `SELECT ki.id, ki.kotId, ki.itemId, ki.quantity, ki.priceAtTime
            FROM kot_items ki
            WHERE ki.kotId IN (${placeholders})`,
-              uncachedIds
-            ),
-          `getOrderItems batch [${uncachedIds.length} orders]`,
           uncachedIds
         )) as any[];
 

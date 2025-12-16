@@ -14,12 +14,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Lock } from "lucide-react-native";
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   RefreshControl,
   ScrollView,
+  SectionList,
   Text,
   TextInput,
   TouchableOpacity,
@@ -34,6 +36,181 @@ import { SafeAreaView } from "react-native-safe-area-context";
 // (types removed) Unused interfaces DateGroup and CompletedBillGroup
 
 type TabType = "active" | "completed" | "all";
+
+// Utility functions moved outside component
+const getCustomerInitials = (name: string): string => {
+  return name
+    .split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+};
+
+const getAvatarColor = (name: string): string => {
+  const colors = [
+    "bg-red-500",
+    "bg-blue-500",
+    "bg-green-500",
+    "bg-yellow-500",
+    "bg-purple-500",
+    "bg-pink-500",
+    "bg-indigo-500",
+    "bg-teal-500",
+    "bg-orange-500",
+    "bg-cyan-500",
+    "bg-lime-500",
+    "bg-emerald-500",
+  ];
+  const index = name.charCodeAt(0) % colors.length;
+  return colors[index];
+};
+
+const formatCurrency = (amount: number): string => {
+  return `₹${amount.toLocaleString("en-IN")}`;
+};
+
+// Memoized customer item for FlatList virtualization
+const CustomerListItem = memo(function CustomerListItem({
+  customer,
+  onPress,
+}: {
+  customer: any;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      className="flex-row items-center bg-white mb-3 px-4 py-3 rounded-lg shadow-sm"
+      activeOpacity={0.7}
+    >
+      <View
+        className={`w-10 h-10 rounded-full ${getAvatarColor(customer.name)} items-center justify-center mr-3`}
+      >
+        <Text className="text-white font-bold text-sm">
+          {getCustomerInitials(customer.name)}
+        </Text>
+      </View>
+      <View className="flex-1">
+        <Text className="text-gray-900 font-semibold text-base">
+          {customer.name}
+        </Text>
+        {customer.contact && (
+          <Text className="text-gray-500 text-xs">{customer.contact}</Text>
+        )}
+        <Text className="text-gray-400 text-xs mt-1">
+          {customer.billCount} bill{customer.billCount === 1 ? "" : "s"} •{" "}
+          {formatCurrency(customer.totalBilled || 0)}
+        </Text>
+      </View>
+      {customer.creditBalance > 0 && (
+        <View className="items-end">
+          <Text className="text-orange-600 font-semibold text-xs">
+            CR {formatCurrency(customer.creditBalance)}
+          </Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+});
+
+// Memoized completed bill item for SectionList virtualization
+const CompletedBillItem = memo(function CompletedBillItem({
+  bill,
+  onPress,
+}: {
+  bill: any;
+  onPress: () => void;
+}) {
+  const isPureCredit =
+    bill.status === "Credit" &&
+    (bill.paidTotal === 0 || bill.paidTotal == null);
+  const isClearance = bill.status === "Clearance";
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={isPureCredit}
+      className={`flex-row items-center justify-between px-4 py-4 bg-white border border-gray-100 rounded-xl mb-3 mx-4 ${isPureCredit ? "" : "active:bg-gray-50"}`}
+      activeOpacity={0.65}
+    >
+      {/* Customer Avatar and Info */}
+      <View className="flex-row items-center flex-1">
+        <View
+          className={`w-14 h-14 rounded-full ${getAvatarColor(bill.customerName)} items-center justify-center mr-4 shadow-sm`}
+        >
+          <Text className="text-white font-bold text-base">
+            {getCustomerInitials(bill.customerName)}
+          </Text>
+        </View>
+        <View className="flex-1">
+          <View className="flex-row items-center mb-1">
+            {isPureCredit && (
+              <Lock size={14} color="#b45309" style={{ marginRight: 4 }} />
+            )}
+            <Text className="text-gray-900 font-semibold text-base">
+              {bill.customerName}
+            </Text>
+          </View>
+          {bill.customerContact && (
+            <Text className="text-gray-500 text-sm">
+              {bill.customerContact}
+            </Text>
+          )}
+          <Text className="text-gray-400 text-xs mt-1">
+            {isClearance
+              ? `Receipt #${bill.receiptNo || "—"} • Credit Clearance`
+              : `Bill #${bill.billNumber || "—"} ${bill.status ? `• ${bill.status}` : ""}`}
+          </Text>
+          {bill.status === "Partial" && (
+            <View className="flex-row mt-2 items-center">
+              {bill.paidTotal > 0 && (
+                <View className="mr-2 px-2 py-0.5 rounded-full bg-green-100">
+                  <Text className="text-[10px] text-green-700 font-semibold">
+                    Paid ₹{bill.paidTotal}
+                  </Text>
+                </View>
+              )}
+              {bill.creditPortion > 0 && (
+                <View className="px-2 py-0.5 rounded-full bg-orange-100">
+                  <Text className="text-[10px] text-orange-700 font-semibold">
+                    Cr ₹{bill.creditPortion}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Amount and Status */}
+      <View className="items-end">
+        <Text className="text-gray-900 font-bold text-lg mb-1">
+          {formatCurrency((bill.total ?? bill.amount) || 0)}
+        </Text>
+        {isClearance ? (
+          <View className="px-2 py-1 rounded-full bg-blue-100">
+            <Text className="text-xs font-medium text-blue-700">
+              Credit Clearance
+            </Text>
+          </View>
+        ) : bill.status === "Paid" ? (
+          <View className="px-2 py-1 rounded-full bg-green-100">
+            <Text className="text-xs font-medium text-green-700">Paid</Text>
+          </View>
+        ) : bill.status === "Partial" ? (
+          <View className="px-2 py-1 rounded-full bg-orange-100">
+            <Text className="text-xs font-medium text-orange-700">Partial</Text>
+          </View>
+        ) : bill.status === "Credit" ? (
+          <View className="px-2 py-1 rounded-full bg-orange-100">
+            <Text className="text-xs font-medium text-orange-700">Credit</Text>
+          </View>
+        ) : null}
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 export default function CustomersScreen() {
   const { tab } = useLocalSearchParams<{ tab?: string }>();
@@ -338,39 +515,6 @@ export default function CustomersScreen() {
   const handleAddCustomer = () => {
     customerState.selectedCustomer.set(null);
     router.push("/(modals)/customer-form");
-  };
-
-  // Utility functions for better UX
-  const getCustomerInitials = (name: string): string => {
-    return name
-      .split(" ")
-      .map((n: string) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
-  const getAvatarColor = (name: string): string => {
-    const colors = [
-      "bg-red-500",
-      "bg-blue-500",
-      "bg-green-500",
-      "bg-yellow-500",
-      "bg-purple-500",
-      "bg-pink-500",
-      "bg-indigo-500",
-      "bg-teal-500",
-      "bg-orange-500",
-      "bg-cyan-500",
-      "bg-lime-500",
-      "bg-emerald-500",
-    ];
-    const index = name.charCodeAt(0) % colors.length;
-    return colors[index];
-  };
-
-  const formatCurrency = (amount: number): string => {
-    return `₹${amount.toLocaleString("en-IN")}`;
   };
 
   // const tabStats = getTabStats(dateGroups); // currently unused
@@ -844,6 +988,34 @@ export default function CustomersScreen() {
           new Date(a.split("-")[0]).getTime()
       );
 
+  // Prepare section data for completed bills SectionList
+  const completedBillSections = useMemo(() => {
+    if (!isCompletedTab) return [];
+    return sortedDates.map((date) => {
+      const group = completedBillGroups[date];
+      const bills = (group?.bills || [])
+        .slice()
+        .sort(
+          (a: any, b: any) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+      const totalAmount = bills.reduce((sum: number, bill: any) => {
+        if (bill.status === "Clearance")
+          return sum + (bill.amount || bill.total || 0);
+        if (bill.status === "Paid") return sum + (bill.total || 0);
+        if (bill.status === "Partial") return sum + (bill.paidTotal || 0);
+        return sum;
+      }, 0);
+      return {
+        date,
+        displayDate: group?.displayDate || date,
+        billCount: bills.length,
+        totalAmount,
+        data: bills,
+      };
+    });
+  }, [isCompletedTab, sortedDates, completedBillGroups]);
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       {/* Enhanced Header */}
@@ -976,6 +1148,107 @@ export default function CustomersScreen() {
                 : `No customers found with ${activeTab} orders`}
             </Text>
           </View>
+        ) : isAllTab ? (
+          // Use FlatList for "All" customers tab (virtualized for performance)
+          <FlatList
+            data={allCustomers}
+            keyExtractor={(item, index) => `cust-${item.id}-${index}`}
+            renderItem={({ item }) => (
+              <CustomerListItem
+                customer={item}
+                onPress={() =>
+                  router.push({
+                    pathname: "/customer-details",
+                    params: {
+                      customerId: item.id,
+                      customerName: item.name,
+                    },
+                  })
+                }
+              />
+            )}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                colors={["#2563eb"]}
+              />
+            }
+            contentContainerStyle={{
+              paddingHorizontal: 16,
+              paddingTop: 16,
+              paddingBottom: 96,
+            }}
+            initialNumToRender={15}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews={true}
+            updateCellsBatchingPeriod={50}
+            getItemLayout={(data, index) => ({
+              length: 76, // Approximate height of each item
+              offset: 76 * index,
+              index,
+            })}
+          />
+        ) : isCompletedTab ? (
+          // Use SectionList for completed bills (virtualized with date sections)
+          <SectionList
+            sections={completedBillSections}
+            keyExtractor={(item, index) => `bill-${item.id}-${index}`}
+            renderItem={({ item }) => (
+              <CompletedBillItem
+                bill={item}
+                onPress={() => {
+                  const isPureCredit =
+                    item.status === "Credit" &&
+                    (item.paidTotal === 0 || item.paidTotal == null);
+                  if (!isPureCredit) {
+                    router.push({
+                      pathname: "/(modals)/receipt-details",
+                      params: { receiptId: item.receiptId || item.id },
+                    });
+                  }
+                }}
+              />
+            )}
+            renderSectionHeader={({ section }) => (
+              <View className="px-4 py-4 bg-gradient-to-r from-green-50 to-emerald-50 mb-3 rounded-lg mx-4 mt-4">
+                <View className="flex-row items-center justify-between mb-2">
+                  <Text className="text-lg font-bold text-gray-900">
+                    {section.displayDate}
+                  </Text>
+                </View>
+                <View className="flex-row items-center">
+                  <View className="bg-white px-3 py-1.5 rounded-full mr-2 shadow-sm">
+                    <Text className="text-gray-700 text-xs font-medium">
+                      {section.billCount} bill
+                      {section.billCount !== 1 ? "s" : ""}
+                    </Text>
+                  </View>
+                  <View className="bg-white px-3 py-1.5 rounded-full shadow-sm">
+                    <Text className="text-gray-700 text-xs font-medium">
+                      {formatCurrency(section.totalAmount)} total
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                colors={["#2563eb"]}
+              />
+            }
+            contentContainerStyle={{ paddingBottom: 96 }}
+            stickySectionHeadersEnabled={false}
+            initialNumToRender={10}
+            maxToRenderPerBatch={8}
+            windowSize={5}
+            removeClippedSubviews={true}
+          />
         ) : (
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -988,76 +1261,12 @@ export default function CustomersScreen() {
             }
             contentContainerStyle={{ paddingBottom: 96 }}
           >
-            {isAllTab ? (
-              <View className="px-4 pt-4">
-                {allCustomers.map((customer: any, index: number) => (
-                  <TouchableOpacity
-                    key={`cust-${customer.id}-${index}`}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/customer-details",
-                        params: {
-                          customerId: customer.id,
-                          customerName: customer.name,
-                        },
-                      })
-                    }
-                    className="flex-row items-center bg-white mb-3 px-4 py-3 rounded-lg shadow-sm"
-                    activeOpacity={0.7}
-                  >
-                    <View
-                      className={`w-10 h-10 rounded-full ${getAvatarColor(customer.name)} items-center justify-center mr-3`}
-                    >
-                      <Text className="text-white font-bold text-sm">
-                        {getCustomerInitials(customer.name)}
-                      </Text>
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-gray-900 font-semibold text-base">
-                        {customer.name}
-                      </Text>
-                      {customer.contact && (
-                        <Text className="text-gray-500 text-xs">
-                          {customer.contact}
-                        </Text>
-                      )}
-                      <Text className="text-gray-400 text-xs mt-1">
-                        {customer.billCount} bill
-                        {customer.billCount === 1 ? "" : "s"} •{" "}
-                        {formatCurrency(customer.totalBilled || 0)}
-                      </Text>
-                    </View>
-                    {customer.creditBalance > 0 && (
-                      <View className="items-end">
-                        <Text className="text-orange-600 font-semibold text-xs">
-                          CR {formatCurrency(customer.creditBalance)}
-                        </Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : isCompletedTab ? (
-              // Render completed bills grouped by date
-              <View className="px-4 pt-4">
-                {sortedDates.map((date, index) =>
-                  renderCompletedBillDateSection(
-                    `${date}-${index}`,
-                    completedBillGroups[date]
-                  )
-                )}
-              </View>
-            ) : (
-              // Render active customers grouped by date
-              <View className="px-4 pt-4">
-                {sortedDates.map((date, index) =>
-                  renderDateSection(
-                    `${date}-${index}`,
-                    filteredDateGroups[date]
-                  )
-                )}
-              </View>
-            )}
+            {/* Render active customers grouped by date */}
+            <View className="px-4 pt-4">
+              {sortedDates.map((date, index) =>
+                renderDateSection(`${date}-${index}`, filteredDateGroups[date])
+              )}
+            </View>
           </ScrollView>
         )}
       </View>

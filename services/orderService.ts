@@ -423,6 +423,98 @@ class OrderService {
     return orders;
   }
 
+  // Paginated version for large datasets - returns page of orders + total count
+  async getOrdersByDatePaginated(
+    dateISO: string,
+    options: { limit?: number; offset?: number } = {}
+  ): Promise<{ orders: KotOrder[]; total: number; hasMore: boolean }> {
+    if (!db) throw new Error("Database not initialized");
+
+    const limit = options.limit || 20;
+    const offset = options.offset || 0;
+
+    // Compute IST day range [start, next)
+    const start = new Date(dateISO + "T00:00:00.000Z");
+    const startMs = start.getTime() - 5.5 * 60 * 60 * 1000;
+    const endMs = startMs + 24 * 60 * 60 * 1000;
+    const startUtc = new Date(startMs).toISOString();
+    const endUtc = new Date(endMs).toISOString();
+
+    // Get total count first (fast with index)
+    const countResult = (await db.getFirstAsync(
+      `SELECT COUNT(*) as total FROM kot_orders WHERE createdAt >= ? AND createdAt < ?`,
+      [startUtc, endUtc]
+    )) as any;
+    const total = countResult?.total || 0;
+
+    // Fetch paginated orders
+    const result = (await db.getAllAsync(
+      `
+      SELECT 
+        ko.*,
+        c.name as customerName,
+        c.contact as customerContact
+      FROM kot_orders ko
+      LEFT JOIN customers c ON ko.customerId = c.id
+      WHERE ko.createdAt >= ? AND ko.createdAt < ?
+      ORDER BY ko.createdAt DESC
+      LIMIT ? OFFSET ?
+    `,
+      [startUtc, endUtc, limit, offset]
+    )) as any[];
+
+    const orders: KotOrder[] = result.map((row: any) => ({
+      id: row.id,
+      kotNumber: row.kotNumber,
+      customerId: row.customerId,
+      billId: row.billId,
+      createdAt: row.createdAt,
+      customer: {
+        id: row.customerId,
+        name: row.customerName,
+        contact: row.customerContact,
+      },
+    }));
+
+    // Batch fetch items for this page only
+    if (orders.length) {
+      const ids = orders.map((o) => o.id);
+      const placeholders = ids.map(() => "?").join(",");
+      const rows = (await db.getAllAsync(
+        `SELECT ki.id, ki.kotId, ki.itemId, ki.quantity, ki.priceAtTime
+         FROM kot_items ki WHERE ki.kotId IN (${placeholders})`,
+        ids
+      )) as any[];
+
+      const byOrder: Record<string, any[]> = {};
+      for (const id of ids) byOrder[id] = [];
+      for (const r of rows) {
+        byOrder[r.kotId].push({
+          id: r.id,
+          kotId: r.kotId,
+          itemId: r.itemId,
+          quantity: r.quantity,
+          priceAtTime: r.priceAtTime,
+        });
+      }
+
+      for (const order of orders) {
+        const items = byOrder[order.id] || [];
+        order.items = items as any;
+        order.total = items.reduce(
+          (sum, item) => sum + item.priceAtTime * item.quantity,
+          0
+        );
+      }
+    }
+
+    return {
+      orders,
+      total,
+      hasMore: offset + orders.length < total,
+    };
+  }
+
   async getOrderById(orderId: string): Promise<KotOrder | null> {
     if (!db) throw new Error("Database not initialized");
 

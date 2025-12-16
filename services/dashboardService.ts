@@ -1,8 +1,34 @@
 import { db } from "../lib/db";
 
+// Dashboard stats cache with short TTL (10 seconds)
+class DashboardCache {
+  private cache = new Map<string, { data: any; timestamp: number }>();
+  private ttl = 10000; // 10 seconds
+
+  get(key: string): any | null {
+    const cached = this.cache.get(key);
+    if (!cached) return null;
+    if (Date.now() - cached.timestamp > this.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+    return cached.data;
+  }
+
+  set(key: string, data: any): void {
+    this.cache.set(key, { data, timestamp: Date.now() });
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+const dashboardCache = new DashboardCache();
+
 export interface DashboardStats {
   cashReceived: number; // Sum of payments in Cash (Clearance + direct) + Advance usage treated as cash equivalent? (business rule: only pure cash)
-  upiReceived: number;  // Sum of payments in UPI (Clearance + direct)
+  upiReceived: number; // Sum of payments in UPI (Clearance + direct)
   totalReceived: number; // Retained for profit calc (cash+upi+advance usage)
   outstandingCredit: number; // SUM(customers.creditBalance)
   totalExpenses: number;
@@ -55,15 +81,28 @@ export interface RevenueByDay {
 }
 
 class DashboardService {
+  // Clear cache when data changes
+  clearCache(): void {
+    dashboardCache.clear();
+    console.log("[CACHE] Cleared dashboard cache");
+  }
+
   async getDashboardStats(
     dateFilter?: DateFilterOptions
   ): Promise<DashboardStats & { totalRevenue: number }> {
     if (!db) throw new Error("Database not initialized");
 
-  // Use local calendar day for "today" to avoid UTC shifting issues (e.g., IST)
-  const today = new Date().toLocaleDateString("en-CA");
+    // Use local calendar day for "today" to avoid UTC shifting issues (e.g., IST)
+    const today = new Date().toLocaleDateString("en-CA");
     const filterStartDate = dateFilter?.startDate || today;
     const filterEndDate = dateFilter?.endDate || today;
+
+    // Check cache
+    const cacheKey = `stats:${filterStartDate}:${filterEndDate}`;
+    const cached = dashboardCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
 
     // Helper to compute local(IST) day range [startUtc, endUtc) for a given YYYY-MM-DD
     const istRangeForDate = (dStr: string) => {
@@ -82,11 +121,10 @@ class DashboardService {
       ).toISOString();
       return { startUtcIso, endUtcIso };
     };
-    const { startUtcIso: filterStartUtc, endUtcIso: filterEndUtc } = rangeForInclusiveDates(
-      filterStartDate,
-      filterEndDate
-    );
-    const { startUtcIso: todayStartUtc, endUtcIso: todayEndUtc } = istRangeForDate(today);
+    const { startUtcIso: filterStartUtc, endUtcIso: filterEndUtc } =
+      rangeForInclusiveDates(filterStartDate, filterEndDate);
+    const { startUtcIso: todayStartUtc, endUtcIso: todayEndUtc } =
+      istRangeForDate(today);
 
     const [
       totalReceivedResult,
@@ -105,20 +143,20 @@ class DashboardService {
       advanceRefundedResult,
       advanceOutstandingResult,
     ] = await Promise.all([
-  this.gettotalReceived(filterStartUtc, filterEndUtc),
+      this.gettotalReceived(filterStartUtc, filterEndUtc),
       this.getOutstandingCredit(),
-  this.getTotalExpenses(filterStartDate, filterEndDate),
-  this.getTotalExpenses(today, today),
-  this.getCreditAccrued(filterStartUtc, filterEndUtc),
-  this.getCreditCleared(filterStartUtc, filterEndUtc),
-  this.getExpensePaid(filterStartUtc, filterEndUtc),
-  this.getExpenseCreditAccrued(filterStartUtc, filterEndUtc),
-  this.getExpenseCreditCleared(filterStartUtc, filterEndUtc),
+      this.getTotalExpenses(filterStartDate, filterEndDate),
+      this.getTotalExpenses(today, today),
+      this.getCreditAccrued(filterStartUtc, filterEndUtc),
+      this.getCreditCleared(filterStartUtc, filterEndUtc),
+      this.getExpensePaid(filterStartUtc, filterEndUtc),
+      this.getExpenseCreditAccrued(filterStartUtc, filterEndUtc),
+      this.getExpenseCreditCleared(filterStartUtc, filterEndUtc),
       this.getExpenseOutstandingCredit(),
-  this.getTotalRevenue(filterStartUtc, filterEndUtc),
-  this.getAdvanceByType("Add", filterStartUtc, filterEndUtc),
-  this.getAdvanceByType("Apply", filterStartUtc, filterEndUtc),
-  this.getAdvanceByType("Refund", filterStartUtc, filterEndUtc),
+      this.getTotalRevenue(filterStartUtc, filterEndUtc),
+      this.getAdvanceByType("Add", filterStartUtc, filterEndUtc),
+      this.getAdvanceByType("Apply", filterStartUtc, filterEndUtc),
+      this.getAdvanceByType("Refund", filterStartUtc, filterEndUtc),
       this.getAdvanceOutstanding(),
     ]);
 
@@ -138,9 +176,12 @@ class DashboardService {
     const advanceOutstanding = advanceOutstandingResult;
 
     // Derive cash & upi portions (excluding credit accrual). Advance usage currently blended into totalReceived only.
-    const { cashPortion, upiPortion } = await this.getCashAndUpiSplit(filterStartUtc, filterEndUtc);
+    const { cashPortion, upiPortion } = await this.getCashAndUpiSplit(
+      filterStartUtc,
+      filterEndUtc
+    );
 
-    return {
+    const result = {
       cashReceived: cashPortion,
       upiReceived: upiPortion,
       totalReceived,
@@ -162,6 +203,10 @@ class DashboardService {
       advanceNetChange,
       advanceOutstanding,
     };
+
+    // Cache the result
+    dashboardCache.set(cacheKey, result);
+    return result;
   }
 
   // Removed getTotalOrders per new dashboard requirement
@@ -183,7 +228,10 @@ class DashboardService {
     return (payRow as any)?.revenue || 0;
   }
 
-  private async getCashAndUpiSplit(startUtc: string, endUtc: string): Promise<{ cashPortion: number; upiPortion: number }> {
+  private async getCashAndUpiSplit(
+    startUtc: string,
+    endUtc: string
+  ): Promise<{ cashPortion: number; upiPortion: number }> {
     if (!db) throw new Error("Database not initialized");
     const row = (await db.getFirstAsync(
       `SELECT 
@@ -244,10 +292,10 @@ class DashboardService {
     if (!db) throw new Error("Database not initialized");
 
     const result = (await db.getFirstAsync(
-    `SELECT COALESCE(SUM(amount), 0) as expenses 
+      `SELECT COALESCE(SUM(amount), 0) as expenses 
   FROM expenses 
   WHERE (deletedAt IS NULL) AND expenseDate >= ? AND expenseDate <= ?`,
-    [startDate, endDate]
+      [startDate, endDate]
     )) as any;
 
     return result?.expenses || 0;
@@ -313,7 +361,9 @@ class DashboardService {
 
     // Compute UTC lower bound for the earliest IST date we want
     const startIst = new Date(Date.now() + 5.5 * 3600 * 1000 - days * 86400000);
-    const startUtcIso = new Date(startIst.getTime() - 5.5 * 3600 * 1000).toISOString();
+    const startUtcIso = new Date(
+      startIst.getTime() - 5.5 * 3600 * 1000
+    ).toISOString();
     const result = (await db.getAllAsync(
       `SELECT 
          DATE(ko.createdAt, '+330 minutes') as date,
@@ -406,7 +456,7 @@ class DashboardService {
     let params: string[] = [];
 
     if (dateFilter) {
-  query += ` WHERE expenseDate >= ? AND expenseDate <= ?`;
+      query += ` WHERE expenseDate >= ? AND expenseDate <= ?`;
       params = [dateFilter.startDate, dateFilter.endDate];
     }
 
@@ -431,7 +481,9 @@ class DashboardService {
   ): Promise<ExpenseListItem[]> {
     if (!db) throw new Error("Database not initialized");
 
-  const where = dateFilter ? `WHERE e.expenseDate >= ? AND e.expenseDate <= ?` : "";
+    const where = dateFilter
+      ? `WHERE e.expenseDate >= ? AND e.expenseDate <= ?`
+      : "";
     const params: string[] = dateFilter
       ? [dateFilter.startDate, dateFilter.endDate]
       : [];
@@ -503,9 +555,16 @@ class DashboardService {
     if (dateFilter) {
       // Convert inclusive IST dates to a single UTC range for index-friendly filtering
       const startIst = new Date(dateFilter.startDate + "T00:00:00.000+05:30");
-      const endNextIst = new Date(new Date(dateFilter.endDate + "T00:00:00.000+05:30").getTime() + 86400000);
-      const startUtc = new Date(startIst.getTime() - 5.5 * 3600 * 1000).toISOString();
-      const endUtc = new Date(endNextIst.getTime() - 5.5 * 3600 * 1000).toISOString();
+      const endNextIst = new Date(
+        new Date(dateFilter.endDate + "T00:00:00.000+05:30").getTime() +
+          86400000
+      );
+      const startUtc = new Date(
+        startIst.getTime() - 5.5 * 3600 * 1000
+      ).toISOString();
+      const endUtc = new Date(
+        endNextIst.getTime() - 5.5 * 3600 * 1000
+      ).toISOString();
       query += ` WHERE ko.createdAt >= ? AND ko.createdAt < ?`;
       params = [startUtc, endUtc];
     }

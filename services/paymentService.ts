@@ -84,9 +84,13 @@ class PaymentService {
       await db.execAsync(`ALTER TABLE bills ADD COLUMN shopId TEXT;`);
     }
     // Backfill metadata & create index/ triggers (idempotent)
-    await db.execAsync(`UPDATE bills SET updatedAt = COALESCE(updatedAt, createdAt);`);
+    await db.execAsync(
+      `UPDATE bills SET updatedAt = COALESCE(updatedAt, createdAt);`
+    );
     await db.execAsync(`UPDATE bills SET shopId = COALESCE(shopId, 'shop_1');`);
-    await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_bills_shop_updated ON bills(shopId, updatedAt);`);
+    await db.execAsync(
+      `CREATE INDEX IF NOT EXISTS idx_bills_shop_updated ON bills(shopId, updatedAt);`
+    );
     await db.execAsync(`
       CREATE TRIGGER IF NOT EXISTS trg_bills_updatedAt_insert
       AFTER INSERT ON bills
@@ -130,8 +134,11 @@ class PaymentService {
     `,
       [bill.id, bill.billNumber, bill.customerId, bill.total, bill.createdAt]
     );
-  // Ensure updatedAt set immediately (especially on older schemas pre-trigger) so sync orders bill before dependent KOT linkage
-  await db!.runAsync(`UPDATE bills SET updatedAt = COALESCE(updatedAt, ?) WHERE id = ?`, [bill.createdAt, bill.id]);
+    // Ensure updatedAt set immediately (especially on older schemas pre-trigger) so sync orders bill before dependent KOT linkage
+    await db!.runAsync(
+      `UPDATE bills SET updatedAt = COALESCE(updatedAt, ?) WHERE id = ?`,
+      [bill.createdAt, bill.id]
+    );
     try {
       const { signalChange } = await import("@/state/appEvents");
       signalChange.bills();
@@ -201,7 +208,10 @@ class PaymentService {
           } else if (part.type === "AdvanceUse") {
             // Treat as paid portion towards bill (advance wallet deduction)
             paidPortion += part.amount;
-          } else if (part.type === "AdvanceAddCash" || part.type === "AdvanceAddUPI") {
+          } else if (
+            part.type === "AdvanceAddCash" ||
+            part.type === "AdvanceAddUPI"
+          ) {
             // Does not affect bill portions; handled separately after receipt/bill creation
           } else {
             paidPortion += part.amount;
@@ -260,13 +270,13 @@ class PaymentService {
             );
             continue; // no payments row
           }
-  if (part.type === "AdvanceAddCash" || part.type === "AdvanceAddUPI") {
+          if (part.type === "AdvanceAddCash" || part.type === "AdvanceAddUPI") {
             // Add extra to advance wallet
             await advanceService.addAdvance(
               paymentData.customerId,
               part.amount,
               {
-        remarks: `Extra paid during bill ${bill.billNumber} (${part.type === 'AdvanceAddCash' ? 'Cash' : part.type === 'AdvanceAddUPI' ? 'UPI' : 'Other'})`,
+                remarks: `Extra paid during bill ${bill.billNumber} (${part.type === "AdvanceAddCash" ? "Cash" : part.type === "AdvanceAddUPI" ? "UPI" : "Other"})`,
                 inTransaction: true,
               }
             );
@@ -385,7 +395,14 @@ class PaymentService {
     // Build conditional createdAt <= billCreatedAt clause only when we have bill timestamp
     const clauseExtra = billCreatedAt ? ` AND createdAt <= ?` : "";
     const params = billCreatedAt
-      ? [billId, nowIso, customerId, dayStartIso, nextDayStartIso, billCreatedAt]
+      ? [
+          billId,
+          nowIso,
+          customerId,
+          dayStartIso,
+          nextDayStartIso,
+          billCreatedAt,
+        ]
       : [billId, nowIso, customerId, dayStartIso, nextDayStartIso];
     await db.runAsync(
       `UPDATE kot_orders
@@ -537,20 +554,45 @@ class PaymentService {
       `SELECT * FROM receipts WHERE customerId = ? ORDER BY createdAt DESC`,
       [customerId]
     )) as any[];
+
+    if (receipts.length === 0) return [];
+
+    // Batch fetch all payments for all billIds (eliminate N+1)
+    const billIds = receipts.map((r) => r.billId).filter(Boolean);
+    let paymentsByBill: Record<string, any[]> = {};
+    if (billIds.length > 0) {
+      const placeholders = billIds.map(() => "?").join(",");
+      const allPayments = (await db.getAllAsync(
+        `SELECT * FROM payments WHERE billId IN (${placeholders}) AND mode != 'Credit'`,
+        billIds
+      )) as any[];
+      for (const p of allPayments) {
+        if (!paymentsByBill[p.billId]) paymentsByBill[p.billId] = [];
+        paymentsByBill[p.billId].push(p);
+      }
+    }
+
+    // Batch fetch advance usage for all receipts (eliminate N+1)
+    const receiptIds = receipts.map((r) => r.id);
+    const advPlaceholders = receiptIds.map(() => "?").join(",");
+    const advRows = (await db.getAllAsync(
+      `SELECT receiptId, COALESCE(SUM(amount), 0) as total 
+       FROM split_payments 
+       WHERE receiptId IN (${advPlaceholders}) AND paymentType = 'AdvanceUse'
+       GROUP BY receiptId`,
+      receiptIds
+    )) as any[];
+    const advanceByReceipt: Record<string, number> = {};
+    for (const a of advRows) {
+      advanceByReceipt[a.receiptId] = a.total || 0;
+    }
+
     const enriched: any[] = [];
     for (const r of receipts) {
-      // Cash/UPI from payments (exclude Credit accrual rows)
-      const pays = (await db.getAllAsync(
-        `SELECT * FROM payments WHERE (billId = ? OR (? IS NULL AND billId IS NULL AND customerId = ?)) AND (mode != 'Credit')`,
-        [r.billId, r.billId, customerId]
-      )) as any[];
+      // Get payments from pre-fetched map
+      const pays = paymentsByBill[r.billId] || [];
       const cashUpi = pays.reduce((s, p) => s + (p.amount || 0), 0);
-      // AdvanceUse from split meta
-      const adv = (await db.getFirstAsync(
-        `SELECT COALESCE(SUM(amount),0) as s FROM split_payments WHERE receiptId = ? AND paymentType = 'AdvanceUse'`,
-        [r.id]
-      )) as any;
-      const advanceUsed = adv?.s || 0;
+      const advanceUsed = advanceByReceipt[r.id] || 0;
       const amountPaid = cashUpi + advanceUsed;
       enriched.push({
         id: r.id,
@@ -566,27 +608,55 @@ class PaymentService {
   }
 
   // Payment history with breakdown including AdvanceUse parts per receipt
-  async getPaymentHistoryWithAdvanceParts(customerId: string): Promise<Payment[]> {
+  async getPaymentHistoryWithAdvanceParts(
+    customerId: string
+  ): Promise<Payment[]> {
     if (!db) throw new Error("Database not initialized");
     const receipts = (await db.getAllAsync(
       `SELECT id, billId, customerId, createdAt FROM receipts WHERE customerId = ? ORDER BY createdAt DESC`,
       [customerId]
     )) as any[];
+
+    if (receipts.length === 0) return [];
+
+    // Batch fetch all payments for all billIds (eliminate N+1)
+    const billIds = receipts.map((r) => r.billId).filter(Boolean);
+    let paymentsByBill: Record<string, Payment[]> = {};
+    if (billIds.length > 0) {
+      const placeholders = billIds.map(() => "?").join(",");
+      const allPayments = (await db.getAllAsync(
+        `SELECT * FROM payments WHERE billId IN (${placeholders}) ORDER BY createdAt ASC`,
+        billIds
+      )) as Payment[];
+      for (const p of allPayments) {
+        if (!paymentsByBill[p.billId!]) paymentsByBill[p.billId!] = [];
+        paymentsByBill[p.billId!].push(p);
+      }
+    }
+
+    // Batch fetch advance parts for all receipts (eliminate N+1)
+    const receiptIds = receipts.map((r) => r.id);
+    const advPlaceholders = receiptIds.map(() => "?").join(",");
+    const allAdvParts = (await db.getAllAsync(
+      `SELECT receiptId, amount, createdAt FROM split_payments 
+       WHERE receiptId IN (${advPlaceholders}) AND paymentType = 'AdvanceUse'
+       ORDER BY createdAt ASC`,
+      receiptIds
+    )) as any[];
+    const advPartsByReceipt: Record<string, any[]> = {};
+    for (const a of allAdvParts) {
+      if (!advPartsByReceipt[a.receiptId]) advPartsByReceipt[a.receiptId] = [];
+      advPartsByReceipt[a.receiptId].push(a);
+    }
+
     const rows: Payment[] = [] as any;
     for (const r of receipts) {
-      // Real payment rows linked to this receipt context
-      const pays = (await db.getAllAsync(
-        r.billId
-          ? `SELECT * FROM payments WHERE billId = ? ORDER BY createdAt ASC`
-          : `SELECT * FROM payments WHERE billId IS NULL AND customerId = ? AND createdAt = ? ORDER BY createdAt ASC`,
-        r.billId ? [r.billId] : [customerId, r.createdAt]
-      )) as Payment[];
+      // Get payments from pre-fetched map
+      const pays = paymentsByBill[r.billId] || [];
       rows.push(...pays);
-      // Add synthetic Advance rows from split meta
-      const advParts = (await db.getAllAsync(
-        `SELECT amount FROM split_payments WHERE receiptId = ? AND paymentType = 'AdvanceUse' ORDER BY createdAt ASC`,
-        [r.id]
-      )) as any[];
+
+      // Add synthetic Advance rows from pre-fetched map
+      const advParts = advPartsByReceipt[r.id] || [];
       for (const a of advParts) {
         rows.push({
           id: uuid.v4() as string,
@@ -601,7 +671,9 @@ class PaymentService {
       }
     }
     // Order newest first
-    rows.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+    rows.sort((a, b) =>
+      a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0
+    );
     return rows;
   }
 
@@ -737,14 +809,13 @@ class PaymentService {
     // Get related bill directly via receipt.billId when available
     let bill: any = null;
     if (receipt.billId) {
-      bill = (await db.getFirstAsync(
-        `SELECT * FROM bills WHERE id = ?`,
-        [receipt.billId]
-      )) as any;
+      bill = (await db.getFirstAsync(`SELECT * FROM bills WHERE id = ?`, [
+        receipt.billId,
+      ])) as any;
     }
 
     let kots: any[] = [];
-  if (bill) {
+    if (bill) {
       // Get KOTs linked to this bill
       kots = (await db.getAllAsync(
         `
@@ -770,7 +841,7 @@ class PaymentService {
       }));
     }
 
-  return {
+    return {
       receipt,
       customer,
       kots,
@@ -822,7 +893,11 @@ class PaymentService {
     await this.ensureSchemaUpgrades();
     // Validate: allow Cash/UPI and AdvanceUse; total cleared (Cash/UPI + AdvanceUse) must be > 0
     const invalid = splits.some(
-      (s) => s.type === "Credit" || s.type === "AdvanceAddCash" || s.type === "AdvanceAddUPI" || s.amount <= 0
+      (s) =>
+        s.type === "Credit" ||
+        s.type === "AdvanceAddCash" ||
+        s.type === "AdvanceAddUPI" ||
+        s.amount <= 0
     );
     if (invalid) throw new Error("Invalid clearance splits");
     const paidTotal = splits
@@ -904,7 +979,7 @@ class PaymentService {
         `
   UPDATE customers SET creditBalance = COALESCE(creditBalance,0) - ?, updatedAt = ? WHERE id = ?
       `,
-  [paidTotal + advanceUsed, now, customerId]
+        [paidTotal + advanceUsed, now, customerId]
       );
 
       // Store split meta for UI
@@ -937,7 +1012,7 @@ class PaymentService {
         `
   UPDATE customers SET creditBalance = COALESCE(creditBalance,0) - ?, updatedAt = ? WHERE id = ?
       `,
-  [amount, new Date().toISOString(), customerId]
+        [amount, new Date().toISOString(), customerId]
       );
       const payment: Payment = {
         id: uuid.v4() as string,
@@ -984,13 +1059,27 @@ class PaymentService {
     `,
       [customerId]
     )) as any[];
+
+    // Batch fetch all payments for all bills (eliminate N+1)
+    if (bills.length === 0) return bills;
+
+    const billIds = bills.map((b) => b.id);
+    const placeholders = billIds.map(() => "?").join(",");
+    const allPayments = (await db.getAllAsync(
+      `SELECT * FROM payments WHERE billId IN (${placeholders}) ORDER BY createdAt ASC`,
+      billIds
+    )) as any[];
+
+    // Group payments by billId
+    const paymentsByBill: Record<string, any[]> = {};
+    for (const p of allPayments) {
+      if (!paymentsByBill[p.billId]) paymentsByBill[p.billId] = [];
+      paymentsByBill[p.billId].push(p);
+    }
+
+    // Apply payments to each bill
     for (const bill of bills) {
-      const payments = (await db.getAllAsync(
-        `
-        SELECT * FROM payments WHERE billId = ? ORDER BY createdAt ASC
-      `,
-        [bill.id]
-      )) as any[];
+      const payments = paymentsByBill[bill.id] || [];
       let paidTotal = 0,
         creditPortion = 0;
       for (const p of payments) {
@@ -1059,6 +1148,39 @@ class PaymentService {
     `,
       [startDateStr + "T00:00:00.000Z"]
     )) as any[];
+
+    // Fetch all payments for these bills in ONE query (eliminate N+1)
+    const billIds = rows.map((r) => r.billId).filter(Boolean);
+    let paymentsByBill: Record<string, any[]> = {};
+    if (billIds.length > 0) {
+      const placeholders = billIds.map(() => "?").join(",");
+      const allPayments = (await db.getAllAsync(
+        `SELECT billId, mode, amount FROM payments WHERE billId IN (${placeholders})`,
+        billIds
+      )) as any[];
+      for (const p of allPayments) {
+        if (!paymentsByBill[p.billId]) paymentsByBill[p.billId] = [];
+        paymentsByBill[p.billId].push(p);
+      }
+    }
+
+    // Fetch all advance usage for receipts in ONE query
+    const receiptIds = rows.map((r) => r.receiptId).filter(Boolean);
+    let advanceByReceipt: Record<string, number> = {};
+    if (receiptIds.length > 0) {
+      const placeholders = receiptIds.map(() => "?").join(",");
+      const advRows = (await db.getAllAsync(
+        `SELECT receiptId, COALESCE(SUM(amount), 0) as total 
+         FROM split_payments 
+         WHERE receiptId IN (${placeholders}) AND paymentType = 'AdvanceUse'
+         GROUP BY receiptId`,
+        receiptIds
+      )) as any[];
+      for (const a of advRows) {
+        advanceByReceipt[a.receiptId] = a.total || 0;
+      }
+    }
+
     // Fetch clearance-only receipts (no billId)
     const clearanceReceipts = (await db.getAllAsync(
       `
@@ -1072,34 +1194,52 @@ class PaymentService {
     `,
       [startDateStr + "T00:00:00.000Z"]
     )) as any[];
+
+    // Fetch advance usage for clearance receipts
+    const clearanceReceiptIds = clearanceReceipts
+      .map((r) => r.receiptId)
+      .filter(Boolean);
+    let clearanceAdvanceByReceipt: Record<string, number> = {};
+    if (clearanceReceiptIds.length > 0) {
+      const placeholders = clearanceReceiptIds.map(() => "?").join(",");
+      const advRows = (await db.getAllAsync(
+        `SELECT receiptId, COALESCE(SUM(amount), 0) as total 
+         FROM split_payments 
+         WHERE receiptId IN (${placeholders}) AND paymentType = 'AdvanceUse'
+         GROUP BY receiptId`,
+        clearanceReceiptIds
+      )) as any[];
+      for (const a of advRows) {
+        clearanceAdvanceByReceipt[a.receiptId] = a.total || 0;
+      }
+    }
+
     const groups: Record<string, any> = {};
+    const today = new Date().toISOString().split("T")[0];
+    const yesterday = new Date(Date.now() - 86400000)
+      .toISOString()
+      .split("T")[0];
+
+    const getDisplayDate = (date: string): string => {
+      if (date === today) return "Today";
+      if (date === yesterday) return "Yesterday";
+      const d = new Date(date);
+      return d.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit",
+        weekday: "long",
+      });
+    };
+
     for (const row of rows) {
       const date = row.createdAt.split("T")[0];
       if (!groups[date]) {
-        // displayDate formatting similar to existing logic
-        const today = new Date().toISOString().split("T")[0];
-        const yesterday = new Date(Date.now() - 86400000)
-          .toISOString()
-          .split("T")[0];
-        let displayDate: string;
-        if (date === today) displayDate = "Today";
-        else if (date === yesterday) displayDate = "Yesterday";
-        else {
-          const d = new Date(date);
-          displayDate = d.toLocaleDateString("en-GB", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "2-digit",
-            weekday: "long",
-          });
-        }
-        groups[date] = { date, displayDate, bills: [] };
+        groups[date] = { date, displayDate: getDisplayDate(date), bills: [] };
       }
-      // fetch payments for this bill
-      const pays = (await db.getAllAsync(
-        `SELECT * FROM payments WHERE billId = ?`,
-        [row.billId]
-      )) as any[];
+
+      // Get payments from pre-fetched map (no N+1!)
+      const pays = paymentsByBill[row.billId] || [];
       let paidTotal = 0,
         creditPortion = 0;
       let hasAnyCredit = false;
@@ -1111,35 +1251,34 @@ class PaymentService {
           paidTotal += p.amount || 0;
         }
       });
-      // Include advance used via split meta or infer auto-applied advance
-      let advanceUsed = 0;
-      if (row.receiptId) {
-        const adv = (await db.getFirstAsync(
-          `SELECT COALESCE(SUM(amount),0) as s FROM split_payments WHERE receiptId = ? AND paymentType = 'AdvanceUse'`,
-          [row.receiptId]
-        )) as any;
-        advanceUsed = adv?.s || 0;
-      }
-      if (!advanceUsed) {
-        // Infer auto-apply (non-split path): any remaining between total and (paid+credit) is likely advance
-        const remaining = Math.max(0, (row.total || 0) - (paidTotal + creditPortion));
-        // Only count as advance if there is a receipt (i.e., not pure credit sale)
-        if (row.receiptId) advanceUsed = remaining;
+
+      // Get advance from pre-fetched map
+      let advanceUsed = advanceByReceipt[row.receiptId] || 0;
+      if (!advanceUsed && row.receiptId) {
+        // Infer auto-apply advance
+        const remaining = Math.max(
+          0,
+          (row.total || 0) - (paidTotal + creditPortion)
+        );
+        advanceUsed = remaining;
       }
       const paidTotalWithAdvance = paidTotal + advanceUsed;
-      // Status rules:
-      // - Paid: only cash/upi etc (paidTotal>0, creditPortion==0)
-      // - Credit: no cash/upi, has credit (creditPortion>0 OR legacy zero-amount credit rows)
-      // - Partial: both present
-      // - Edge (both zero): treat as Credit if any credit row exists, else fall back to Paid
+
+      // Status rules
       let status: "Paid" | "Credit" | "Partial";
-      if (paidTotalWithAdvance >= (row.total || 0) && creditPortion === 0) status = "Paid";
-      else if (paidTotalWithAdvance === 0 && (creditPortion > 0 || hasAnyCredit))
+      if (paidTotalWithAdvance >= (row.total || 0) && creditPortion === 0)
+        status = "Paid";
+      else if (
+        paidTotalWithAdvance === 0 &&
+        (creditPortion > 0 || hasAnyCredit)
+      )
         status = "Credit";
-      else if (paidTotalWithAdvance > 0 && creditPortion > 0) status = "Partial";
+      else if (paidTotalWithAdvance > 0 && creditPortion > 0)
+        status = "Partial";
       else status = row.receiptId ? "Paid" : "Credit";
+
       groups[date].bills.push({
-        id: row.receiptId || row.billId, // keep id for navigation; if no receipt we use billId
+        id: row.receiptId || row.billId,
         billId: row.billId,
         receiptId: row.receiptId,
         billNumber: row.billNumber,
@@ -1154,34 +1293,14 @@ class PaymentService {
         createdAt: row.createdAt,
       });
     }
+
     // Add clearance receipts as standalone entries
     for (const cr of clearanceReceipts) {
       const date = cr.createdAt.split("T")[0];
       if (!groups[date]) {
-        const today = new Date().toISOString().split("T")[0];
-        const yesterday = new Date(Date.now() - 86400000)
-          .toISOString()
-          .split("T")[0];
-        let displayDate: string;
-        if (date === today) displayDate = "Today";
-        else if (date === yesterday) displayDate = "Yesterday";
-        else {
-          const d = new Date(date);
-          displayDate = d.toLocaleDateString("en-GB", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "2-digit",
-            weekday: "long",
-          });
-        }
-        groups[date] = { date, displayDate, bills: [] };
+        groups[date] = { date, displayDate: getDisplayDate(date), bills: [] };
       }
-      // Include advance used for clearance receipt via split meta
-      const adv = (await db.getFirstAsync(
-        `SELECT COALESCE(SUM(amount),0) as s FROM split_payments WHERE receiptId = ? AND paymentType = 'AdvanceUse'`,
-        [cr.receiptId]
-      )) as any;
-      const advUsed = adv?.s || 0;
+      const advUsed = clearanceAdvanceByReceipt[cr.receiptId] || 0;
       const totalPaid = (cr.amount || 0) + advUsed;
       groups[date].bills.push({
         id: cr.receiptId,

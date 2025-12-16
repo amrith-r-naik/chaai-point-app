@@ -26,60 +26,66 @@ class DueService {
   async getCustomersWithDues(): Promise<CustomerDue[]> {
     if (!db) throw new Error("Database not initialized");
 
-    const result = (await db.getAllAsync(`
+    // Single query to get all unpaid KOTs with their customer and item info
+    // This eliminates N+1 by fetching everything in one go
+    const allUnpaidKots = (await db.getAllAsync(`
       SELECT 
         c.id as customerId,
         c.name as customerName,
         c.contact as customerContact,
-        COALESCE(SUM(ki.quantity * ki.priceAtTime), 0) as totalDueAmount,
-        MAX(ko.createdAt) as lastOrderDate
+        ko.id as kotId,
+        ko.kotNumber,
+        ko.createdAt,
+        COALESCE(SUM(ki.quantity * ki.priceAtTime), 0) as amount,
+        GROUP_CONCAT(mi.name || ' (x' || ki.quantity || ')', ', ') as items
       FROM customers c
       INNER JOIN kot_orders ko ON c.id = ko.customerId
       INNER JOIN kot_items ki ON ko.id = ki.kotId
+      LEFT JOIN menu_items mi ON ki.itemId = mi.id
       WHERE ko.billId IS NULL
-      GROUP BY c.id, c.name, c.contact
-      HAVING totalDueAmount > 0
-      ORDER BY lastOrderDate DESC
+      GROUP BY c.id, c.name, c.contact, ko.id, ko.kotNumber, ko.createdAt
+      ORDER BY ko.createdAt DESC
     `)) as any[];
 
-    const customersWithDues: CustomerDue[] = [];
+    // Group by customer in JavaScript
+    const customerMap = new Map<string, CustomerDue>();
 
-    for (const row of result) {
-      const unpaidKots = (await db.getAllAsync(
-        `
-        SELECT 
-          ko.id,
-          ko.kotNumber,
-          ko.createdAt,
-          COALESCE(SUM(ki.quantity * ki.priceAtTime), 0) as amount,
-          GROUP_CONCAT(mi.name || ' (x' || ki.quantity || ')', ', ') as items
-        FROM kot_orders ko
-        INNER JOIN kot_items ki ON ko.id = ki.kotId
-        LEFT JOIN menu_items mi ON ki.itemId = mi.id
-        WHERE ko.customerId = ? AND ko.billId IS NULL
-        GROUP BY ko.id, ko.kotNumber, ko.createdAt
-        ORDER BY ko.createdAt DESC
-      `,
-        [row.customerId]
-      )) as any[];
+    for (const row of allUnpaidKots) {
+      if (!customerMap.has(row.customerId)) {
+        customerMap.set(row.customerId, {
+          customerId: row.customerId,
+          customerName: row.customerName,
+          customerContact: row.customerContact,
+          totalDueAmount: 0,
+          lastOrderDate: row.createdAt,
+          unpaidKots: [],
+        });
+      }
 
-      customersWithDues.push({
-        customerId: row.customerId,
-        customerName: row.customerName,
-        customerContact: row.customerContact,
-        totalDueAmount: row.totalDueAmount,
-        lastOrderDate: row.lastOrderDate,
-        unpaidKots: unpaidKots.map((kot) => ({
-          id: kot.id,
-          kotNumber: kot.kotNumber,
-          amount: kot.amount,
-          createdAt: kot.createdAt,
-          items: kot.items || "No items",
-        })),
+      const customer = customerMap.get(row.customerId)!;
+      customer.totalDueAmount += row.amount;
+      customer.unpaidKots.push({
+        id: row.kotId,
+        kotNumber: row.kotNumber,
+        amount: row.amount,
+        createdAt: row.createdAt,
+        items: row.items || "No items",
       });
+
+      // Update lastOrderDate if this KOT is newer
+      if (row.createdAt > customer.lastOrderDate) {
+        customer.lastOrderDate = row.createdAt;
+      }
     }
 
-    return customersWithDues;
+    // Convert to array and sort by lastOrderDate DESC
+    return Array.from(customerMap.values())
+      .filter((c) => c.totalDueAmount > 0)
+      .sort(
+        (a, b) =>
+          new Date(b.lastOrderDate).getTime() -
+          new Date(a.lastOrderDate).getTime()
+      );
   }
 
   async getTotalPendingDues(): Promise<number> {

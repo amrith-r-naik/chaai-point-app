@@ -65,11 +65,20 @@ export async function getCustomersSummary(): Promise<
         c.id,
         c.name,
         c.contact,
-        COALESCE(c.creditBalance,0) as creditBalance,
-        (SELECT COUNT(*) FROM bills b WHERE b.customerId = c.id) as billCount,
-        COALESCE((SELECT SUM(total) FROM bills b2 WHERE b2.customerId = c.id),0) as totalBilled,
-        (SELECT MAX(createdAt) FROM bills b3 WHERE b3.customerId = c.id) as lastBillAt
+        COALESCE(c.creditBalance, 0) as creditBalance,
+        COALESCE(bs.billCount, 0) as billCount,
+        COALESCE(bs.totalBilled, 0) as totalBilled,
+        bs.lastBillAt
       FROM customers c
+      LEFT JOIN (
+        SELECT 
+          customerId,
+          COUNT(*) as billCount,
+          SUM(total) as totalBilled,
+          MAX(createdAt) as lastBillAt
+        FROM bills
+        GROUP BY customerId
+      ) bs ON bs.customerId = c.id
       ORDER BY c.name ASC
     `)) as any[];
 

@@ -98,7 +98,7 @@ interface OrderDetails {
 }
 
 export default function OrderSummaryScreen() {
-  const { orderId, orderNumber, from } = useLocalSearchParams<{
+  const { orderId } = useLocalSearchParams<{
     orderId: string;
     orderNumber: string;
     from?: string;
@@ -107,13 +107,7 @@ export default function OrderSummaryScreen() {
   const [order, setOrder] = useState<OrderDetails | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (orderId) {
-      loadOrderDetails();
-    }
-  }, [orderId]);
-
-  const loadOrderDetails = async () => {
+  const loadOrderDetails = useCallback(async () => {
     try {
       setLoading(true);
       // This function will be implemented in orderService
@@ -124,7 +118,7 @@ export default function OrderSummaryScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [orderId]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -168,6 +162,12 @@ export default function OrderSummaryScreen() {
     ),
     []
   );
+
+  useEffect(() => {
+    if (orderId) {
+      loadOrderDetails();
+    }
+  }, [orderId, loadOrderDetails]);
 
   if (loading) {
     return (

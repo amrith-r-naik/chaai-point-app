@@ -1,16 +1,16 @@
-import { Plus, X } from 'lucide-react-native';
-import React, { useState } from 'react';
+import { Plus, X } from "lucide-react-native";
+import React, { useState } from "react";
 import {
-    Animated,
-    Dimensions,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import { theme } from '../constants/theme';
+  Animated,
+  Dimensions,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { theme } from "../constants/theme";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 
 interface Category {
   name: string;
@@ -33,14 +33,14 @@ export const FABCategorySelector: React.FC<FABCategorySelectorProps> = ({
 
   const toggleExpansion = () => {
     const toValue = isExpanded ? 0 : 1;
-    
+
     Animated.spring(animation, {
       toValue,
       useNativeDriver: false,
       tension: 100,
       friction: 8,
     }).start();
-    
+
     setIsExpanded(!isExpanded);
   };
 
@@ -56,10 +56,12 @@ export const FABCategorySelector: React.FC<FABCategorySelectorProps> = ({
 
   const fabRotation = animation.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '45deg'],
+    outputRange: ["0deg", "45deg"],
   });
 
-  const selectedCategoryData = categories.find(cat => cat.name === selectedCategory);
+  const selectedCategoryData = categories.find(
+    (cat) => cat.name === selectedCategory
+  );
 
   return (
     <View style={styles.container}>
@@ -67,12 +69,11 @@ export const FABCategorySelector: React.FC<FABCategorySelectorProps> = ({
       {isExpanded && (
         <View style={styles.categoriesContainer}>
           {categories.map((category, index) => {
-            const delay = index * 50;
             const categoryOpacity = animation.interpolate({
               inputRange: [0, 1],
               outputRange: [0, 1],
             });
-            
+
             const categoryTranslateY = animation.interpolate({
               inputRange: [0, 1],
               outputRange: [20, 0],
@@ -93,14 +94,16 @@ export const FABCategorySelector: React.FC<FABCategorySelectorProps> = ({
                   onPress={() => handleCategorySelect(category.name)}
                   style={[
                     styles.categoryButton,
-                    selectedCategory === category.name && styles.selectedCategoryButton,
+                    selectedCategory === category.name &&
+                      styles.selectedCategoryButton,
                   ]}
                 >
                   <Text style={styles.categoryEmoji}>{category.emoji}</Text>
                   <Text
                     style={[
                       styles.categoryText,
-                      selectedCategory === category.name && styles.selectedCategoryText,
+                      selectedCategory === category.name &&
+                        styles.selectedCategoryText,
                     ]}
                   >
                     {category.name}
@@ -161,22 +164,22 @@ export const FABCategorySelector: React.FC<FABCategorySelectorProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 20,
     right: 20,
     zIndex: 1000,
   },
   overlay: {
-    position: 'absolute',
+    position: "absolute",
     top: -1000,
     left: -width,
     width: width * 2,
     height: 2000,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
     zIndex: -1,
   },
   categoriesContainer: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 80,
     right: 0,
     minWidth: 150,
@@ -185,14 +188,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   categoryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'white',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "white",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 25,
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 2,
@@ -200,7 +203,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: "transparent",
   },
   selectedCategoryButton: {
     backgroundColor: theme.colors.primary,
@@ -212,18 +215,18 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
     color: theme.colors.text,
   },
   selectedCategoryText: {
-    color: 'white',
+    color: "white",
   },
   fab: {
     width: 60,
     height: 60,
     borderRadius: 30,
     elevation: 8,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 4,
@@ -232,16 +235,16 @@ const styles = StyleSheet.create({
     shadowRadius: 4.65,
   },
   fabButton: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
     borderRadius: 30,
     backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   fabContent: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   fabEmoji: {
     fontSize: 20,
@@ -249,8 +252,8 @@ const styles = StyleSheet.create({
   },
   fabText: {
     fontSize: 10,
-    color: 'white',
-    fontWeight: '600',
-    textAlign: 'center',
+    color: "white",
+    fontWeight: "600",
+    textAlign: "center",
   },
 });

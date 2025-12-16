@@ -96,7 +96,7 @@ const OrderItem = React.memo(
     // Custom comparison - only re-render if order data actually changed
     return (
       prevProps.order.id === nextProps.order.id &&
-      prevProps.order.updatedAt === nextProps.order.updatedAt &&
+      prevProps.order.createdAt === nextProps.order.createdAt &&
       prevProps.order.billId === nextProps.order.billId &&
       prevProps.order.total === nextProps.order.total
     );
@@ -104,7 +104,9 @@ const OrderItem = React.memo(
 );
 
 // Memoized item separator
-const ItemSeparator = React.memo(() => <View style={{ height: 0 }} />);
+const ItemSeparator = React.memo(function ItemSeparator() {
+  return <View style={{ height: 0 }} />;
+});
 
 export default function OrdersScreen() {
   // Granular subscriptions - only re-render when specific fields change

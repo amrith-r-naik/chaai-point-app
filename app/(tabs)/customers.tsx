@@ -71,9 +71,12 @@ const formatCurrency = (amount: number): string => {
   return `₹${amount.toLocaleString("en-IN")}`;
 };
 
-// Constants for FlatList/SectionList optimization
+// Constants for FlatList/SectionList optimization (reserved for getItemLayout)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const CUSTOMER_ITEM_HEIGHT = 76; // Height of CustomerListItem
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const BILL_ITEM_HEIGHT = 100; // Height of CompletedBillItem
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const SECTION_HEADER_HEIGHT = 80; // Height of section headers
 
 // Memoized customer item for FlatList virtualization
@@ -1051,8 +1054,10 @@ export default function CustomersScreen() {
 
   const isAllTab = activeTab === "all";
   const isCompletedTab = activeTab === "completed";
-  const filteredDateGroups =
-    isAllTab || isCompletedTab ? {} : (filteredData as any);
+  const filteredDateGroups = useMemo(
+    () => (isAllTab || isCompletedTab ? {} : (filteredData as any)),
+    [isAllTab, isCompletedTab, filteredData]
+  );
   const allCustomers = isAllTab ? allSummaries : [];
   const completedBillGroups = useMemo(
     () => (isCompletedTab ? (filteredData as any) : {}),

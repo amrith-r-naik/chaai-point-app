@@ -116,7 +116,8 @@ export default function CustomerKOTsScreen() {
     }
   };
 
-  const getKOTStatusColor = (status: string) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _getKOTStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case "pending":
         return "bg-orange-100 text-orange-700 border-orange-200";

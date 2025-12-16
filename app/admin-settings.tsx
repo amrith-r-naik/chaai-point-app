@@ -621,7 +621,7 @@ export default function AdminSettingsScreen() {
           },
         ]
       );
-    } catch (error) {
+    } catch {
       setLoading(false);
     }
   };

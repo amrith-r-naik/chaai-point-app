@@ -28,7 +28,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+// useSafeAreaInsets removed (not used)
 
 // Height constant for getItemLayout optimization
 const CUSTOMER_DUE_ITEM_HEIGHT = 160;
@@ -49,52 +49,31 @@ interface CustomerDueItemProps {
 }
 
 const CustomerDueItem = React.memo<CustomerDueItemProps>(
-  ({ item, onPress }) => (
-    <TouchableOpacity
-      onPress={() => onPress(item)}
-      style={{
-        backgroundColor: "white",
-        marginHorizontal: 16,
-        marginBottom: 12,
-        borderRadius: 12,
-        padding: 16,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 3,
-      }}
-    >
-      <View
+  function CustomerDueItem({ item, onPress }) {
+    return (
+      <TouchableOpacity
+        onPress={() => onPress(item)}
         style={{
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
+          backgroundColor: "white",
+          marginHorizontal: 16,
+          marginBottom: 12,
+          borderRadius: 12,
+          padding: 16,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 8,
+          elevation: 3,
         }}
       >
-        <View style={{ flex: 1 }}>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginBottom: 8,
-            }}
-          >
-            <User size={20} color={theme.colors.primary} />
-            <Text
-              style={{
-                fontSize: 18,
-                fontWeight: "600",
-                color: theme.colors.text,
-                marginLeft: 8,
-                flex: 1,
-              }}
-            >
-              {item.customerName}
-            </Text>
-          </View>
-
-          {item.customerContact && (
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+          }}
+        >
+          <View style={{ flex: 1 }}>
             <View
               style={{
                 flexDirection: "row",
@@ -102,7 +81,49 @@ const CustomerDueItem = React.memo<CustomerDueItemProps>(
                 marginBottom: 8,
               }}
             >
-              <Phone size={16} color={theme.colors.textSecondary} />
+              <User size={20} color={theme.colors.primary} />
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                  marginLeft: 8,
+                  flex: 1,
+                }}
+              >
+                {item.customerName}
+              </Text>
+            </View>
+
+            {item.customerContact && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginBottom: 8,
+                }}
+              >
+                <Phone size={16} color={theme.colors.textSecondary} />
+                <Text
+                  style={{
+                    fontSize: 14,
+                    color: theme.colors.textSecondary,
+                    marginLeft: 8,
+                  }}
+                >
+                  {item.customerContact}
+                </Text>
+              </View>
+            )}
+
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginBottom: 8,
+              }}
+            >
+              <Clock size={16} color={theme.colors.textSecondary} />
               <Text
                 style={{
                   fontSize: 14,
@@ -110,82 +131,63 @@ const CustomerDueItem = React.memo<CustomerDueItemProps>(
                   marginLeft: 8,
                 }}
               >
-                {item.customerContact}
+                Last order: {formatDueDate(item.lastOrderDate)}
               </Text>
             </View>
-          )}
 
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginBottom: 8,
-            }}
-          >
-            <Clock size={16} color={theme.colors.textSecondary} />
-            <Text
-              style={{
-                fontSize: 14,
-                color: theme.colors.textSecondary,
-                marginLeft: 8,
-              }}
-            >
-              Last order: {formatDueDate(item.lastOrderDate)}
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <Receipt size={16} color={theme.colors.textSecondary} />
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: theme.colors.textSecondary,
+                  marginLeft: 8,
+                }}
+              >
+                {item.unpaidKots.length} unpaid order
+                {item.unpaidKots.length !== 1 ? "s" : ""}
+              </Text>
+            </View>
           </View>
 
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Receipt size={16} color={theme.colors.textSecondary} />
+          <View style={{ alignItems: "flex-end", marginLeft: 16 }}>
             <Text
               style={{
-                fontSize: 14,
-                color: theme.colors.textSecondary,
-                marginLeft: 8,
+                fontSize: 20,
+                fontWeight: "700",
+                color: theme.colors.error,
+                marginBottom: 8,
               }}
             >
-              {item.unpaidKots.length} unpaid order
-              {item.unpaidKots.length !== 1 ? "s" : ""}
+              ₹{item.totalDueAmount.toFixed(2)}
             </Text>
-          </View>
-        </View>
-
-        <View style={{ alignItems: "flex-end", marginLeft: 16 }}>
-          <Text
-            style={{
-              fontSize: 20,
-              fontWeight: "700",
-              color: theme.colors.error,
-              marginBottom: 8,
-            }}
-          >
-            ₹{item.totalDueAmount.toFixed(2)}
-          </Text>
-          <View
-            style={{
-              backgroundColor: theme.colors.primary,
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              borderRadius: 6,
-              flexDirection: "row",
-              alignItems: "center",
-            }}
-          >
-            <CreditCard size={14} color="white" />
-            <Text
+            <View
               style={{
-                color: "white",
-                fontSize: 12,
-                fontWeight: "600",
-                marginLeft: 4,
+                backgroundColor: theme.colors.primary,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 6,
+                flexDirection: "row",
+                alignItems: "center",
               }}
             >
-              Collect
-            </Text>
+              <CreditCard size={14} color="white" />
+              <Text
+                style={{
+                  color: "white",
+                  fontSize: 12,
+                  fontWeight: "600",
+                  marginLeft: 4,
+                }}
+              >
+                Collect
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  ),
+      </TouchableOpacity>
+    );
+  },
   (prevProps, nextProps) => {
     // Custom comparison - only re-render if relevant data changes
     return (
@@ -580,7 +582,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
 
 export default function DueManagementScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const isMounted = useMountedRef();
   const [isReady, setIsReady] = useState(false);
   const [customersWithDues, setCustomersWithDues] = useState<CustomerDue[]>([]);

@@ -29,27 +29,29 @@ interface LedgerItemProps {
 }
 
 const LedgerItem = React.memo<LedgerItemProps>(
-  ({ item }) => (
-    <View
-      style={{
-        backgroundColor: "white",
-        borderRadius: 10,
-        padding: 12,
-        borderWidth: 1,
-        borderColor: "#e5e7eb",
-      }}
-    >
-      <Text style={{ fontWeight: "800" }}>
-        {item.entryType} ₹{item.amount}
-      </Text>
-      <Text style={{ color: "#64748b", fontSize: 12 }}>
-        {new Date(item.createdAt).toLocaleString("en-IN")}
-      </Text>
-      {item.remarks ? (
-        <Text style={{ marginTop: 6 }}>{item.remarks}</Text>
-      ) : null}
-    </View>
-  ),
+  function LedgerItem({ item }) {
+    return (
+      <View
+        style={{
+          backgroundColor: "white",
+          borderRadius: 10,
+          padding: 12,
+          borderWidth: 1,
+          borderColor: "#e5e7eb",
+        }}
+      >
+        <Text style={{ fontWeight: "800" }}>
+          {item.entryType} ₹{item.amount}
+        </Text>
+        <Text style={{ color: "#64748b", fontSize: 12 }}>
+          {new Date(item.createdAt).toLocaleString("en-IN")}
+        </Text>
+        {item.remarks ? (
+          <Text style={{ marginTop: 6 }}>{item.remarks}</Text>
+        ) : null}
+      </View>
+    );
+  },
   (prevProps, nextProps) => {
     // Custom comparison - only re-render if relevant data changes
     return (

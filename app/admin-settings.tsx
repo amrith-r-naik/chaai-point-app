@@ -9,6 +9,10 @@ import {
 import { settingsService } from "@/services/settingsService";
 import { runAllSyncDiagnostics, TestResult } from "@/services/syncDiagnostics";
 import { authState } from "@/state/authState";
+import {
+  clearTestData,
+  generateTestData,
+} from "@/utils/debugTestDataGenerator";
 import { perfMonitor } from "@/utils/performanceMonitor";
 import { use$ } from "@legendapp/state/react";
 import { router } from "expo-router";
@@ -406,6 +410,93 @@ export default function AdminSettingsScreen() {
     } finally {
       setDiagRunning(false);
     }
+  };
+
+  // Test Data Generation Functions (Phase 1.2)
+  const handleGenerateTestData = async (
+    scale: "small" | "medium" | "large"
+  ) => {
+    try {
+      setLoading(true);
+      Alert.alert(
+        "Generate Test Data",
+        `Creating ${scale} scale test data. This may take 30-60 seconds. Continue?`,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => setLoading(false) },
+          {
+            text: "Generate",
+            onPress: async () => {
+              try {
+                const result = await generateTestData(scale);
+                Alert.alert(
+                  "Test Data Generated",
+                  `✅ Generation complete!\n\n` +
+                    `Customers: ${result.customerCount}\n` +
+                    `Orders: ${result.totalOrders}\n` +
+                    `Items: ${result.totalItems}\n` +
+                    `Bills: ${result.totalBills}\n` +
+                    `Time: ${(result.duration / 1000).toFixed(2)}s\n\n` +
+                    `📈 Next: Go to Dashboard and run queries. Check Admin Settings > Print Performance Report for metrics.`,
+                  [
+                    {
+                      text: "Print Report Now",
+                      onPress: () => {
+                        perfMonitor.printReport();
+                        Alert.alert(
+                          "Performance Report Printed",
+                          "Check console for detailed metrics"
+                        );
+                      },
+                    },
+                    { text: "OK", style: "default" },
+                  ]
+                );
+                await loadTableCounts();
+              } catch (error: any) {
+                Alert.alert(
+                  "Error",
+                  error?.message || "Failed to generate test data"
+                );
+              } finally {
+                setLoading(false);
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      setLoading(false);
+    }
+  };
+
+  const handleClearTestData = async () => {
+    Alert.alert(
+      "Clear All Test Data",
+      "This will delete all customers, orders, bills, and menu items. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear All",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await clearTestData();
+              perfMonitor.clearLogs();
+              await loadTableCounts();
+              Alert.alert("Success", "All test data cleared");
+            } catch (error: any) {
+              Alert.alert(
+                "Error",
+                error?.message || "Failed to clear test data"
+              );
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   // Sync & Backup actions removed from Admin Settings
@@ -853,6 +944,130 @@ export default function AdminSettingsScreen() {
                 Clear Performance Logs
               </Text>
             </TouchableOpacity>
+
+            {/* Test Data Generation */}
+            <View
+              style={{
+                marginTop: 24,
+                paddingTop: 24,
+                borderTopWidth: 1,
+                borderTopColor: theme.colors.border,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "bold",
+                  color: theme.colors.text,
+                  marginBottom: 12,
+                }}
+              >
+                Test Data Generation (Phase 1.2)
+              </Text>
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: theme.colors.textSecondary,
+                  marginBottom: 12,
+                }}
+              >
+                Generate test data at different scales to measure query
+                performance degradation. Clear logs between runs for accurate
+                baselines.
+              </Text>
+              <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
+                <TouchableOpacity
+                  onPress={() => handleGenerateTestData("small")}
+                  disabled={loading}
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#3B82F6",
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    borderRadius: 6,
+                    ...theme.shadows.sm,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: "white",
+                      fontWeight: "600",
+                      textAlign: "center",
+                      fontSize: 12,
+                    }}
+                  >
+                    Gen Small (100)
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => handleGenerateTestData("medium")}
+                  disabled={loading}
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#8B5CF6",
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    borderRadius: 6,
+                    ...theme.shadows.sm,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: "white",
+                      fontWeight: "600",
+                      textAlign: "center",
+                      fontSize: 12,
+                    }}
+                  >
+                    Gen Medium (500)
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => handleGenerateTestData("large")}
+                  disabled={loading}
+                  style={{
+                    flex: 1,
+                    backgroundColor: "#EC4899",
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    borderRadius: 6,
+                    ...theme.shadows.sm,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: "white",
+                      fontWeight: "600",
+                      textAlign: "center",
+                      fontSize: 12,
+                    }}
+                  >
+                    Gen Large (1000)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                onPress={handleClearTestData}
+                disabled={loading}
+                style={{
+                  backgroundColor: "#EF4444",
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                  borderRadius: 6,
+                  ...theme.shadows.sm,
+                }}
+              >
+                <Text
+                  style={{
+                    color: "white",
+                    fontWeight: "600",
+                    textAlign: "center",
+                  }}
+                >
+                  Clear All Test Data
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 

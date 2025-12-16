@@ -64,7 +64,8 @@ const styles = StyleSheet.create({
   },
 });
 
-const StatCard: React.FC<{
+// Memoized StatCard to prevent re-renders when parent state changes
+interface StatCardProps {
   icon: React.ReactNode;
   title: string;
   value: string;
@@ -72,108 +73,132 @@ const StatCard: React.FC<{
   color: string;
   backgroundColor: string;
   onPress?: () => void;
-}> = ({ icon, title, value, trend, color, backgroundColor, onPress }) => (
-  <TouchableOpacity
-    onPress={onPress}
-    disabled={!onPress}
-    style={{
-      backgroundColor: "white",
-      padding: 20,
-      borderRadius: 20,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.08,
-      shadowRadius: 12,
-      elevation: 6,
-      marginBottom: 16,
-      borderWidth: 1,
-      borderColor: "#F8FAFC",
-    }}
-    activeOpacity={onPress ? 0.7 : 1}
-  >
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-      }}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+}
+
+const StatCard = React.memo<StatCardProps>(
+  function StatCard({
+    icon,
+    title,
+    value,
+    trend,
+    color,
+    backgroundColor,
+    onPress,
+  }) {
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        disabled={!onPress}
+        style={{
+          backgroundColor: "white",
+          padding: 20,
+          borderRadius: 20,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.08,
+          shadowRadius: 12,
+          elevation: 6,
+          marginBottom: 16,
+          borderWidth: 1,
+          borderColor: "#F8FAFC",
+        }}
+        activeOpacity={onPress ? 0.7 : 1}
+      >
         <View
           style={{
-            width: 56,
-            height: 56,
-            backgroundColor: backgroundColor,
-            borderRadius: 16,
-            justifyContent: "center",
+            flexDirection: "row",
             alignItems: "center",
-            marginRight: 16,
+            justifyContent: "space-between",
           }}
         >
-          {icon}
+          <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+            <View
+              style={{
+                width: 56,
+                height: 56,
+                backgroundColor: backgroundColor,
+                borderRadius: 16,
+                justifyContent: "center",
+                alignItems: "center",
+                marginRight: 16,
+              }}
+            >
+              {icon}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Typography
+                variant="caption"
+                color="textSecondary"
+                weight="medium"
+                style={{ marginBottom: 4, fontSize: 12 }}
+              >
+                {title}
+              </Typography>
+              <Typography
+                variant="h3"
+                weight="bold"
+                style={{
+                  color: color,
+                  fontSize: getCurrencyFontSize(
+                    parseFloat(value.replace(/[^\d.-]/g, "")),
+                    22
+                  ),
+                  lineHeight: 28,
+                }}
+              >
+                {value}
+              </Typography>
+            </View>
+          </View>
+          {trend && (
+            <View
+              style={{
+                backgroundColor:
+                  trend === "up"
+                    ? "#FEF3C7"
+                    : trend === "down"
+                      ? "#FEE2E2"
+                      : "#F3F4F6",
+                padding: 8,
+                borderRadius: 12,
+              }}
+            >
+              {trend === "up" && <TrendingUp size={16} color="#D97706" />}
+              {trend === "down" && <TrendingDown size={16} color="#DC2626" />}
+              {trend === "neutral" && <Activity size={16} color="#6B7280" />}
+            </View>
+          )}
+          {onPress && (
+            <View
+              style={{
+                backgroundColor: color,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 12,
+                marginLeft: 12,
+              }}
+            >
+              <Typography
+                style={{ color: "white", fontWeight: "600", fontSize: 12 }}
+              >
+                Manage
+              </Typography>
+            </View>
+          )}
         </View>
-        <View style={{ flex: 1 }}>
-          <Typography
-            variant="caption"
-            color="textSecondary"
-            weight="medium"
-            style={{ marginBottom: 4, fontSize: 12 }}
-          >
-            {title}
-          </Typography>
-          <Typography
-            variant="h3"
-            weight="bold"
-            style={{
-              color: color,
-              fontSize: getCurrencyFontSize(
-                parseFloat(value.replace(/[^\d.-]/g, "")),
-                22
-              ),
-              lineHeight: 28,
-            }}
-          >
-            {value}
-          </Typography>
-        </View>
-      </View>
-      {trend && (
-        <View
-          style={{
-            backgroundColor:
-              trend === "up"
-                ? "#FEF3C7"
-                : trend === "down"
-                  ? "#FEE2E2"
-                  : "#F3F4F6",
-            padding: 8,
-            borderRadius: 12,
-          }}
-        >
-          {trend === "up" && <TrendingUp size={16} color="#D97706" />}
-          {trend === "down" && <TrendingDown size={16} color="#DC2626" />}
-          {trend === "neutral" && <Activity size={16} color="#6B7280" />}
-        </View>
-      )}
-      {onPress && (
-        <View
-          style={{
-            backgroundColor: color,
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            borderRadius: 12,
-            marginLeft: 12,
-          }}
-        >
-          <Typography
-            style={{ color: "white", fontWeight: "600", fontSize: 12 }}
-          >
-            Manage
-          </Typography>
-        </View>
-      )}
-    </View>
-  </TouchableOpacity>
+      </TouchableOpacity>
+    );
+  },
+  (prevProps, nextProps) => {
+    // Custom comparison - only re-render if display data changes
+    return (
+      prevProps.title === nextProps.title &&
+      prevProps.value === nextProps.value &&
+      prevProps.color === nextProps.color &&
+      prevProps.backgroundColor === nextProps.backgroundColor &&
+      prevProps.trend === nextProps.trend
+    );
+  }
 );
 
 export default function BillingScreen() {
@@ -192,7 +217,6 @@ export default function BillingScreen() {
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [totalExpenses, setTotalExpenses] = useState(0);
-  const [outstandingCredit, setOutstandingCredit] = useState(0);
   const [clearModal, setClearModal] = useState<{
     visible: boolean;
     expense?: ExpenseListItem;
@@ -215,14 +239,11 @@ export default function BillingScreen() {
   const loadExpenses = React.useCallback(async () => {
     try {
       const dateFilter = getDateFilter();
-      const [expensesData, stats] = await Promise.all([
+      const [expensesData] = await Promise.all([
         dashboardService.getExpensesWithStatus(dateFilter),
         dashboardService.getDashboardStats(),
       ]);
       setExpenses(expensesData);
-      setOutstandingCredit(
-        (stats as any).expenseOutstandingCredit ?? stats.outstandingCredit ?? 0
-      );
 
       const total = expensesData.reduce(
         (sum, expense) => sum + expense.amount,
@@ -241,41 +262,41 @@ export default function BillingScreen() {
   // Track last version to avoid redundant loads
   const lastVersionRef = useRef<number>(0);
 
+  // Focus refresh callback - extracted to avoid hook nesting issues
+  const focusRefreshCallback = useCallback(() => {
+    const currentVersion =
+      ev.expensesVersion + ev.paymentsVersion + ev.billsVersion + ev.anyVersion;
+    if (currentVersion !== lastVersionRef.current) {
+      lastVersionRef.current = currentVersion;
+      loadExpenses();
+    }
+  }, [
+    ev.expensesVersion,
+    ev.paymentsVersion,
+    ev.billsVersion,
+    ev.anyVersion,
+    loadExpenses,
+  ]);
+
   // Use focus-aware refresh - only reload when screen focuses and data changed
-  useFocusRefresh(
-    useCallback(() => {
-      const currentVersion =
-        ev.expensesVersion +
-        ev.paymentsVersion +
-        ev.billsVersion +
-        ev.anyVersion;
-      if (currentVersion !== lastVersionRef.current) {
-        lastVersionRef.current = currentVersion;
-        loadExpenses();
-      }
-    }, [
-      ev.expensesVersion,
-      ev.paymentsVersion,
-      ev.billsVersion,
-      ev.anyVersion,
-      loadExpenses,
-    ]),
-    { minInterval: 5000, dependencies: [startDate, endDate] }
-  );
+  useFocusRefresh(focusRefreshCallback, {
+    minInterval: 5000,
+    dependencies: [startDate, endDate],
+  });
 
   // Initial load and date filter change
   useEffect(() => {
     loadExpenses();
   }, [loadExpenses]);
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     setRefreshing(true);
     loadExpenses();
-  };
+  }, [loadExpenses]);
 
-  const handleExpenseAdded = () => {
+  const handleExpenseAdded = useCallback(() => {
     loadExpenses();
-  };
+  }, [loadExpenses]);
 
   if (loading) {
     return (

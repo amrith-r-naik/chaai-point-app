@@ -554,36 +554,39 @@ export default function CustomersScreen() {
     loadCustomers();
   }, [loadCustomers, activeTab]);
 
+  // Focus refresh callback - extracted to avoid hook nesting issues
+  const focusRefreshCallback = useCallback(() => {
+    if (!isDbReady) return;
+
+    const currentVersion =
+      ev.ordersVersion +
+      ev.billsVersion +
+      ev.paymentsVersion +
+      ev.customersVersion +
+      ev.anyVersion;
+
+    // Only reload if version changed
+    if (currentVersion !== lastVersionRef.current) {
+      lastVersionRef.current = currentVersion;
+      loadCustomers();
+      loadOrdersData();
+    }
+  }, [
+    isDbReady,
+    ev.ordersVersion,
+    ev.billsVersion,
+    ev.paymentsVersion,
+    ev.customersVersion,
+    ev.anyVersion,
+    loadCustomers,
+    loadOrdersData,
+  ]);
+
   // Use focus-aware refresh - consolidated from multiple useEffects
-  useFocusRefresh(
-    useCallback(() => {
-      if (!isDbReady) return;
-
-      const currentVersion =
-        ev.ordersVersion +
-        ev.billsVersion +
-        ev.paymentsVersion +
-        ev.customersVersion +
-        ev.anyVersion;
-
-      // Only reload if version changed
-      if (currentVersion !== lastVersionRef.current) {
-        lastVersionRef.current = currentVersion;
-        loadCustomers();
-        loadOrdersData();
-      }
-    }, [
-      isDbReady,
-      ev.ordersVersion,
-      ev.billsVersion,
-      ev.paymentsVersion,
-      ev.customersVersion,
-      ev.anyVersion,
-      loadCustomers,
-      loadOrdersData,
-    ]),
-    { minInterval: 3000, dependencies: [activeTab] }
-  );
+  useFocusRefresh(focusRefreshCallback, {
+    minInterval: 3000,
+    dependencies: [activeTab],
+  });
 
   const handleAddCustomer = () => {
     customerState.selectedCustomer.set(null);
@@ -608,89 +611,6 @@ export default function CustomersScreen() {
 
     // For future dates (shouldn't happen but just in case), don't show
     return false;
-  };
-
-  // Filter customers based on active tab and search
-  const getFilteredData = () => {
-    if (activeTab === "completed") {
-      // For completed tab, return completed bills data
-      const filtered: any = {};
-
-      Object.entries(completedBills).forEach(([date, group]: [string, any]) => {
-        const filteredBills = (group.bills || []).filter((bill: any) => {
-          if (searchQuery.trim()) {
-            return (
-              bill.customerName
-                .toLowerCase()
-                .includes(searchQuery.toLowerCase()) ||
-              (bill.customerContact &&
-                bill.customerContact.includes(searchQuery)) ||
-              (bill.receiptNo &&
-                bill.receiptNo.toString().includes(searchQuery))
-            );
-          }
-          return true;
-        });
-
-        if (filteredBills.length > 0) {
-          filtered[date] = {
-            ...group,
-            bills: filteredBills,
-          };
-        }
-      });
-
-      return filtered;
-    }
-
-    if (activeTab === "all") {
-      // For "All" tab, show all customers regardless of orders
-      return customers.filter((customer: any) => {
-        if (searchQuery.trim()) {
-          return (
-            customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (customer.contact && customer.contact.includes(searchQuery))
-          );
-        }
-        return true;
-      });
-    } else {
-      // For "Active" tab, use date groups
-      const filtered: any = {};
-
-      Object.entries(dateGroups).forEach(([date, group]: [string, any]) => {
-        const filteredCustomers: any = {};
-
-        Object.entries(group.customers || {}).forEach(
-          ([customerId, customerData]: [string, any]) => {
-            // Apply search filter
-            if (searchQuery.trim()) {
-              const matchesSearch =
-                customerData.customer.name
-                  .toLowerCase()
-                  .includes(searchQuery.toLowerCase()) ||
-                (customerData.customer.contact &&
-                  customerData.customer.contact.includes(searchQuery));
-              if (!matchesSearch) return;
-            }
-
-            // Apply tab filter for active
-            if (activeTab === "active" && customerData.hasActiveOrders) {
-              filteredCustomers[customerId] = customerData;
-            }
-          }
-        );
-
-        if (Object.keys(filteredCustomers).length > 0) {
-          filtered[date] = {
-            ...group,
-            customers: filteredCustomers,
-          };
-        }
-      });
-
-      return filtered;
-    }
   };
 
   const renderDateSection = (date: string, group: any) => {
@@ -1045,7 +965,89 @@ export default function CustomersScreen() {
     );
   };
 
-  const filteredData = getFilteredData();
+  // Memoize filtered data to prevent recalculation on every render
+  const filteredData = useMemo(() => {
+    if (activeTab === "completed") {
+      // For completed tab, return completed bills data
+      const filtered: any = {};
+
+      Object.entries(completedBills).forEach(([date, group]: [string, any]) => {
+        const filteredBills = (group.bills || []).filter((bill: any) => {
+          if (searchQuery.trim()) {
+            return (
+              bill.customerName
+                .toLowerCase()
+                .includes(searchQuery.toLowerCase()) ||
+              (bill.customerContact &&
+                bill.customerContact.includes(searchQuery)) ||
+              (bill.receiptNo &&
+                bill.receiptNo.toString().includes(searchQuery))
+            );
+          }
+          return true;
+        });
+
+        if (filteredBills.length > 0) {
+          filtered[date] = {
+            ...group,
+            bills: filteredBills,
+          };
+        }
+      });
+
+      return filtered;
+    }
+
+    if (activeTab === "all") {
+      // For "All" tab, show all customers regardless of orders
+      return customers.filter((customer: any) => {
+        if (searchQuery.trim()) {
+          return (
+            customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (customer.contact && customer.contact.includes(searchQuery))
+          );
+        }
+        return true;
+      });
+    } else {
+      // For "Active" tab, use date groups
+      const filtered: any = {};
+
+      Object.entries(dateGroups).forEach(([date, group]: [string, any]) => {
+        const filteredCustomers: any = {};
+
+        Object.entries(group.customers || {}).forEach(
+          ([customerId, customerData]: [string, any]) => {
+            // Apply search filter
+            if (searchQuery.trim()) {
+              const matchesSearch =
+                customerData.customer.name
+                  .toLowerCase()
+                  .includes(searchQuery.toLowerCase()) ||
+                (customerData.customer.contact &&
+                  customerData.customer.contact.includes(searchQuery));
+              if (!matchesSearch) return;
+            }
+
+            // Apply tab filter for active
+            if (activeTab === "active" && customerData.hasActiveOrders) {
+              filteredCustomers[customerId] = customerData;
+            }
+          }
+        );
+
+        if (Object.keys(filteredCustomers).length > 0) {
+          filtered[date] = {
+            ...group,
+            customers: filteredCustomers,
+          };
+        }
+      });
+
+      return filtered;
+    }
+  }, [activeTab, completedBills, customers, dateGroups, searchQuery]);
+
   const isAllTab = activeTab === "all";
   const isCompletedTab = activeTab === "completed";
   const filteredDateGroups =

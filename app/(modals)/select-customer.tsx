@@ -205,10 +205,13 @@ export default function SelectCustomerScreen() {
     }
   };
 
-  const handleSelectCustomer = (customer: Customer) => {
-    orderState.selectedCustomerId.set(customer.id);
-    router.back();
-  };
+  const handleSelectCustomer = useCallback(
+    (customer: Customer) => {
+      orderState.selectedCustomerId.set(customer.id);
+      router.back();
+    },
+    [router]
+  );
 
   const handleAddNewCustomer = () => {
     customerState.selectedCustomer.set(null);
@@ -219,6 +222,28 @@ export default function SelectCustomerScreen() {
     (customer) =>
       customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (customer.contact && customer.contact.includes(searchQuery))
+  );
+
+  const keyExtractor = useCallback((item: Customer) => item.id, []);
+
+  const renderItem = useCallback(
+    ({ item }: { item: Customer }) => (
+      <CustomerItem
+        customer={item}
+        onSelect={handleSelectCustomer}
+        isSelected={selectedCustomerId === item.id}
+      />
+    ),
+    [handleSelectCustomer, selectedCustomerId]
+  );
+
+  const getItemLayout = useCallback(
+    (_data: any, index: number) => ({
+      length: CUSTOMER_ITEM_HEIGHT,
+      offset: CUSTOMER_ITEM_HEIGHT * index,
+      index,
+    }),
+    []
   );
 
   return (
@@ -402,17 +427,8 @@ export default function SelectCustomerScreen() {
             ) : (
               <FlatList<Customer>
                 data={filteredCustomers}
-                keyExtractor={useCallback((item: Customer) => item.id, [])}
-                renderItem={useCallback(
-                  ({ item }: { item: Customer }) => (
-                    <CustomerItem
-                      customer={item}
-                      onSelect={handleSelectCustomer}
-                      isSelected={selectedCustomerId === item.id}
-                    />
-                  ),
-                  [handleSelectCustomer, selectedCustomerId]
-                )}
+                keyExtractor={keyExtractor}
+                renderItem={renderItem}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{
                   paddingBottom: 32,
@@ -424,14 +440,7 @@ export default function SelectCustomerScreen() {
                 updateCellsBatchingPeriod={50}
                 removeClippedSubviews={true}
                 // Fixed height layout for faster rendering
-                getItemLayout={useCallback(
-                  (_data: any, index: number) => ({
-                    length: CUSTOMER_ITEM_HEIGHT,
-                    offset: CUSTOMER_ITEM_HEIGHT * index,
-                    index,
-                  }),
-                  []
-                )}
+                getItemLayout={getItemLayout}
               />
             )}
           </View>

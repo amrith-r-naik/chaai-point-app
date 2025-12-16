@@ -395,98 +395,112 @@ interface MetricCardProps {
   onPress?: () => void;
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({
-  title,
-  value,
-  icon,
-  iconBg,
-  valueColor = "#1e293b",
-  featured = false,
-  subtitle,
-  onPress,
-}) => {
-  const formatValue = () => {
-    if (
-      typeof value === "number" &&
-      (title.toLowerCase().includes("revenue") ||
-        title.toLowerCase().includes("expense") ||
-        title.toLowerCase().includes("payment") ||
-        title.toLowerCase().includes("profit") ||
-        title.toLowerCase().includes("due") ||
-        title.toLowerCase().includes("value") ||
-        title.toLowerCase().includes("advance") ||
-        title.toLowerCase().includes("outstanding"))
-    ) {
-      return formatCurrency(value);
-    }
-    return value.toString();
-  };
+// Memoized MetricCard to prevent re-renders when parent state changes
+const MetricCard = React.memo<MetricCardProps>(
+  function MetricCard({
+    title,
+    value,
+    icon,
+    iconBg,
+    valueColor = "#1e293b",
+    featured = false,
+    subtitle,
+    onPress,
+  }) {
+    const formatValue = () => {
+      if (
+        typeof value === "number" &&
+        (title.toLowerCase().includes("revenue") ||
+          title.toLowerCase().includes("expense") ||
+          title.toLowerCase().includes("payment") ||
+          title.toLowerCase().includes("profit") ||
+          title.toLowerCase().includes("due") ||
+          title.toLowerCase().includes("value") ||
+          title.toLowerCase().includes("advance") ||
+          title.toLowerCase().includes("outstanding"))
+      ) {
+        return formatCurrency(value);
+      }
+      return value.toString();
+    };
 
-  const getFontSize = () => {
-    if (
-      typeof value === "number" &&
-      (title.toLowerCase().includes("revenue") ||
-        title.toLowerCase().includes("expense") ||
-        title.toLowerCase().includes("payment") ||
-        title.toLowerCase().includes("profit") ||
-        title.toLowerCase().includes("due") ||
-        title.toLowerCase().includes("value") ||
-        title.toLowerCase().includes("advance") ||
-        title.toLowerCase().includes("outstanding"))
-    ) {
-      return getCurrencyFontSize(value, 22);
-    }
-    return 22;
-  };
+    const getFontSize = () => {
+      if (
+        typeof value === "number" &&
+        (title.toLowerCase().includes("revenue") ||
+          title.toLowerCase().includes("expense") ||
+          title.toLowerCase().includes("payment") ||
+          title.toLowerCase().includes("profit") ||
+          title.toLowerCase().includes("due") ||
+          title.toLowerCase().includes("value") ||
+          title.toLowerCase().includes("advance") ||
+          title.toLowerCase().includes("outstanding"))
+      ) {
+        return getCurrencyFontSize(value, 22);
+      }
+      return 22;
+    };
 
-  const CardContent = () => (
-    <View
-      style={[
-        styles.metricCard,
-        featured && styles.metricCardFeatured,
-        onPress && { flex: 1 },
-      ]}
-    >
-      <View style={styles.metricHeader}>
-        <Text style={styles.metricTitle} numberOfLines={2}>
-          {title}
-        </Text>
-        <View style={[styles.metricIcon, { backgroundColor: iconBg }]}>
-          {icon}
-        </View>
-      </View>
-      <Text
+    const CardContent = () => (
+      <View
         style={[
-          styles.metricValue,
-          { fontSize: getFontSize(), color: valueColor },
+          styles.metricCard,
+          featured && styles.metricCardFeatured,
+          onPress && { flex: 1 },
         ]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
       >
-        {formatValue()}
-      </Text>
-      {subtitle && (
-        <Text style={styles.metricSubtext} numberOfLines={1}>
-          {subtitle}
+        <View style={styles.metricHeader}>
+          <Text style={styles.metricTitle} numberOfLines={2}>
+            {title}
+          </Text>
+          <View style={[styles.metricIcon, { backgroundColor: iconBg }]}>
+            {icon}
+          </View>
+        </View>
+        <Text
+          style={[
+            styles.metricValue,
+            { fontSize: getFontSize(), color: valueColor },
+          ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+        >
+          {formatValue()}
         </Text>
-      )}
-    </View>
-  );
+        {subtitle && (
+          <Text style={styles.metricSubtext} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        )}
+      </View>
+    );
 
-  if (onPress) {
+    if (onPress) {
+      return (
+        <TouchableOpacity
+          onPress={onPress}
+          activeOpacity={0.7}
+          style={{ flex: 1 }}
+        >
+          <CardContent />
+        </TouchableOpacity>
+      );
+    }
+
+    return <CardContent />;
+  },
+  (prevProps, nextProps) => {
+    // Custom comparison - only re-render if display data changes
     return (
-      <TouchableOpacity
-        onPress={onPress}
-        activeOpacity={0.7}
-        style={{ flex: 1 }}
-      >
-        <CardContent />
-      </TouchableOpacity>
+      prevProps.title === nextProps.title &&
+      prevProps.value === nextProps.value &&
+      prevProps.iconBg === nextProps.iconBg &&
+      prevProps.valueColor === nextProps.valueColor &&
+      prevProps.featured === nextProps.featured &&
+      prevProps.subtitle === nextProps.subtitle
     );
   }
-
-  return <CardContent />;
-};
+);
 
 // FilterButton removed (no longer needed with date-range picker)
 
@@ -541,17 +555,20 @@ export default function HomeScreen() {
   const lastVersionRef = useRef<number>(0);
   const ev = use$(appEvents);
 
+  // Focus refresh callback - extracted to avoid hook nesting issues
+  const focusRefreshCallback = useCallback(() => {
+    const currentVersion = ev.anyVersion;
+    if (currentVersion !== lastVersionRef.current) {
+      lastVersionRef.current = currentVersion;
+      loadDashboardData();
+    }
+  }, [ev.anyVersion, loadDashboardData]);
+
   // Use focus-aware refresh - only reload when screen focuses and data changed
-  useFocusRefresh(
-    useCallback(() => {
-      const currentVersion = ev.anyVersion;
-      if (currentVersion !== lastVersionRef.current) {
-        lastVersionRef.current = currentVersion;
-        loadDashboardData();
-      }
-    }, [ev.anyVersion, loadDashboardData]),
-    { minInterval: 5000, dependencies: [startDate, endDate] }
-  );
+  useFocusRefresh(focusRefreshCallback, {
+    minInterval: 5000,
+    dependencies: [startDate, endDate],
+  });
 
   // Initial load and date filter change
   useEffect(() => {
@@ -563,7 +580,7 @@ export default function HomeScreen() {
     loadDashboardData();
   };
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
       {
         text: "Cancel",
@@ -583,9 +600,9 @@ export default function HomeScreen() {
         },
       },
     ]);
-  };
+  }, []);
 
-  const handlePushToCloud = async () => {
+  const handlePushToCloud = useCallback(async () => {
     try {
       setPushRunning(true);
       await openDatabase();
@@ -599,9 +616,9 @@ export default function HomeScreen() {
     } finally {
       setPushRunning(false);
     }
-  };
+  }, []);
 
-  const handlePullFromCloud = async () => {
+  const handlePullFromCloud = useCallback(async () => {
     try {
       setPullRunning(true);
       await openDatabase();
@@ -616,9 +633,9 @@ export default function HomeScreen() {
     } finally {
       setPullRunning(false);
     }
-  };
+  }, [loadDashboardData]);
 
-  const handleBackupDb = async () => {
+  const handleBackupDb = useCallback(async () => {
     try {
       setBackupRunning(true);
       await openDatabase();
@@ -633,7 +650,7 @@ export default function HomeScreen() {
     } finally {
       setBackupRunning(false);
     }
-  };
+  }, []);
 
   // Load last sync and latest backup on mount
   useEffect(() => {

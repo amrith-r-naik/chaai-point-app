@@ -144,20 +144,23 @@ export default function OrdersScreen() {
   const lastVersionRef = useRef<number>(0);
   const ev = use$(appEvents);
 
-  // Use focus-aware refresh with 5-second minimum interval
-  useFocusRefresh(
-    useCallback(() => {
-      if (isDbReady) {
-        const currentVersion = ev.ordersVersion + ev.anyVersion;
-        // Only reload if version changed or first load
-        if (currentVersion !== lastVersionRef.current) {
-          lastVersionRef.current = currentVersion;
-          loadOrders();
-        }
+  // Focus refresh callback - extracted to avoid hook nesting issues
+  const focusRefreshCallback = useCallback(() => {
+    if (isDbReady) {
+      const currentVersion = ev.ordersVersion + ev.anyVersion;
+      // Only reload if version changed or first load
+      if (currentVersion !== lastVersionRef.current) {
+        lastVersionRef.current = currentVersion;
+        loadOrders();
       }
-    }, [isDbReady, ev.ordersVersion, ev.anyVersion, loadOrders]),
-    { minInterval: 3000, dependencies: [selectedDate] }
-  );
+    }
+  }, [isDbReady, ev.ordersVersion, ev.anyVersion, loadOrders]);
+
+  // Use focus-aware refresh with 3-second minimum interval
+  useFocusRefresh(focusRefreshCallback, {
+    minInterval: 3000,
+    dependencies: [selectedDate],
+  });
 
   // Load on date change
   useEffect(() => {

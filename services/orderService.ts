@@ -3,6 +3,104 @@ import { withQueryPerf } from "@/utils/performanceMonitor";
 import { db, withTransaction } from "../lib/db";
 import { menuService } from "./menuService";
 
+// Simple query cache with TTL (30 seconds)
+class QueryCache {
+  private cache = new Map<string, { data: any; timestamp: number }>();
+  private ttl = 30000; // 30 seconds
+
+  get(key: string): any | null {
+    const cached = this.cache.get(key);
+    if (!cached) return null;
+
+    const now = Date.now();
+    if (now - cached.timestamp > this.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    return cached.data;
+  }
+
+  set(key: string, data: any): void {
+    this.cache.set(key, { data, timestamp: Date.now() });
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+// Menu items cache - longer TTL since they rarely change (5 minutes)
+class MenuItemCache {
+  private cache: Map<string, MenuItem> | null = null;
+  private timestamp = 0;
+  private ttl = 300000; // 5 minutes
+
+  async get(): Promise<Map<string, MenuItem>> {
+    const now = Date.now();
+
+    // Return cached if still valid
+    if (this.cache && now - this.timestamp < this.ttl) {
+      return this.cache;
+    }
+
+    // Fetch and cache all menu items
+    if (!db) throw new Error("Database not initialized");
+
+    const items = (await db.getAllAsync(
+      `SELECT id, name, category, price FROM menu_items WHERE isActive = 1`
+    )) as MenuItem[];
+
+    this.cache = new Map(items.map((item) => [item.id, item]));
+    this.timestamp = now;
+
+    return this.cache;
+  }
+
+  clear(): void {
+    this.cache = null;
+    this.timestamp = 0;
+  }
+}
+
+// Order items cache - cache items by orderId (30 seconds TTL)
+class OrderItemsCache {
+  private cache = new Map<string, { data: any[]; timestamp: number }>();
+  private ttl = 30000; // 30 seconds
+
+  get(kotId: string): any[] | null {
+    const cached = this.cache.get(kotId);
+    if (!cached) return null;
+
+    if (Date.now() - cached.timestamp > this.ttl) {
+      this.cache.delete(kotId);
+      return null;
+    }
+
+    return cached.data;
+  }
+
+  set(kotId: string, items: any[]): void {
+    this.cache.set(kotId, { data: items, timestamp: Date.now() });
+  }
+
+  // Set multiple at once (for batch operations)
+  setMany(itemsByOrder: Record<string, any[]>): void {
+    const now = Date.now();
+    for (const [kotId, items] of Object.entries(itemsByOrder)) {
+      this.cache.set(kotId, { data: items, timestamp: now });
+    }
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+const queryCache = new QueryCache();
+const menuItemCache = new MenuItemCache();
+const orderItemsCache = new OrderItemsCache();
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -208,6 +306,15 @@ class OrderService {
 
   async getOrdersByDate(dateISO: string): Promise<KotOrder[]> {
     if (!db) throw new Error("Database not initialized");
+
+    // Check cache first
+    const cacheKey = `getOrdersByDate:${dateISO}`;
+    const cached = queryCache.get(cacheKey);
+    if (cached) {
+      console.log(`[CACHE HIT] ${cacheKey}`);
+      return cached;
+    }
+
     // dateISO expected as YYYY-MM-DD; compare in IST using '+330 minutes'
     // Compute IST day range [start, next)
     const start = new Date(dateISO + "T00:00:00.000Z");
@@ -249,33 +356,60 @@ class OrderService {
     }));
 
     if (orders.length) {
-      const ids = orders.map((o) => o.id);
-      const placeholders = ids.map(() => "?").join(",");
-      const rows = (await withQueryPerf(
-        () =>
-          db!.getAllAsync(
-            `SELECT ki.*, mi.name as itemName
-         FROM kot_items ki 
-         LEFT JOIN menu_items mi ON mi.id = ki.itemId
-         WHERE ki.kotId IN (${placeholders})`,
-            ids
-          ),
-        `getOrderItems batch [${orders.length} orders]`,
-        ids
-      )) as any[];
-      const byOrder: Record<string, any[]> = {};
-      for (const r of rows) {
-        (byOrder[r.kotId] ||= []).push({
-          id: r.id,
-          kotId: r.kotId,
-          itemId: r.itemId,
-          quantity: r.quantity,
-          priceAtTime: r.priceAtTime,
-          name: r.itemName,
-        });
-      }
+      // Check cache first - find which orders we need to fetch
+      const cachedByOrder: Record<string, any[]> = {};
+      const uncachedIds: string[] = [];
+
       for (const order of orders) {
-        const items = (byOrder[order.id] || []) as any[];
+        const cached = orderItemsCache.get(order.id);
+        if (cached) {
+          cachedByOrder[order.id] = cached;
+        } else {
+          uncachedIds.push(order.id);
+        }
+      }
+
+      // Only fetch uncached orders from database
+      if (uncachedIds.length > 0) {
+        const placeholders = uncachedIds.map(() => "?").join(",");
+
+        const rows = (await withQueryPerf(
+          () =>
+            db!.getAllAsync(
+              `SELECT ki.id, ki.kotId, ki.itemId, ki.quantity, ki.priceAtTime
+           FROM kot_items ki
+           WHERE ki.kotId IN (${placeholders})`,
+              uncachedIds
+            ),
+          `getOrderItems batch [${uncachedIds.length} orders]`,
+          uncachedIds
+        )) as any[];
+
+        // Group by order and cache
+        const fetchedByOrder: Record<string, any[]> = {};
+        for (const id of uncachedIds) {
+          fetchedByOrder[id] = []; // Initialize empty for orders with no items
+        }
+        for (const r of rows) {
+          fetchedByOrder[r.kotId].push({
+            id: r.id,
+            kotId: r.kotId,
+            itemId: r.itemId,
+            quantity: r.quantity,
+            priceAtTime: r.priceAtTime,
+          });
+        }
+
+        // Cache all fetched items
+        orderItemsCache.setMany(fetchedByOrder);
+
+        // Merge with cached results
+        Object.assign(cachedByOrder, fetchedByOrder);
+      }
+
+      // Apply items to orders
+      for (const order of orders) {
+        const items = cachedByOrder[order.id] || [];
         order.items = items as any;
         order.total = items.reduce(
           (sum, item) => sum + item.priceAtTime * item.quantity,
@@ -284,6 +418,8 @@ class OrderService {
       }
     }
 
+    // Cache the result
+    queryCache.set(cacheKey, orders);
     return orders;
   }
 
@@ -461,6 +597,8 @@ class OrderService {
       const { signalChange } = await import("@/state/appEvents");
       signalChange.orders();
       signalChange.any();
+      // Clear query cache when order is created
+      this.clearCache();
     } catch {}
     return orderId;
   }
@@ -1074,6 +1212,19 @@ class OrderService {
       console.error("Error fetching order details by ID:", error);
       throw error;
     }
+  }
+
+  // Clear cache when orders are modified
+  clearCache(): void {
+    queryCache.clear();
+    orderItemsCache.clear();
+    console.log("[CACHE] Cleared order query cache");
+  }
+
+  // Clear menu cache when items change
+  clearMenuCache(): void {
+    menuItemCache.clear();
+    console.log("[CACHE] Cleared menu item cache");
   }
 }
 

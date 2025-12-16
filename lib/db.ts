@@ -171,9 +171,10 @@ async function initializeSchema() {
       CREATE INDEX IF NOT EXISTS idx_payments_bill ON payments(billId);
       CREATE INDEX IF NOT EXISTS idx_bills_customer ON bills(customerId);
       CREATE INDEX IF NOT EXISTS idx_bills_createdAt ON bills(createdAt);
+      CREATE INDEX IF NOT EXISTS idx_bills_customer_date ON bills(customerId, createdAt);
       CREATE INDEX IF NOT EXISTS idx_payments_createdAt ON payments(createdAt);
       CREATE INDEX IF NOT EXISTS idx_receipts_bill ON receipts(billId);
-  -- New performance indexes
+  -- Critical performance indexes (Phase 2 optimization)
   CREATE INDEX IF NOT EXISTS idx_kot_orders_createdAt ON kot_orders(createdAt);
   CREATE INDEX IF NOT EXISTS idx_kot_orders_customer_createdAt ON kot_orders(customerId, createdAt);
   CREATE INDEX IF NOT EXISTS idx_kot_items_kotId ON kot_items(kotId);
@@ -821,20 +822,37 @@ async function runMigrations() {
     await db!.execAsync("BEGIN IMMEDIATE TRANSACTION");
     try {
       const ensureMeta = async (table: string) => {
-        const cols = (await db!.getAllAsync(`PRAGMA table_info(${table})`)) as any[];
-        const hasShop = cols.some(c => c.name === 'shopId');
-        const hasDeleted = cols.some(c => c.name === 'deletedAt');
-        const hasUpdated = cols.some(c => c.name === 'updatedAt');
-        if (!hasShop) await db!.execAsync(`ALTER TABLE ${table} ADD COLUMN shopId TEXT;`);
-        if (!hasDeleted) await db!.execAsync(`ALTER TABLE ${table} ADD COLUMN deletedAt TEXT;`);
-        if (!hasUpdated) await db!.execAsync(`ALTER TABLE ${table} ADD COLUMN updatedAt TEXT;`);
+        const cols = (await db!.getAllAsync(
+          `PRAGMA table_info(${table})`
+        )) as any[];
+        const hasShop = cols.some((c) => c.name === "shopId");
+        const hasDeleted = cols.some((c) => c.name === "deletedAt");
+        const hasUpdated = cols.some((c) => c.name === "updatedAt");
+        if (!hasShop)
+          await db!.execAsync(`ALTER TABLE ${table} ADD COLUMN shopId TEXT;`);
+        if (!hasDeleted)
+          await db!.execAsync(
+            `ALTER TABLE ${table} ADD COLUMN deletedAt TEXT;`
+          );
+        if (!hasUpdated)
+          await db!.execAsync(
+            `ALTER TABLE ${table} ADD COLUMN updatedAt TEXT;`
+          );
         // Backfill defaults
-        await db!.execAsync(`UPDATE ${table} SET shopId = COALESCE(shopId, 'shop_1');`);
-        await db!.execAsync(`UPDATE ${table} SET updatedAt = COALESCE(updatedAt, createdAt);`);
+        await db!.execAsync(
+          `UPDATE ${table} SET shopId = COALESCE(shopId, 'shop_1');`
+        );
+        await db!.execAsync(
+          `UPDATE ${table} SET updatedAt = COALESCE(updatedAt, createdAt);`
+        );
         // Bump updatedAt to now so previously unsynced legacy rows get pushed
-        await db!.execAsync(`UPDATE ${table} SET updatedAt = DATETIME('now') WHERE updatedAt IS NOT NULL;`);
+        await db!.execAsync(
+          `UPDATE ${table} SET updatedAt = DATETIME('now') WHERE updatedAt IS NOT NULL;`
+        );
         // Index & triggers
-        await db!.execAsync(`CREATE INDEX IF NOT EXISTS idx_${table}_shop_updated ON ${table}(shopId, updatedAt);`);
+        await db!.execAsync(
+          `CREATE INDEX IF NOT EXISTS idx_${table}_shop_updated ON ${table}(shopId, updatedAt);`
+        );
         await db!.execAsync(`
           CREATE TRIGGER IF NOT EXISTS trg_${table}_updatedAt_insert
           AFTER INSERT ON ${table}
@@ -850,13 +868,13 @@ async function runMigrations() {
             UPDATE ${table} SET updatedAt = COALESCE(NEW.updatedAt, DATETIME('now')) WHERE id = NEW.id;
           END;`);
       };
-      await ensureMeta('kot_orders');
-      await ensureMeta('kot_items');
+      await ensureMeta("kot_orders");
+      await ensureMeta("kot_items");
       await setUserVersion(13);
-      await db!.execAsync('COMMIT');
+      await db!.execAsync("COMMIT");
       v = 13;
     } catch (e) {
-      await db!.execAsync('ROLLBACK');
+      await db!.execAsync("ROLLBACK");
       throw e;
     }
   }
@@ -1036,6 +1054,13 @@ async function runMigrations() {
       throw e;
     }
   }
+
+  // Restore synchronous mode after init complete
+  try {
+    await db!.execAsync(`PRAGMA synchronous = NORMAL;`);
+  } catch {
+    // Ignore if it fails, not critical
+  }
 }
 
 // Integrity audit: verify bill totals and customer credit consistency
@@ -1186,10 +1211,12 @@ export async function nextLocalNumber(
     let seed = 0;
     if (name === "kot") {
       // Compare by UTC range corresponding to IST date
-      const startUtc = new Date(ist.getTime() - 5.5 * 3600 * 1000)
-        .toISOString();
-      const endUtc = new Date(ist.getTime() - 5.5 * 3600 * 1000 + 86400000)
-        .toISOString();
+      const startUtc = new Date(
+        ist.getTime() - 5.5 * 3600 * 1000
+      ).toISOString();
+      const endUtc = new Date(
+        ist.getTime() - 5.5 * 3600 * 1000 + 86400000
+      ).toISOString();
       const r = (await db.getFirstAsync(
         `SELECT COALESCE(MAX(kotNumber),0) as m
          FROM kot_orders
@@ -1199,10 +1226,18 @@ export async function nextLocalNumber(
       seed = r?.m || 0;
     } else if (name === "bill") {
       // Fiscal year window as UTC range corresponding to IST local dates
-      const fyStartIst = new Date(`${fiscalStartYear}-04-01T00:00:00.000+05:30`);
-      const fyEndNextIst = new Date(`${fiscalStartYear + 1}-04-01T00:00:00.000+05:30`);
-      const fyStartUtc = new Date(fyStartIst.getTime() - 5.5 * 3600 * 1000).toISOString();
-      const fyEndUtc = new Date(fyEndNextIst.getTime() - 5.5 * 3600 * 1000).toISOString();
+      const fyStartIst = new Date(
+        `${fiscalStartYear}-04-01T00:00:00.000+05:30`
+      );
+      const fyEndNextIst = new Date(
+        `${fiscalStartYear + 1}-04-01T00:00:00.000+05:30`
+      );
+      const fyStartUtc = new Date(
+        fyStartIst.getTime() - 5.5 * 3600 * 1000
+      ).toISOString();
+      const fyEndUtc = new Date(
+        fyEndNextIst.getTime() - 5.5 * 3600 * 1000
+      ).toISOString();
       const r = (await db.getFirstAsync(
         `SELECT COALESCE(MAX(billNumber),0) as m
          FROM bills
@@ -1211,10 +1246,18 @@ export async function nextLocalNumber(
       )) as any;
       seed = r?.m || 0;
     } else if (name === "receipt") {
-      const fyStartIst = new Date(`${fiscalStartYear}-04-01T00:00:00.000+05:30`);
-      const fyEndNextIst = new Date(`${fiscalStartYear + 1}-04-01T00:00:00.000+05:30`);
-      const fyStartUtc = new Date(fyStartIst.getTime() - 5.5 * 3600 * 1000).toISOString();
-      const fyEndUtc = new Date(fyEndNextIst.getTime() - 5.5 * 3600 * 1000).toISOString();
+      const fyStartIst = new Date(
+        `${fiscalStartYear}-04-01T00:00:00.000+05:30`
+      );
+      const fyEndNextIst = new Date(
+        `${fiscalStartYear + 1}-04-01T00:00:00.000+05:30`
+      );
+      const fyStartUtc = new Date(
+        fyStartIst.getTime() - 5.5 * 3600 * 1000
+      ).toISOString();
+      const fyEndUtc = new Date(
+        fyEndNextIst.getTime() - 5.5 * 3600 * 1000
+      ).toISOString();
       const r = (await db.getFirstAsync(
         `SELECT COALESCE(MAX(receiptNo),0) as m
          FROM receipts
@@ -1223,10 +1266,18 @@ export async function nextLocalNumber(
       )) as any;
       seed = r?.m || 0;
     } else if (name === "expense") {
-      const fyStartIst = new Date(`${fiscalStartYear}-04-01T00:00:00.000+05:30`);
-      const fyEndNextIst = new Date(`${fiscalStartYear + 1}-04-01T00:00:00.000+05:30`);
-      const fyStartUtc = new Date(fyStartIst.getTime() - 5.5 * 3600 * 1000).toISOString();
-      const fyEndUtc = new Date(fyEndNextIst.getTime() - 5.5 * 3600 * 1000).toISOString();
+      const fyStartIst = new Date(
+        `${fiscalStartYear}-04-01T00:00:00.000+05:30`
+      );
+      const fyEndNextIst = new Date(
+        `${fiscalStartYear + 1}-04-01T00:00:00.000+05:30`
+      );
+      const fyStartUtc = new Date(
+        fyStartIst.getTime() - 5.5 * 3600 * 1000
+      ).toISOString();
+      const fyEndUtc = new Date(
+        fyEndNextIst.getTime() - 5.5 * 3600 * 1000
+      ).toISOString();
       const r = (await db.getFirstAsync(
         `SELECT COALESCE(MAX(voucherNo),0) as m
          FROM expenses
@@ -1249,4 +1300,21 @@ export async function nextLocalNumber(
     [scope, periodKey, name, next]
   );
   return next;
+}
+/**
+ * Analyze query statistics for better query planner performance
+ * Call this after generating test data or bulk operations
+ * Should NOT be called during app init (blocks database)
+ */
+export async function analyzeDatabase() {
+  if (!db) throw new Error("Database not initialized");
+  try {
+    console.log("🔍 Analyzing database for query optimization...");
+    const start = performance.now();
+    await db.execAsync("ANALYZE");
+    const duration = performance.now() - start;
+    console.log(`✅ Database analysis complete (${duration.toFixed(0)}ms)`);
+  } catch (error) {
+    console.warn("⚠️  Database analysis failed (non-critical):", error);
+  }
 }

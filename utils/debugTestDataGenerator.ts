@@ -4,7 +4,7 @@
  * This should only be called from the app's admin settings screen during development
  */
 
-import { db, withTransaction } from "@/lib/db";
+import { analyzeDatabase, db, withTransaction } from "@/lib/db";
 
 // Realistic test data templates
 export const firstNames = [
@@ -161,6 +161,9 @@ export async function generateTestData(scale: "small" | "medium" | "large") {
     console.log(`   • Bills: ${totalBills}`);
     console.log(`   • Duration: ${(duration / 1000).toFixed(2)}s\n`);
 
+    // Analyze database for optimal query performance
+    await analyzeDatabase();
+
     return { customerCount, totalOrders, totalItems, totalBills, duration };
   } catch (error) {
     console.error("❌ Error generating test data:", error);
@@ -174,28 +177,82 @@ export async function generateTestData(scale: "small" | "medium" | "large") {
 export async function clearTestData() {
   console.log("\n🧹 Clearing all test data...");
 
-  try {
-    await withTransaction(async () => {
-      // Delete in order respecting foreign keys
-      // Order: bottom-up from leaf tables to root tables
-      await db!.execAsync("DELETE FROM expense_settlements");
-      await db!.execAsync("DELETE FROM split_payments");
-      await db!.execAsync("DELETE FROM payments");
-      await db!.execAsync("DELETE FROM receipts");
-      await db!.execAsync("DELETE FROM kot_items");
-      await db!.execAsync("DELETE FROM kot_orders"); // MUST be before bills (FK billId)
-      await db!.execAsync("DELETE FROM bills");
-      await db!.execAsync("DELETE FROM customer_advances");
-      await db!.execAsync("DELETE FROM expenses");
-      await db!.execAsync("DELETE FROM customers"); // Parent of bills, kot_orders, etc.
-      await db!.execAsync("DELETE FROM menu_items");
-    });
+  const maxRetries = 15;
+  let attempt = 0;
 
-    console.log("✅ Test data cleared\n");
-  } catch (error) {
-    console.error("❌ Error clearing test data:", error);
-    throw error;
+  while (attempt < maxRetries) {
+    try {
+      // Increase timeout for this operation
+      await db!.execAsync("PRAGMA busy_timeout = 15000;");
+
+      // Force WAL checkpoint to complete any pending writes
+      try {
+        await db!.execAsync("PRAGMA wal_checkpoint(RESTART);");
+      } catch {
+        // Ignore checkpoint errors
+      }
+
+      // Wait for any queries to complete
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+
+      // Use IMMEDIATE transaction to force write lock acquisition
+      await db!.execAsync("BEGIN IMMEDIATE;");
+      try {
+        // Disable foreign key checks
+        await db!.execAsync("PRAGMA foreign_keys = OFF;");
+
+        // Delete all data
+        await db!.execAsync(`
+          DELETE FROM expense_settlements;
+          DELETE FROM split_payments;
+          DELETE FROM payments;
+          DELETE FROM receipts;
+          DELETE FROM kot_items;
+          DELETE FROM kot_orders;
+          DELETE FROM bills;
+          DELETE FROM customer_advances;
+          DELETE FROM expenses;
+          DELETE FROM customers;
+          DELETE FROM menu_items;
+        `);
+
+        // Re-enable foreign key checks
+        await db!.execAsync("PRAGMA foreign_keys = ON;");
+
+        await db!.execAsync("COMMIT;");
+      } catch (e) {
+        try {
+          await db!.execAsync("ROLLBACK;");
+        } catch {}
+        throw e;
+      }
+
+      // Clear service caches after deleting data
+      const { orderService } = await import("@/services/orderService");
+      orderService.clearCache();
+
+      console.log("✅ Test data cleared\n");
+
+      // Reset timeout back to normal
+      await db!.execAsync("PRAGMA busy_timeout = 10000;");
+      return;
+    } catch (error: any) {
+      attempt++;
+      const msg = String(error?.message || error);
+
+      if (msg.includes("locked") && attempt < maxRetries) {
+        console.warn(
+          `⚠️  Database locked (attempt ${attempt}/${maxRetries}), retrying...`
+        );
+        continue;
+      }
+
+      console.error("❌ Error clearing test data:", error);
+      throw error;
+    }
   }
+
+  throw new Error("Failed to clear test data after multiple retries");
 }
 
 // ============= Private Helpers =============

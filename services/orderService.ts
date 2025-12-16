@@ -1,4 +1,5 @@
 // services/orderService.ts
+import { withQueryPerf } from "@/utils/performanceMonitor";
 import { db, withTransaction } from "../lib/db";
 import { menuService } from "./menuService";
 
@@ -106,9 +107,10 @@ class OrderService {
       [billId]
     )) as any[];
 
+    const database = db;
     const withItems = await Promise.all(
       kots.map(async (kot: any) => {
-        const items = (await db!.getAllAsync(
+        const items = (await database.getAllAsync(
           `
           SELECT 
             ki.id,
@@ -214,8 +216,10 @@ class OrderService {
     const startUtc = new Date(startMs).toISOString();
     const endUtc = new Date(endMs).toISOString();
 
-    const result = await db.getAllAsync(
-      `
+    const result = await withQueryPerf(
+      () =>
+        db!.getAllAsync(
+          `
       SELECT 
         ko.*,
         c.name as customerName,
@@ -225,6 +229,9 @@ class OrderService {
       WHERE ko.createdAt >= ? AND ko.createdAt < ?
       ORDER BY ko.createdAt DESC
     `,
+          [startUtc, endUtc]
+        ),
+      `getOrdersByDate [${dateISO}]`,
       [startUtc, endUtc]
     );
 
@@ -244,11 +251,16 @@ class OrderService {
     if (orders.length) {
       const ids = orders.map((o) => o.id);
       const placeholders = ids.map(() => "?").join(",");
-      const rows = (await db.getAllAsync(
-        `SELECT ki.*, mi.name as itemName
+      const rows = (await withQueryPerf(
+        () =>
+          db!.getAllAsync(
+            `SELECT ki.*, mi.name as itemName
          FROM kot_items ki 
          LEFT JOIN menu_items mi ON mi.id = ki.itemId
          WHERE ki.kotId IN (${placeholders})`,
+            ids
+          ),
+        `getOrderItems batch [${orders.length} orders]`,
         ids
       )) as any[];
       const byOrder: Record<string, any[]> = {};
@@ -885,8 +897,12 @@ class OrderService {
       `,
         (() => {
           const d = new Date(targetDate + "T00:00:00.000+05:30");
-          const startUtc = new Date(d.getTime() - 5.5 * 3600 * 1000).toISOString();
-          const endUtc = new Date(d.getTime() - 5.5 * 3600 * 1000 + 86400000).toISOString();
+          const startUtc = new Date(
+            d.getTime() - 5.5 * 3600 * 1000
+          ).toISOString();
+          const endUtc = new Date(
+            d.getTime() - 5.5 * 3600 * 1000 + 86400000
+          ).toISOString();
           return [startUtc, endUtc];
         })()
       );

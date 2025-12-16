@@ -1,3 +1,4 @@
+import { useScreenPerformance } from "@/hooks/useScreenPerformance";
 import { KotOrder, orderService } from "@/services/orderService";
 import { appEvents } from "@/state/appEvents";
 import { authState } from "@/state/authState";
@@ -93,6 +94,9 @@ export default function OrdersScreen() {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [showPicker, setShowPicker] = useState(false);
+
+  // Track screen performance
+  useScreenPerformance("Orders");
 
   const toISTDateKey = (d: Date) => {
     const istMs = d.getTime() + 5.5 * 60 * 60 * 1000;

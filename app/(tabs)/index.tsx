@@ -2,6 +2,7 @@ import AddExpenseModal from "@/app/(modals)/add-expense";
 import { Loading } from "@/components/ui";
 // UnbilledOrdersCard removed as unbilled KOT concept deprecated
 import { theme } from "@/constants/theme";
+import { useScreenPerformance } from "@/hooks/useScreenPerformance";
 import { openDatabase } from "@/lib/db";
 import { logoutUser } from "@/services/authService";
 import { backupService } from "@/services/backupService";
@@ -491,6 +492,9 @@ const MetricCard: React.FC<MetricCardProps> = ({
 export default function HomeScreen() {
   const auth = use$(authState);
   const insets = useSafeAreaInsets();
+
+  // Track screen performance
+  useScreenPerformance("Dashboard");
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);

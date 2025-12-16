@@ -9,6 +9,7 @@ import {
 import { settingsService } from "@/services/settingsService";
 import { runAllSyncDiagnostics, TestResult } from "@/services/syncDiagnostics";
 import { authState } from "@/state/authState";
+import { perfMonitor } from "@/utils/performanceMonitor";
 import { use$ } from "@legendapp/state/react";
 import { router } from "expo-router";
 import { Database, Lock, Settings, Trash2, X } from "lucide-react-native";
@@ -361,12 +362,15 @@ export default function AdminSettingsScreen() {
               await menuService.clearAllMenuItems();
               await loadTableCounts();
               await loadMenuItems();
-              Alert.alert("Success", "All local menu items deleted (cloud unchanged)");
+              Alert.alert(
+                "Success",
+                "All local menu items deleted (cloud unchanged)"
+              );
             } catch (error: any) {
               Alert.alert(
                 "Error",
                 error?.message ||
-                "Failed to delete local menu items. If items are referenced in orders, delete those first or clear all business data."
+                  "Failed to delete local menu items. If items are referenced in orders, delete those first or clear all business data."
               );
             } finally {
               setLoading(false);
@@ -785,6 +789,73 @@ export default function AdminSettingsScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Performance Report */}
+        {__DEV__ && (
+          <View style={{ marginBottom: 24 }}>
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "bold",
+                color: theme.colors.text,
+                marginBottom: 12,
+              }}
+            >
+              Performance Monitoring
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                perfMonitor.printReport();
+                Alert.alert(
+                  "Performance Report",
+                  "Check console for detailed metrics"
+                );
+              }}
+              style={{
+                backgroundColor: "#10B981",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                borderRadius: 8,
+                ...theme.shadows.sm,
+                marginBottom: 8,
+              }}
+            >
+              <Settings size={18} color="white" />
+              <Text
+                style={{ color: "white", fontWeight: "600", marginLeft: 8 }}
+              >
+                Print Performance Report
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                perfMonitor.clearLogs();
+                Alert.alert("Cleared", "Performance logs cleared");
+              }}
+              style={{
+                backgroundColor: "#6B7280",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                borderRadius: 8,
+                ...theme.shadows.sm,
+              }}
+            >
+              <Trash2 size={18} color="white" />
+              <Text
+                style={{ color: "white", fontWeight: "600", marginLeft: 8 }}
+              >
+                Clear Performance Logs
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {process.env.NODE_ENV === "development" && (
           <>
             <View style={{ marginBottom: 32 }}>
@@ -902,7 +973,7 @@ export default function AdminSettingsScreen() {
                   </Text>
 
                   {auditResult.billIssues.length === 0 &&
-                    auditResult.creditIssues.length === 0 ? (
+                  auditResult.creditIssues.length === 0 ? (
                     <View style={{ paddingVertical: 4 }}>
                       <Text style={{ color: "#16a34a", fontWeight: "600" }}>
                         No issues found.

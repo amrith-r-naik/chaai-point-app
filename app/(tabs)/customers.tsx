@@ -1,3 +1,4 @@
+import { useScreenPerformance } from "@/hooks/useScreenPerformance";
 import {
   getAllCustomers,
   getCustomersSummary,
@@ -48,6 +49,9 @@ export default function CustomersScreen() {
   const auth = use$(authState);
   const router = useRouter();
   const ev = use$(appEvents);
+
+  // Track screen performance
+  useScreenPerformance("Customers");
 
   // Initialize/Update active tab from route param when present
   useEffect(() => {

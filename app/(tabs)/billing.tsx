@@ -35,6 +35,7 @@ import {
 } from "react-native";
 
 import ExpenseDetailsModal from "@/app/(modals)/expense-details";
+import { useScreenPerformance } from "@/hooks/useScreenPerformance";
 import { formatCurrency, getCurrencyFontSize } from "@/utils/currency";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ExpenseItem } from "../../components/expenses/ExpenseItem";
@@ -177,6 +178,10 @@ const StatCard: React.FC<{
 export default function BillingScreen() {
   const insets = useSafeAreaInsets();
   const ev = use$(appEvents);
+
+  // Track screen performance
+  useScreenPerformance("Billing");
+
   const [expenses, setExpenses] = useState<ExpenseListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -194,7 +199,10 @@ export default function BillingScreen() {
   const [clearCash, setClearCash] = useState("");
   const [clearUpi, setClearUpi] = useState("");
   const [focusedField, setFocusedField] = useState<"cash" | "upi" | null>(null);
-  const [detailsModal, setDetailsModal] = useState<{ visible: boolean; expenseId: string | null }>({ visible: false, expenseId: null });
+  const [detailsModal, setDetailsModal] = useState<{
+    visible: boolean;
+    expenseId: string | null;
+  }>({ visible: false, expenseId: null });
 
   const getDateFilter = React.useCallback((): DateFilterOptions => {
     // Use local calendar day to avoid UTC shift issues
@@ -449,7 +457,6 @@ export default function BillingScreen() {
             backgroundColor="#FEF2F2"
           />
 
-
           {/* Section Header */}
           <View
             style={{
@@ -587,7 +594,9 @@ export default function BillingScreen() {
                   onClearCredit={(e) => {
                     setClearModal({ visible: true, expense: e });
                   }}
-                  onPress={(e) => setDetailsModal({ visible: true, expenseId: e.id })}
+                  onPress={(e) =>
+                    setDetailsModal({ visible: true, expenseId: e.id })
+                  }
                 />
               ))}
             </View>

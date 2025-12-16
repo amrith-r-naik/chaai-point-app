@@ -70,147 +70,178 @@ const formatCurrency = (amount: number): string => {
   return `₹${amount.toLocaleString("en-IN")}`;
 };
 
+// Constants for FlatList/SectionList optimization
+const CUSTOMER_ITEM_HEIGHT = 76; // Height of CustomerListItem
+const BILL_ITEM_HEIGHT = 100; // Height of CompletedBillItem
+const SECTION_HEADER_HEIGHT = 80; // Height of section headers
+
 // Memoized customer item for FlatList virtualization
-const CustomerListItem = memo(function CustomerListItem({
-  customer,
-  onPress,
-}: {
-  customer: any;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      className="flex-row items-center bg-white mb-3 px-4 py-3 rounded-lg shadow-sm"
-      activeOpacity={0.7}
-    >
-      <View
-        className={`w-10 h-10 rounded-full ${getAvatarColor(customer.name)} items-center justify-center mr-3`}
+const CustomerListItem = memo(
+  function CustomerListItem({
+    customer,
+    onPress,
+  }: {
+    customer: any;
+    onPress: () => void;
+  }) {
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        className="flex-row items-center bg-white mb-3 px-4 py-3 rounded-lg shadow-sm"
+        activeOpacity={0.7}
       >
-        <Text className="text-white font-bold text-sm">
-          {getCustomerInitials(customer.name)}
-        </Text>
-      </View>
-      <View className="flex-1">
-        <Text className="text-gray-900 font-semibold text-base">
-          {customer.name}
-        </Text>
-        {customer.contact && (
-          <Text className="text-gray-500 text-xs">{customer.contact}</Text>
-        )}
-        <Text className="text-gray-400 text-xs mt-1">
-          {customer.billCount} bill{customer.billCount === 1 ? "" : "s"} •{" "}
-          {formatCurrency(customer.totalBilled || 0)}
-        </Text>
-      </View>
-      {customer.creditBalance > 0 && (
-        <View className="items-end">
-          <Text className="text-orange-600 font-semibold text-xs">
-            CR {formatCurrency(customer.creditBalance)}
-          </Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-});
-
-// Memoized completed bill item for SectionList virtualization
-const CompletedBillItem = memo(function CompletedBillItem({
-  bill,
-  onPress,
-}: {
-  bill: any;
-  onPress: () => void;
-}) {
-  const isPureCredit =
-    bill.status === "Credit" &&
-    (bill.paidTotal === 0 || bill.paidTotal == null);
-  const isClearance = bill.status === "Clearance";
-
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      disabled={isPureCredit}
-      className={`flex-row items-center justify-between px-4 py-4 bg-white border border-gray-100 rounded-xl mb-3 mx-4 ${isPureCredit ? "" : "active:bg-gray-50"}`}
-      activeOpacity={0.65}
-    >
-      {/* Customer Avatar and Info */}
-      <View className="flex-row items-center flex-1">
         <View
-          className={`w-14 h-14 rounded-full ${getAvatarColor(bill.customerName)} items-center justify-center mr-4 shadow-sm`}
+          className={`w-10 h-10 rounded-full ${getAvatarColor(customer.name)} items-center justify-center mr-3`}
         >
-          <Text className="text-white font-bold text-base">
-            {getCustomerInitials(bill.customerName)}
+          <Text className="text-white font-bold text-sm">
+            {getCustomerInitials(customer.name)}
           </Text>
         </View>
         <View className="flex-1">
-          <View className="flex-row items-center mb-1">
-            {isPureCredit && (
-              <Lock size={14} color="#b45309" style={{ marginRight: 4 }} />
-            )}
-            <Text className="text-gray-900 font-semibold text-base">
-              {bill.customerName}
-            </Text>
-          </View>
-          {bill.customerContact && (
-            <Text className="text-gray-500 text-sm">
-              {bill.customerContact}
-            </Text>
+          <Text className="text-gray-900 font-semibold text-base">
+            {customer.name}
+          </Text>
+          {customer.contact && (
+            <Text className="text-gray-500 text-xs">{customer.contact}</Text>
           )}
           <Text className="text-gray-400 text-xs mt-1">
-            {isClearance
-              ? `Receipt #${bill.receiptNo || "—"} • Credit Clearance`
-              : `Bill #${bill.billNumber || "—"} ${bill.status ? `• ${bill.status}` : ""}`}
+            {customer.billCount} bill{customer.billCount === 1 ? "" : "s"} •{" "}
+            {formatCurrency(customer.totalBilled || 0)}
           </Text>
-          {bill.status === "Partial" && (
-            <View className="flex-row mt-2 items-center">
-              {bill.paidTotal > 0 && (
-                <View className="mr-2 px-2 py-0.5 rounded-full bg-green-100">
-                  <Text className="text-[10px] text-green-700 font-semibold">
-                    Paid ₹{bill.paidTotal}
-                  </Text>
-                </View>
-              )}
-              {bill.creditPortion > 0 && (
-                <View className="px-2 py-0.5 rounded-full bg-orange-100">
-                  <Text className="text-[10px] text-orange-700 font-semibold">
-                    Cr ₹{bill.creditPortion}
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
         </View>
-      </View>
-
-      {/* Amount and Status */}
-      <View className="items-end">
-        <Text className="text-gray-900 font-bold text-lg mb-1">
-          {formatCurrency((bill.total ?? bill.amount) || 0)}
-        </Text>
-        {isClearance ? (
-          <View className="px-2 py-1 rounded-full bg-blue-100">
-            <Text className="text-xs font-medium text-blue-700">
-              Credit Clearance
+        {customer.creditBalance > 0 && (
+          <View className="items-end">
+            <Text className="text-orange-600 font-semibold text-xs">
+              CR {formatCurrency(customer.creditBalance)}
             </Text>
           </View>
-        ) : bill.status === "Paid" ? (
-          <View className="px-2 py-1 rounded-full bg-green-100">
-            <Text className="text-xs font-medium text-green-700">Paid</Text>
+        )}
+      </TouchableOpacity>
+    );
+  },
+  (prevProps, nextProps) => {
+    // Custom comparison - only re-render if customer data changed
+    return (
+      prevProps.customer.id === nextProps.customer.id &&
+      prevProps.customer.billCount === nextProps.customer.billCount &&
+      prevProps.customer.creditBalance === nextProps.customer.creditBalance &&
+      prevProps.customer.totalBilled === nextProps.customer.totalBilled
+    );
+  }
+);
+
+// Memoized completed bill item for SectionList virtualization
+const CompletedBillItem = memo(
+  function CompletedBillItem({
+    bill,
+    onPress,
+  }: {
+    bill: any;
+    onPress: () => void;
+  }) {
+    const isPureCredit =
+      bill.status === "Credit" &&
+      (bill.paidTotal === 0 || bill.paidTotal == null);
+    const isClearance = bill.status === "Clearance";
+
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        disabled={isPureCredit}
+        className={`flex-row items-center justify-between px-4 py-4 bg-white border border-gray-100 rounded-xl mb-3 mx-4 ${isPureCredit ? "" : "active:bg-gray-50"}`}
+        activeOpacity={0.65}
+      >
+        {/* Customer Avatar and Info */}
+        <View className="flex-row items-center flex-1">
+          <View
+            className={`w-14 h-14 rounded-full ${getAvatarColor(bill.customerName)} items-center justify-center mr-4 shadow-sm`}
+          >
+            <Text className="text-white font-bold text-base">
+              {getCustomerInitials(bill.customerName)}
+            </Text>
           </View>
-        ) : bill.status === "Partial" ? (
-          <View className="px-2 py-1 rounded-full bg-orange-100">
-            <Text className="text-xs font-medium text-orange-700">Partial</Text>
+          <View className="flex-1">
+            <View className="flex-row items-center mb-1">
+              {isPureCredit && (
+                <Lock size={14} color="#b45309" style={{ marginRight: 4 }} />
+              )}
+              <Text className="text-gray-900 font-semibold text-base">
+                {bill.customerName}
+              </Text>
+            </View>
+            {bill.customerContact && (
+              <Text className="text-gray-500 text-sm">
+                {bill.customerContact}
+              </Text>
+            )}
+            <Text className="text-gray-400 text-xs mt-1">
+              {isClearance
+                ? `Receipt #${bill.receiptNo || "—"} • Credit Clearance`
+                : `Bill #${bill.billNumber || "—"} ${bill.status ? `• ${bill.status}` : ""}`}
+            </Text>
+            {bill.status === "Partial" && (
+              <View className="flex-row mt-2 items-center">
+                {bill.paidTotal > 0 && (
+                  <View className="mr-2 px-2 py-0.5 rounded-full bg-green-100">
+                    <Text className="text-[10px] text-green-700 font-semibold">
+                      Paid ₹{bill.paidTotal}
+                    </Text>
+                  </View>
+                )}
+                {bill.creditPortion > 0 && (
+                  <View className="px-2 py-0.5 rounded-full bg-orange-100">
+                    <Text className="text-[10px] text-orange-700 font-semibold">
+                      Cr ₹{bill.creditPortion}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
-        ) : bill.status === "Credit" ? (
-          <View className="px-2 py-1 rounded-full bg-orange-100">
-            <Text className="text-xs font-medium text-orange-700">Credit</Text>
-          </View>
-        ) : null}
-      </View>
-    </TouchableOpacity>
-  );
-});
+        </View>
+
+        {/* Amount and Status */}
+        <View className="items-end">
+          <Text className="text-gray-900 font-bold text-lg mb-1">
+            {formatCurrency((bill.total ?? bill.amount) || 0)}
+          </Text>
+          {isClearance ? (
+            <View className="px-2 py-1 rounded-full bg-blue-100">
+              <Text className="text-xs font-medium text-blue-700">
+                Credit Clearance
+              </Text>
+            </View>
+          ) : bill.status === "Paid" ? (
+            <View className="px-2 py-1 rounded-full bg-green-100">
+              <Text className="text-xs font-medium text-green-700">Paid</Text>
+            </View>
+          ) : bill.status === "Partial" ? (
+            <View className="px-2 py-1 rounded-full bg-orange-100">
+              <Text className="text-xs font-medium text-orange-700">
+                Partial
+              </Text>
+            </View>
+          ) : bill.status === "Credit" ? (
+            <View className="px-2 py-1 rounded-full bg-orange-100">
+              <Text className="text-xs font-medium text-orange-700">
+                Credit
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </TouchableOpacity>
+    );
+  },
+  (prevProps, nextProps) => {
+    // Custom comparison - only re-render if bill data changed
+    return (
+      prevProps.bill.id === nextProps.bill.id &&
+      prevProps.bill.status === nextProps.bill.status &&
+      prevProps.bill.total === nextProps.bill.total &&
+      prevProps.bill.paidTotal === nextProps.bill.paidTotal
+    );
+  }
+);
 
 export default function CustomersScreen() {
   const { tab } = useLocalSearchParams<{ tab?: string }>();

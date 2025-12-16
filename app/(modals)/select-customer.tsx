@@ -3,7 +3,7 @@ import { use$ } from "@legendapp/state/react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Stack, useRouter } from "expo-router";
 import { Plus, Search } from "lucide-react-native";
-import { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   InteractionManager,
@@ -19,130 +19,144 @@ import { authState } from "../../state/authState";
 import { customerState } from "../../state/customerState";
 import { orderState } from "../../state/orderState";
 
-// Using Customer type from service for consistency
+// Constants for FlatList optimization
+const CUSTOMER_ITEM_HEIGHT = 80; // Height of each customer item
 
-function CustomerItem({
-  customer,
-  onSelect,
-  isSelected,
-}: {
-  customer: Customer;
-  onSelect: (customer: Customer) => void;
-  isSelected: boolean;
-}) {
-  const getAvatarColor = (name: string): string => {
-    const colors = [
-      "#ef4444",
-      "#f97316",
-      "#f59e0b",
-      "#eab308",
-      "#84cc16",
-      "#22c55e",
-      "#10b981",
-      "#14b8a6",
-      "#06b6d4",
-      "#0ea5e9",
-      "#3b82f6",
-      "#6366f1",
-      "#8b5cf6",
-      "#a855f7",
-      "#d946ef",
-      "#ec4899",
-      "#f43f5e",
-    ];
-    const index = name.charCodeAt(0) % colors.length;
-    return colors[index];
-  };
+// Helper functions moved outside component for memoization
+const getAvatarColor = (name: string): string => {
+  const colors = [
+    "#ef4444",
+    "#f97316",
+    "#f59e0b",
+    "#eab308",
+    "#84cc16",
+    "#22c55e",
+    "#10b981",
+    "#14b8a6",
+    "#06b6d4",
+    "#0ea5e9",
+    "#3b82f6",
+    "#6366f1",
+    "#8b5cf6",
+    "#a855f7",
+    "#d946ef",
+    "#ec4899",
+    "#f43f5e",
+  ];
+  const index = name.charCodeAt(0) % colors.length;
+  return colors[index];
+};
 
-  const getCustomerInitials = (name: string): string => {
-    return name
-      .split(" ")
-      .map((n: string) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
+const getCustomerInitials = (name: string): string => {
+  return name
+    .split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+};
 
-  return (
-    <Pressable
-      onPress={() => onSelect(customer)}
-      style={{
-        backgroundColor: "white",
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: "#f3f4f6",
-        flexDirection: "row",
-        alignItems: "center",
-      }}
-    >
-      <View
+// Memoized CustomerItem with custom comparison
+const CustomerItem = React.memo(
+  function CustomerItem({
+    customer,
+    onSelect,
+    isSelected,
+  }: {
+    customer: Customer;
+    onSelect: (customer: Customer) => void;
+    isSelected: boolean;
+  }) {
+    return (
+      <Pressable
+        onPress={() => onSelect(customer)}
         style={{
-          width: 48,
-          height: 48,
-          backgroundColor: getAvatarColor(customer.name),
-          borderRadius: 24,
-          justifyContent: "center",
+          backgroundColor: "white",
+          padding: 16,
+          borderBottomWidth: 1,
+          borderBottomColor: "#f3f4f6",
+          flexDirection: "row",
           alignItems: "center",
-          marginRight: 16,
         }}
       >
-        <Text
-          style={{
-            color: "white",
-            fontWeight: "600",
-            fontSize: 18,
-          }}
-        >
-          {getCustomerInitials(customer.name)}
-        </Text>
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text
-          style={{
-            fontSize: 16,
-            fontWeight: "500",
-            color: theme.colors.text,
-            marginBottom: 2,
-          }}
-        >
-          {customer.name}
-        </Text>
-        {customer.contact && (
-          <Text
-            style={{
-              fontSize: 14,
-              color: theme.colors.textSecondary,
-            }}
-          >
-            {customer.contact}
-          </Text>
-        )}
-      </View>
-      {isSelected ? (
         <View
           style={{
-            width: 24,
-            height: 24,
-            borderRadius: 12,
-            backgroundColor: theme.colors.primary,
+            width: 48,
+            height: 48,
+            backgroundColor: getAvatarColor(customer.name),
+            borderRadius: 24,
             justifyContent: "center",
             alignItems: "center",
+            marginRight: 16,
           }}
         >
           <Text
             style={{
               color: "white",
-              fontSize: 16,
               fontWeight: "600",
+              fontSize: 18,
             }}
           >
-            ✓
+            {getCustomerInitials(customer.name)}
           </Text>
         </View>
-      ) : null}
-    </Pressable>
-  );
-}
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{
+              fontSize: 16,
+              fontWeight: "500",
+              color: theme.colors.text,
+              marginBottom: 2,
+            }}
+          >
+            {customer.name}
+          </Text>
+          {customer.contact && (
+            <Text
+              style={{
+                fontSize: 14,
+                color: theme.colors.textSecondary,
+              }}
+            >
+              {customer.contact}
+            </Text>
+          )}
+        </View>
+        {isSelected ? (
+          <View
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: 12,
+              backgroundColor: theme.colors.primary,
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            <Text
+              style={{
+                color: "white",
+                fontSize: 16,
+                fontWeight: "600",
+              }}
+            >
+              ✓
+            </Text>
+          </View>
+        ) : null}
+      </Pressable>
+    );
+  },
+  (prevProps, nextProps) => {
+    // Custom comparison - only re-render if relevant props changed
+    return (
+      prevProps.customer.id === nextProps.customer.id &&
+      prevProps.customer.name === nextProps.customer.name &&
+      prevProps.customer.contact === nextProps.customer.contact &&
+      prevProps.isSelected === nextProps.isSelected
+    );
+  }
+);
 
 export default function SelectCustomerScreen() {
   const router = useRouter();
@@ -388,24 +402,36 @@ export default function SelectCustomerScreen() {
             ) : (
               <FlatList<Customer>
                 data={filteredCustomers}
-                keyExtractor={(item: Customer) => item.id}
-                renderItem={({ item }: { item: Customer }) => (
-                  <CustomerItem
-                    customer={item}
-                    onSelect={handleSelectCustomer}
-                    isSelected={selectedCustomerId === item.id}
-                  />
+                keyExtractor={useCallback((item: Customer) => item.id, [])}
+                renderItem={useCallback(
+                  ({ item }: { item: Customer }) => (
+                    <CustomerItem
+                      customer={item}
+                      onSelect={handleSelectCustomer}
+                      isSelected={selectedCustomerId === item.id}
+                    />
+                  ),
+                  [handleSelectCustomer, selectedCustomerId]
                 )}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{
                   paddingBottom: 32,
                 }}
                 // Performance tuning
-                initialNumToRender={12}
-                windowSize={10}
-                maxToRenderPerBatch={12}
+                initialNumToRender={10}
+                windowSize={7}
+                maxToRenderPerBatch={10}
                 updateCellsBatchingPeriod={50}
-                removeClippedSubviews
+                removeClippedSubviews={true}
+                // Fixed height layout for faster rendering
+                getItemLayout={useCallback(
+                  (_data: any, index: number) => ({
+                    length: CUSTOMER_ITEM_HEIGHT,
+                    offset: CUSTOMER_ITEM_HEIGHT * index,
+                    index,
+                  }),
+                  []
+                )}
               />
             )}
           </View>

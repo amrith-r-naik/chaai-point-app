@@ -7,7 +7,7 @@ import { orderState } from "@/state/orderState";
 import { use$ } from "@legendapp/state/react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   FlatList,
   Platform,
@@ -18,76 +18,93 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-function OrderItem({ order }: { order: KotOrder }) {
-  const router = useRouter();
+// Constants for FlatList optimization
+const ORDER_ITEM_HEIGHT = 130; // Approximate height of each order item
 
-  const handleViewOrder = () => {
-    orderState.selectedOrder.set(order);
-    router.push("/(modals)/order-details");
-  };
+// Memoized OrderItem with custom comparison to prevent unnecessary re-renders
+const OrderItem = React.memo(
+  function OrderItem({
+    order,
+    onPress,
+  }: {
+    order: KotOrder;
+    onPress: () => void;
+  }) {
+    const formatDate = (dateString: string) => {
+      const date = new Date(dateString);
+      return (
+        date.toLocaleDateString() +
+        " " +
+        date.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      );
+    };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
     return (
-      date.toLocaleDateString() +
-      " " +
-      date.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    );
-  };
-
-  return (
-    <Pressable
-      onPress={handleViewOrder}
-      className="bg-white p-4 mb-3 rounded-lg border border-gray-200 shadow-sm"
-    >
-      <View className="flex-row justify-between items-start mb-2">
-        <View className="flex-1">
-          <Text className="text-lg font-semibold text-gray-900">
-            KOT-{order.kotNumber}
-          </Text>
-          <Text className="text-sm text-gray-600 mt-1">
-            {order.customer?.name || "Unknown Customer"}
-          </Text>
-        </View>
-        <View className="items-end">
-          {order.billId && (
-            <View className="mb-2 rounded-full bg-green-100 px-2 py-0.5">
-              <Text className="text-green-700 text-xs font-semibold">
-                Billed
-              </Text>
-            </View>
-          )}
-          <TouchableOpacity
-            onPress={handleViewOrder}
-            className="bg-blue-50 px-3 py-1 rounded-md"
-          >
-            <Text className="text-blue-600 text-sm font-medium">
-              View Order
+      <Pressable
+        onPress={onPress}
+        className="bg-white p-4 mb-3 rounded-lg border border-gray-200 shadow-sm"
+      >
+        <View className="flex-row justify-between items-start mb-2">
+          <View className="flex-1">
+            <Text className="text-lg font-semibold text-gray-900">
+              KOT-{order.kotNumber}
             </Text>
-          </TouchableOpacity>
+            <Text className="text-sm text-gray-600 mt-1">
+              {order.customer?.name || "Unknown Customer"}
+            </Text>
+          </View>
+          <View className="items-end">
+            {order.billId && (
+              <View className="mb-2 rounded-full bg-green-100 px-2 py-0.5">
+                <Text className="text-green-700 text-xs font-semibold">
+                  Billed
+                </Text>
+              </View>
+            )}
+            <TouchableOpacity
+              onPress={onPress}
+              className="bg-blue-50 px-3 py-1 rounded-md"
+            >
+              <Text className="text-blue-600 text-sm font-medium">
+                View Order
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
 
-      <View className="flex-row justify-between items-center mt-2">
-        <Text className="text-sm text-gray-500">
-          {formatDate(order.createdAt)}
-        </Text>
-        <Text className="text-lg font-bold text-gray-900">
-          ₹{order.total || 0}
-        </Text>
-      </View>
+        <View className="flex-row justify-between items-center mt-2">
+          <Text className="text-sm text-gray-500">
+            {formatDate(order.createdAt)}
+          </Text>
+          <Text className="text-lg font-bold text-gray-900">
+            ₹{order.total || 0}
+          </Text>
+        </View>
 
-      {order.items && order.items.length > 0 && (
-        <Text className="text-xs text-gray-400 mt-1">
-          {order.items.length} item{order.items.length > 1 ? "s" : ""}
-        </Text>
-      )}
-    </Pressable>
-  );
-}
+        {order.items && order.items.length > 0 && (
+          <Text className="text-xs text-gray-400 mt-1">
+            {order.items.length} item{order.items.length > 1 ? "s" : ""}
+          </Text>
+        )}
+      </Pressable>
+    );
+  },
+  (prevProps, nextProps) => {
+    // Custom comparison - only re-render if order data actually changed
+    return (
+      prevProps.order.id === nextProps.order.id &&
+      prevProps.order.updatedAt === nextProps.order.updatedAt &&
+      prevProps.order.billId === nextProps.order.billId &&
+      prevProps.order.total === nextProps.order.total
+    );
+  }
+);
+
+// Memoized item separator
+const ItemSeparator = React.memo(() => <View style={{ height: 0 }} />);
 
 export default function OrdersScreen() {
   // Granular subscriptions - only re-render when specific fields change
@@ -148,6 +165,31 @@ export default function OrdersScreen() {
       loadOrders();
     }
   }, [isDbReady, selectedDate, loadOrders]);
+
+  // Memoized FlatList callbacks - must be defined before any conditional returns
+  const keyExtractor = useCallback((item: KotOrder) => item.id, []);
+
+  const renderItem = useCallback(
+    ({ item }: { item: KotOrder }) => (
+      <OrderItem
+        order={item}
+        onPress={() => {
+          orderState.selectedOrder.set(item);
+          router.push("/(modals)/order-details");
+        }}
+      />
+    ),
+    [router]
+  );
+
+  const getItemLayout = useCallback(
+    (_data: any, index: number) => ({
+      length: ORDER_ITEM_HEIGHT,
+      offset: ORDER_ITEM_HEIGHT * index,
+      index,
+    }),
+    []
+  );
 
   const handleCreateOrder = () => {
     // Reset order state before navigation
@@ -258,15 +300,19 @@ export default function OrdersScreen() {
         ) : (
           <FlatList
             data={orders}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => <OrderItem order={item} />}
+            keyExtractor={keyExtractor}
+            renderItem={renderItem}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 20 }}
-            initialNumToRender={12}
-            maxToRenderPerBatch={12}
-            windowSize={7}
+            // Performance optimizations
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
             removeClippedSubviews={true}
             updateCellsBatchingPeriod={50}
+            // Fixed height layout for faster rendering
+            getItemLayout={getItemLayout}
+            ItemSeparatorComponent={ItemSeparator}
           />
         )}
       </View>

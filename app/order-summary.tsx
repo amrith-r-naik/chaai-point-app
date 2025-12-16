@@ -2,7 +2,7 @@ import { theme } from "@/constants/theme";
 import { orderService } from "@/services/orderService";
 import { router, useLocalSearchParams } from "expo-router";
 import { ArrowLeft, Calendar, Receipt, User } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -13,13 +13,78 @@ import {
   View,
 } from "react-native";
 
+// Memoized order item row
+const OrderItemRow = React.memo(
+  function OrderItemRow({
+    item,
+  }: {
+    item: {
+      id: string;
+      menuItemName: string;
+      quantity: number;
+      price: number;
+      total: number;
+    };
+  }) {
+    return (
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          paddingVertical: 12,
+          borderBottomWidth: 1,
+          borderBottomColor: theme.colors.border,
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{
+              fontSize: 16,
+              fontWeight: "500",
+              color: theme.colors.text,
+              marginBottom: 2,
+            }}
+          >
+            {item.menuItemName}
+          </Text>
+          <Text
+            style={{
+              fontSize: 14,
+              color: theme.colors.textSecondary,
+            }}
+          >
+            ₹{item.price.toFixed(2)} × {item.quantity}
+          </Text>
+        </View>
+        <Text
+          style={{
+            fontSize: 16,
+            fontWeight: "600",
+            color: theme.colors.primary,
+          }}
+        >
+          ₹{item.total.toFixed(2)}
+        </Text>
+      </View>
+    );
+  },
+  (prevProps, nextProps) => {
+    return (
+      prevProps.item.id === nextProps.item.id &&
+      prevProps.item.quantity === nextProps.item.quantity &&
+      prevProps.item.total === nextProps.item.total
+    );
+  }
+);
+
 interface OrderDetails {
   id: string;
   orderNumber: string;
   customerName: string;
   totalAmount: number;
   amountPaid: number;
-  paymentStatus: 'paid' | 'credit' | 'partial';
+  paymentStatus: "paid" | "credit" | "partial";
   paymentMethod?: string;
   createdAt: string;
   items: {
@@ -63,12 +128,12 @@ export default function OrderSummaryScreen() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'paid':
-        return '#10b981';
-      case 'credit':
-        return '#f59e0b';
-      case 'partial':
-        return '#ef4444';
+      case "paid":
+        return "#10b981";
+      case "credit":
+        return "#f59e0b";
+      case "partial":
+        return "#ef4444";
       default:
         return theme.colors.textSecondary;
     }
@@ -76,74 +141,40 @@ export default function OrderSummaryScreen() {
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'paid':
-        return 'Paid';
-      case 'credit':
-        return 'Credit';
-      case 'partial':
-        return 'Partial Payment';
+      case "paid":
+        return "Paid";
+      case "credit":
+        return "Credit";
+      case "partial":
+        return "Partial Payment";
       default:
-        return 'Unknown';
+        return "Unknown";
     }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    return new Date(dateString).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
-  const renderOrderItem = ({ item }: { item: OrderDetails['items'][0] }) => (
-    <View
-      style={{
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-      }}
-    >
-      <View style={{ flex: 1 }}>
-        <Text
-          style={{
-            fontSize: 16,
-            fontWeight: "500",
-            color: theme.colors.text,
-            marginBottom: 2,
-          }}
-        >
-          {item.menuItemName}
-        </Text>
-        <Text
-          style={{
-            fontSize: 14,
-            color: theme.colors.textSecondary,
-          }}
-        >
-          ₹{item.price.toFixed(2)} × {item.quantity}
-        </Text>
-      </View>
-      <Text
-        style={{
-          fontSize: 16,
-          fontWeight: "600",
-          color: theme.colors.primary,
-        }}
-      >
-        ₹{item.total.toFixed(2)}
-      </Text>
-    </View>
+  const renderOrderItem = useCallback(
+    ({ item }: { item: OrderDetails["items"][0] }) => (
+      <OrderItemRow item={item} />
+    ),
+    []
   );
 
   if (loading) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: "#f9fafb" }}>
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <View
+          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+        >
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={{ marginTop: 16, color: theme.colors.textSecondary }}>
             Loading order details...
@@ -156,8 +187,21 @@ export default function OrderSummaryScreen() {
   if (!order) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: "#f9fafb" }}>
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 32 }}>
-          <Text style={{ fontSize: 18, color: theme.colors.textSecondary, textAlign: "center" }}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 32,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 18,
+              color: theme.colors.textSecondary,
+              textAlign: "center",
+            }}
+          >
             Order not found
           </Text>
           <TouchableOpacity
@@ -247,7 +291,13 @@ export default function OrderSummaryScreen() {
             Order Information
           </Text>
 
-          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 12,
+            }}
+          >
             <User size={16} color={theme.colors.textSecondary} />
             <Text
               style={{
@@ -270,7 +320,13 @@ export default function OrderSummaryScreen() {
             </Text>
           </View>
 
-          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 12,
+            }}
+          >
             <Calendar size={16} color={theme.colors.textSecondary} />
             <Text
               style={{
@@ -293,7 +349,13 @@ export default function OrderSummaryScreen() {
             </Text>
           </View>
 
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <Receipt size={16} color={theme.colors.textSecondary} />
               <Text
@@ -309,7 +371,7 @@ export default function OrderSummaryScreen() {
             </View>
             <View
               style={{
-                backgroundColor: getStatusColor(order.paymentStatus) + '20',
+                backgroundColor: getStatusColor(order.paymentStatus) + "20",
                 paddingHorizontal: 12,
                 paddingVertical: 4,
                 borderRadius: 12,
@@ -384,41 +446,85 @@ export default function OrderSummaryScreen() {
             Payment Summary
           </Text>
 
-          <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              marginBottom: 8,
+            }}
+          >
             <Text style={{ fontSize: 14, color: theme.colors.textSecondary }}>
               Total Amount:
             </Text>
-            <Text style={{ fontSize: 14, fontWeight: "500", color: theme.colors.text }}>
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: "500",
+                color: theme.colors.text,
+              }}
+            >
               ₹{order.totalAmount.toFixed(2)}
             </Text>
           </View>
 
-          <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              marginBottom: 8,
+            }}
+          >
             <Text style={{ fontSize: 14, color: theme.colors.textSecondary }}>
               Amount Paid:
             </Text>
-            <Text style={{ fontSize: 14, fontWeight: "500", color: theme.colors.text }}>
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: "500",
+                color: theme.colors.text,
+              }}
+            >
               ₹{order.amountPaid.toFixed(2)}
             </Text>
           </View>
 
           {order.totalAmount !== order.amountPaid && (
-            <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
-              <Text style={{ fontSize: 14, color: '#ef4444' }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                marginBottom: 8,
+              }}
+            >
+              <Text style={{ fontSize: 14, color: "#ef4444" }}>
                 Pending Amount:
               </Text>
-              <Text style={{ fontSize: 14, fontWeight: "500", color: '#ef4444' }}>
+              <Text
+                style={{ fontSize: 14, fontWeight: "500", color: "#ef4444" }}
+              >
                 ₹{(order.totalAmount - order.amountPaid).toFixed(2)}
               </Text>
             </View>
           )}
 
           {order.paymentMethod && (
-            <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                marginTop: 8,
+              }}
+            >
               <Text style={{ fontSize: 14, color: theme.colors.textSecondary }}>
                 Payment Method:
               </Text>
-              <Text style={{ fontSize: 14, fontWeight: "500", color: theme.colors.text }}>
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: "500",
+                  color: theme.colors.text,
+                }}
+              >
                 {order.paymentMethod}
               </Text>
             </View>

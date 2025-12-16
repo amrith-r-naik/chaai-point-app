@@ -946,6 +946,32 @@ export default function CustomerDetailsScreen() {
               >
                 Advance History
               </Text>
+              {advanceLedger.length > 0 && (
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(modals)/advance-ledger",
+                      params: { customerId, customerName },
+                    })
+                  }
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    backgroundColor: theme.colors.primary + "15",
+                    borderRadius: 6,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      fontWeight: "600",
+                      color: theme.colors.primary,
+                    }}
+                  >
+                    View All
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
             {advanceLedger.length === 0 ? (
               <View style={{ alignItems: "center", paddingVertical: 24 }}>

@@ -366,12 +366,25 @@ export default function CustomersScreen() {
 
                   if (result.processedKOTs > 0) {
                     // Run database maintenance after EOD (ANALYZE + WAL checkpoint)
+                    // Wait 500ms for all transactions to fully commit before maintenance
                     try {
+                      await new Promise((resolve) => setTimeout(resolve, 500));
                       const { analyzeDatabase, walCheckpoint } = await import(
                         "@/lib/db"
                       );
                       await analyzeDatabase();
-                      await walCheckpoint("TRUNCATE");
+                      // Use PASSIVE mode first (non-blocking), then TRUNCATE if needed
+                      const checkpointResult = await walCheckpoint("PASSIVE");
+                      if (
+                        checkpointResult.pagesRemaining &&
+                        checkpointResult.pagesRemaining > 0
+                      ) {
+                        // Wait and retry with TRUNCATE
+                        await new Promise((resolve) =>
+                          setTimeout(resolve, 300)
+                        );
+                        await walCheckpoint("TRUNCATE");
+                      }
                       console.log("✅ Post-EOD database maintenance complete");
                     } catch (maintenanceError) {
                       console.warn(

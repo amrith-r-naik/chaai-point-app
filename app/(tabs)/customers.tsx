@@ -365,6 +365,21 @@ export default function CustomersScreen() {
                   const result = await orderService.processEndOfDay(dateString);
 
                   if (result.processedKOTs > 0) {
+                    // Run database maintenance after EOD (ANALYZE + WAL checkpoint)
+                    try {
+                      const { analyzeDatabase, walCheckpoint } = await import(
+                        "@/lib/db"
+                      );
+                      await analyzeDatabase();
+                      await walCheckpoint("TRUNCATE");
+                      console.log("✅ Post-EOD database maintenance complete");
+                    } catch (maintenanceError) {
+                      console.warn(
+                        "Post-EOD maintenance failed (non-critical):",
+                        maintenanceError
+                      );
+                    }
+
                     Alert.alert(
                       "EOD Completed",
                       `Successfully processed ${result.processedKOTs} KOTs as credit payments.\nTotal Amount: ₹${result.totalAmount.toFixed(2)}`,

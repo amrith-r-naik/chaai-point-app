@@ -1306,7 +1306,10 @@ export async function nextLocalNumber(
  * Call this after generating test data or bulk operations
  * Should NOT be called during app init (blocks database)
  */
-export async function analyzeDatabase() {
+export async function analyzeDatabase(): Promise<{
+  success: boolean;
+  durationMs: number;
+}> {
   if (!db) throw new Error("Database not initialized");
   try {
     console.log("🔍 Analyzing database for query optimization...");
@@ -1314,7 +1317,221 @@ export async function analyzeDatabase() {
     await db.execAsync("ANALYZE");
     const duration = performance.now() - start;
     console.log(`✅ Database analysis complete (${duration.toFixed(0)}ms)`);
+    return { success: true, durationMs: duration };
   } catch (error) {
     console.warn("⚠️  Database analysis failed (non-critical):", error);
+    return { success: false, durationMs: 0 };
   }
+}
+
+/**
+ * VACUUM the database to reclaim space after deletes
+ * This rebuilds the database file, removing fragmentation and freeing disk space
+ * Warning: This can be slow on large databases and blocks all operations
+ */
+export async function vacuumDatabase(): Promise<{
+  success: boolean;
+  durationMs: number;
+  sizeBefore?: number;
+  sizeAfter?: number;
+}> {
+  if (!db) throw new Error("Database not initialized");
+  try {
+    console.log("🧹 Starting VACUUM to reclaim database space...");
+
+    // Get page count before vacuum
+    const beforeStats = await db.getFirstAsync<{
+      page_count: number;
+      page_size: number;
+    }>(
+      "SELECT page_count, page_size FROM pragma_page_count(), pragma_page_size()"
+    );
+    const sizeBefore = beforeStats
+      ? beforeStats.page_count * beforeStats.page_size
+      : 0;
+
+    const start = performance.now();
+    await db.execAsync("VACUUM");
+    const duration = performance.now() - start;
+
+    // Get page count after vacuum
+    const afterStats = await db.getFirstAsync<{
+      page_count: number;
+      page_size: number;
+    }>(
+      "SELECT page_count, page_size FROM pragma_page_count(), pragma_page_size()"
+    );
+    const sizeAfter = afterStats
+      ? afterStats.page_count * afterStats.page_size
+      : 0;
+
+    const savedBytes = sizeBefore - sizeAfter;
+    console.log(
+      `✅ VACUUM complete (${duration.toFixed(0)}ms) - Reclaimed ${(savedBytes / 1024).toFixed(1)}KB`
+    );
+
+    return { success: true, durationMs: duration, sizeBefore, sizeAfter };
+  } catch (error) {
+    console.error("❌ VACUUM failed:", error);
+    return { success: false, durationMs: 0 };
+  }
+}
+
+/**
+ * Force a WAL checkpoint to flush WAL journal to main database file
+ * Use before backup to ensure backup contains all data
+ * @param mode - PASSIVE (non-blocking), FULL (blocks writers), RESTART (blocks and restarts WAL), TRUNCATE (blocks and truncates WAL)
+ * @param retries - Number of retries if checkpoint is partial (default: 2)
+ */
+export async function walCheckpoint(
+  mode: "PASSIVE" | "FULL" | "RESTART" | "TRUNCATE" = "TRUNCATE",
+  retries: number = 2
+): Promise<{
+  success: boolean;
+  durationMs: number;
+  pagesWritten?: number;
+  pagesRemaining?: number;
+}> {
+  if (!db) throw new Error("Database not initialized");
+
+  let totalPagesWritten = 0;
+  let lastPagesRemaining = 0;
+  const totalStart = performance.now();
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      if (attempt > 0) {
+        console.log(`🔄 WAL checkpoint retry ${attempt}/${retries}...`);
+        // Short delay between retries to let other operations complete
+        await new Promise((r) => setTimeout(r, 500));
+      } else {
+        console.log(`🔄 Running WAL checkpoint (mode: ${mode})...`);
+      }
+
+      const start = performance.now();
+
+      // PRAGMA wal_checkpoint returns: busy, log, checkpointed
+      // busy: 0 if success, 1 if could not checkpoint all frames
+      // log: total frames in WAL
+      // checkpointed: frames checkpointed
+      const result = await db.getFirstAsync<{
+        busy: number;
+        log: number;
+        checkpointed: number;
+      }>(`PRAGMA wal_checkpoint(${mode})`);
+
+      const duration = performance.now() - start;
+      const pagesWritten = result?.checkpointed || 0;
+      const pagesRemaining = (result?.log || 0) - pagesWritten;
+
+      totalPagesWritten += pagesWritten;
+      lastPagesRemaining = pagesRemaining;
+
+      if (result?.busy === 0 || pagesRemaining === 0) {
+        const totalDuration = performance.now() - totalStart;
+        console.log(
+          `✅ WAL checkpoint complete (${totalDuration.toFixed(0)}ms) - ${totalPagesWritten} pages flushed`
+        );
+        return {
+          success: true,
+          durationMs: totalDuration,
+          pagesWritten: totalPagesWritten,
+          pagesRemaining: 0,
+        };
+      }
+
+      console.log(
+        `⏳ Checkpoint progress: ${pagesWritten} pages flushed, ${pagesRemaining} remaining`
+      );
+    } catch (error) {
+      console.error("❌ WAL checkpoint failed:", error);
+      return { success: false, durationMs: performance.now() - totalStart };
+    }
+  }
+
+  // All retries exhausted
+  const totalDuration = performance.now() - totalStart;
+  console.warn(
+    `⚠️ WAL checkpoint partial after ${retries + 1} attempts (${totalDuration.toFixed(0)}ms) - ${lastPagesRemaining} pages remaining`
+  );
+  return {
+    success: false,
+    durationMs: totalDuration,
+    pagesWritten: totalPagesWritten,
+    pagesRemaining: lastPagesRemaining,
+  };
+}
+
+/**
+ * Get WAL file size and status
+ */
+export async function getWalStatus(): Promise<{
+  walPages: number;
+  walSizeBytes: number;
+  autocheckpoint: number;
+}> {
+  if (!db) throw new Error("Database not initialized");
+
+  // Get WAL info
+  const walInfo = await db.getFirstAsync<{ log: number }>(
+    "PRAGMA wal_checkpoint(PASSIVE)"
+  );
+
+  const pageSize = await db.getFirstAsync<{ page_size: number }>(
+    "PRAGMA page_size"
+  );
+
+  const autocheckpoint = await db.getFirstAsync<{ auto_vacuum: number }>(
+    "PRAGMA wal_autocheckpoint"
+  );
+
+  const walPages = walInfo?.log || 0;
+  const walSizeBytes = walPages * (pageSize?.page_size || 4096);
+
+  return {
+    walPages,
+    walSizeBytes,
+    autocheckpoint: autocheckpoint?.auto_vacuum || 1000,
+  };
+}
+
+/**
+ * Perform full database maintenance (ANALYZE + VACUUM + WAL checkpoint)
+ * Best run during low-activity periods (EOD or manual admin trigger)
+ */
+export async function performDatabaseMaintenance(): Promise<{
+  analyze: { success: boolean; durationMs: number };
+  vacuum: { success: boolean; durationMs: number; spaceReclaimed?: number };
+  checkpoint: { success: boolean; durationMs: number };
+  totalDurationMs: number;
+}> {
+  if (!db) throw new Error("Database not initialized");
+
+  console.log("🔧 Starting full database maintenance...");
+  const totalStart = performance.now();
+
+  // 1. Run ANALYZE to update query planner statistics
+  const analyzeResult = await analyzeDatabase();
+
+  // 2. Run VACUUM to reclaim space
+  const vacuumResult = await vacuumDatabase();
+  const spaceReclaimed =
+    vacuumResult.sizeBefore && vacuumResult.sizeAfter
+      ? vacuumResult.sizeBefore - vacuumResult.sizeAfter
+      : undefined;
+
+  // 3. Force WAL checkpoint (TRUNCATE mode to reset WAL file)
+  const checkpointResult = await walCheckpoint("TRUNCATE");
+
+  const totalDuration = performance.now() - totalStart;
+  console.log(
+    `✅ Database maintenance complete (${totalDuration.toFixed(0)}ms total)`
+  );
+
+  return {
+    analyze: analyzeResult,
+    vacuum: { ...vacuumResult, spaceReclaimed },
+    checkpoint: checkpointResult,
+    totalDurationMs: totalDuration,
+  };
 }

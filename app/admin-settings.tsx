@@ -1,5 +1,13 @@
 import { theme } from "@/constants/theme";
-import { openDatabase, runIntegrityAudit } from "@/lib/db";
+import {
+  analyzeDatabase,
+  getWalStatus,
+  openDatabase,
+  performDatabaseMaintenance,
+  runIntegrityAudit,
+  vacuumDatabase,
+  walCheckpoint,
+} from "@/lib/db";
 import { adminService } from "@/services/adminService";
 import {
   CreateMenuItemData,
@@ -52,6 +60,11 @@ export default function AdminSettingsScreen() {
   const [diagRunning, setDiagRunning] = useState(false);
   const [diagResults, setDiagResults] = useState<TestResult[] | null>(null);
   const [showDiagModal, setShowDiagModal] = useState(false);
+  const [maintenanceRunning, setMaintenanceRunning] = useState(false);
+  const [walStatus, setWalStatus] = useState<{
+    walPages: number;
+    walSizeBytes: number;
+  } | null>(null);
 
   const categories = [
     "Tea",
@@ -81,8 +94,19 @@ export default function AdminSettingsScreen() {
     loadTableCounts();
     loadMenuItems();
     loadSettings();
+    loadWalStatus();
     // Sync & Backup state removed here; handled on Dashboard
   }, [auth.user]);
+
+  const loadWalStatus = async () => {
+    try {
+      await openDatabase();
+      const status = await getWalStatus();
+      setWalStatus(status);
+    } catch (e) {
+      console.warn("Failed to load WAL status:", e);
+    }
+  };
 
   const loadMenuItems = async () => {
     try {
@@ -409,6 +433,113 @@ export default function AdminSettingsScreen() {
       Alert.alert("Diagnostics Failed", e?.message || String(e));
     } finally {
       setDiagRunning(false);
+    }
+  };
+
+  // Database Maintenance Functions (Phase 2.3)
+  const handleRunMaintenance = async () => {
+    Alert.alert(
+      "Run Database Maintenance",
+      "This will run ANALYZE, VACUUM, and WAL checkpoint. This may take a few seconds and briefly block database operations. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Run Maintenance",
+          onPress: async () => {
+            try {
+              setMaintenanceRunning(true);
+              await openDatabase();
+              const result = await performDatabaseMaintenance();
+              await loadWalStatus();
+
+              const spaceReclaimed = result.vacuum.spaceReclaimed
+                ? `${(result.vacuum.spaceReclaimed / 1024).toFixed(1)}KB`
+                : "N/A";
+
+              Alert.alert(
+                "Maintenance Complete",
+                `✅ Database maintenance finished in ${result.totalDurationMs.toFixed(0)}ms\n\n` +
+                  `ANALYZE: ${result.analyze.success ? "✓" : "✗"} (${result.analyze.durationMs.toFixed(0)}ms)\n` +
+                  `VACUUM: ${result.vacuum.success ? "✓" : "✗"} (${result.vacuum.durationMs.toFixed(0)}ms)\n` +
+                  `Space reclaimed: ${spaceReclaimed}\n` +
+                  `WAL Checkpoint: ${result.checkpoint.success ? "✓" : "✗"} (${result.checkpoint.durationMs.toFixed(0)}ms)`
+              );
+            } catch (e: any) {
+              Alert.alert("Maintenance Failed", e?.message || String(e));
+            } finally {
+              setMaintenanceRunning(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleVacuumOnly = async () => {
+    try {
+      setMaintenanceRunning(true);
+      await openDatabase();
+      const result = await vacuumDatabase();
+      if (result.success) {
+        const spaceReclaimed =
+          result.sizeBefore && result.sizeAfter
+            ? `${((result.sizeBefore - result.sizeAfter) / 1024).toFixed(1)}KB`
+            : "N/A";
+        Alert.alert(
+          "VACUUM Complete",
+          `Completed in ${result.durationMs.toFixed(0)}ms\nSpace reclaimed: ${spaceReclaimed}`
+        );
+      } else {
+        Alert.alert("VACUUM Failed", "See console for details");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || String(e));
+    } finally {
+      setMaintenanceRunning(false);
+    }
+  };
+
+  const handleAnalyzeOnly = async () => {
+    try {
+      setMaintenanceRunning(true);
+      await openDatabase();
+      const result = await analyzeDatabase();
+      if (result.success) {
+        Alert.alert(
+          "ANALYZE Complete",
+          `Query planner statistics updated in ${result.durationMs.toFixed(0)}ms`
+        );
+      } else {
+        Alert.alert("ANALYZE Failed", "See console for details");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || String(e));
+    } finally {
+      setMaintenanceRunning(false);
+    }
+  };
+
+  const handleWalCheckpoint = async () => {
+    try {
+      setMaintenanceRunning(true);
+      await openDatabase();
+      const result = await walCheckpoint("TRUNCATE");
+      await loadWalStatus();
+      if (result.success) {
+        Alert.alert(
+          "WAL Checkpoint Complete",
+          `Flushed ${result.pagesWritten} pages in ${result.durationMs.toFixed(0)}ms`
+        );
+      } else {
+        Alert.alert(
+          "WAL Checkpoint Partial",
+          `${result.pagesRemaining} pages remaining. Database may be busy.`
+        );
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || String(e));
+    } finally {
+      setMaintenanceRunning(false);
     }
   };
 
@@ -842,6 +973,116 @@ export default function AdminSettingsScreen() {
           onPress={handleClearAllTables}
           destructive
         />
+
+        {/* Database Maintenance (Phase 2.3) */}
+        <View style={{ marginBottom: 24, marginTop: 16 }}>
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: "bold",
+              color: theme.colors.text,
+              marginBottom: 8,
+            }}
+          >
+            Database Maintenance
+          </Text>
+          <Text
+            style={{
+              fontSize: 12,
+              color: theme.colors.textSecondary,
+              marginBottom: 12,
+            }}
+          >
+            Optimize database performance by reclaiming space and updating query
+            statistics.
+            {walStatus &&
+              ` WAL: ${walStatus.walPages} pages (${(walStatus.walSizeBytes / 1024).toFixed(1)}KB)`}
+          </Text>
+
+          {/* Full Maintenance Button */}
+          <TouchableOpacity
+            onPress={handleRunMaintenance}
+            disabled={maintenanceRunning}
+            style={{
+              backgroundColor: "#10B981",
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              paddingVertical: 14,
+              paddingHorizontal: 16,
+              borderRadius: 8,
+              opacity: maintenanceRunning ? 0.6 : 1,
+              ...theme.shadows.sm,
+              marginBottom: 12,
+            }}
+          >
+            {maintenanceRunning ? (
+              <ActivityIndicator color="white" size="small" />
+            ) : (
+              <Database size={18} color="white" />
+            )}
+            <Text style={{ color: "white", fontWeight: "600", marginLeft: 8 }}>
+              {maintenanceRunning
+                ? "Running Maintenance..."
+                : "Run Full Maintenance"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Individual Operations */}
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TouchableOpacity
+              onPress={handleAnalyzeOnly}
+              disabled={maintenanceRunning}
+              style={{
+                flex: 1,
+                backgroundColor: "#3B82F6",
+                paddingVertical: 10,
+                paddingHorizontal: 8,
+                borderRadius: 6,
+                alignItems: "center",
+                opacity: maintenanceRunning ? 0.6 : 1,
+              }}
+            >
+              <Text style={{ color: "white", fontWeight: "500", fontSize: 12 }}>
+                ANALYZE
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleVacuumOnly}
+              disabled={maintenanceRunning}
+              style={{
+                flex: 1,
+                backgroundColor: "#8B5CF6",
+                paddingVertical: 10,
+                paddingHorizontal: 8,
+                borderRadius: 6,
+                alignItems: "center",
+                opacity: maintenanceRunning ? 0.6 : 1,
+              }}
+            >
+              <Text style={{ color: "white", fontWeight: "500", fontSize: 12 }}>
+                VACUUM
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleWalCheckpoint}
+              disabled={maintenanceRunning}
+              style={{
+                flex: 1,
+                backgroundColor: "#F59E0B",
+                paddingVertical: 10,
+                paddingHorizontal: 8,
+                borderRadius: 6,
+                alignItems: "center",
+                opacity: maintenanceRunning ? 0.6 : 1,
+              }}
+            >
+              <Text style={{ color: "white", fontWeight: "500", fontSize: 12 }}>
+                WAL Checkpoint
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Sync Diagnostics */}
         {process.env.NODE_ENV === "development" && (

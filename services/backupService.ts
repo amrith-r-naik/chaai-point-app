@@ -1,4 +1,5 @@
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { walCheckpoint } from "@/lib/db";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import * as FileSystem from "expo-file-system";
 
 function toDbPath(dbName = "chaai-point.db") {
@@ -30,6 +31,15 @@ export const backupService = {
         "Cloud backup unavailable: Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY and rebuild."
       );
     }
+
+    // Force WAL checkpoint before backup to ensure all data is in the main DB file
+    try {
+      console.log("📦 Preparing backup: forcing WAL checkpoint...");
+      await walCheckpoint("TRUNCATE");
+    } catch (e) {
+      console.warn("WAL checkpoint before backup failed (continuing):", e);
+    }
+
     const dbPath = toDbPath();
     const exists = await FileSystem.getInfoAsync(dbPath);
     if (!exists.exists) {
@@ -57,7 +67,7 @@ export const backupService = {
   },
 
   async listBackups(shopId = "shop_1") {
-  if (!isSupabaseConfigured) return [];
+    if (!isSupabaseConfigured) return [];
     const { data, error } = await supabase.storage
       .from("backups")
       .list(shopId, { limit: 50, sortBy: { column: "name", order: "desc" } });
@@ -66,7 +76,7 @@ export const backupService = {
   },
 
   async getLatestBackup(shopId = "shop_1") {
-  const files = await this.listBackups(shopId);
+    const files = await this.listBackups(shopId);
     if (!files.length) return null;
     // Names contain ISO-like timestamp; desc sort gives latest first
     return files[0];

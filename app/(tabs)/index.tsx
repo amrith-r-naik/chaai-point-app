@@ -1,5 +1,5 @@
 import AddExpenseModal from "@/app/(modals)/add-expense";
-import { Loading } from "@/components/ui";
+import { DashboardSkeleton, Loading } from "@/components/ui";
 // UnbilledOrdersCard removed as unbilled KOT concept deprecated
 import { theme } from "@/constants/theme";
 import { useFocusRefresh } from "@/hooks/useFocusRefresh";
@@ -686,13 +686,7 @@ export default function HomeScreen() {
     );
   }
 
-  if (loading) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.surface }}>
-        <Loading message="Loading dashboard data..." />
-      </SafeAreaView>
-    );
-  }
+  // Note: We no longer block on loading - show skeleton in place instead
 
   return (
     <SafeAreaView style={styles.container}>
@@ -832,6 +826,10 @@ export default function HomeScreen() {
         <View style={styles.contentContainer}>
           <Text style={styles.sectionTitle}>Key Metrics</Text>
 
+          {/* Show skeleton while loading, then real metrics */}
+          {loading ? (
+            <DashboardSkeleton />
+          ) : (
           <View style={styles.metricsGrid}>
             <View style={styles.metricsRow}>
               <MetricCard
@@ -915,6 +913,7 @@ export default function HomeScreen() {
 
             {/* Advance metric cards removed as per request */}
           </View>
+          )}
 
           {/* Unbilled Orders Card removed */}
 

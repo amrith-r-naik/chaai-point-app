@@ -9,6 +9,7 @@ import { ArrowLeft } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  InteractionManager,
   RefreshControl,
   ScrollView,
   Text,
@@ -24,10 +25,19 @@ export default function CustomerKOTsScreen() {
   // Local date in YYYY-MM-DD (e.g., en-CA locale formats as 2025-09-05)
   const today = new Date().toLocaleDateString("en-CA");
 
+  const [isReady, setIsReady] = useState(false);
   const [kots, setKots] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+
+  // Defer heavy rendering until after navigation animation
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      setIsReady(true);
+    });
+    return () => task.cancel();
+  }, []);
 
   // Fetch KOTs for the selected customer and date
   const fetchKOTs = useCallback(async () => {
@@ -49,8 +59,10 @@ export default function CustomerKOTsScreen() {
   }, [selectedCustomer?.id, today, isDbReady]);
 
   useEffect(() => {
-    fetchKOTs();
-  }, [fetchKOTs]);
+    if (isReady) {
+      fetchKOTs();
+    }
+  }, [isReady, fetchKOTs]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);

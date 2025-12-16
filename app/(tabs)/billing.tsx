@@ -1,5 +1,5 @@
 import AddExpenseModal from "@/app/(modals)/add-expense";
-import { Loading, Typography } from "@/components/ui";
+import { ListItemSkeleton, Loading, Typography } from "@/components/ui";
 import { theme } from "@/constants/theme";
 import { useFocusRefresh } from "@/hooks/useFocusRefresh";
 import {
@@ -298,17 +298,7 @@ export default function BillingScreen() {
     loadExpenses();
   }, [loadExpenses]);
 
-  if (loading) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: "#F8FAFC" }}>
-        <View
-          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
-        >
-          <Loading message="Loading expenses..." />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  // Note: We no longer block on loading - show skeleton in place instead
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F8FAFC" }}>
@@ -540,7 +530,15 @@ export default function BillingScreen() {
           </View>
 
           {/* Expenses List or Empty State */}
-          {expenses.length === 0 ? (
+          {/* Show skeleton while loading */}
+          {loading ? (
+            <View style={{ marginBottom: 20 }}>
+              <ListItemSkeleton />
+              <ListItemSkeleton />
+              <ListItemSkeleton />
+              <ListItemSkeleton />
+            </View>
+          ) : expenses.length === 0 ? (
             <View
               style={{
                 backgroundColor: "white",

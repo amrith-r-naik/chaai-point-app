@@ -17,6 +17,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
+  InteractionManager,
   Modal,
   RefreshControl,
   SafeAreaView,
@@ -579,6 +580,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
 export default function DueManagementScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [isReady, setIsReady] = useState(false);
   const [customersWithDues, setCustomersWithDues] = useState<CustomerDue[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -587,6 +589,14 @@ export default function DueManagementScreen() {
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDue | null>(
     null
   );
+
+  // Defer heavy rendering until after navigation animation
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      setIsReady(true);
+    });
+    return () => task.cancel();
+  }, []);
 
   const loadDuesData = useCallback(async () => {
     try {
@@ -606,9 +616,12 @@ export default function DueManagementScreen() {
     }
   }, []);
 
+  // Load data only after screen is ready (after navigation animation)
   useEffect(() => {
-    loadDuesData();
-  }, [loadDuesData]);
+    if (isReady) {
+      loadDuesData();
+    }
+  }, [isReady, loadDuesData]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);

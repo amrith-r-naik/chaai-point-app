@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  InteractionManager,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -42,11 +43,20 @@ export default function CustomerBillScreen() {
     date: string;
   }>();
 
+  const [isReady, setIsReady] = useState(false);
   const [bill, setBill] = useState<Bill | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   // Granular state subscription for optimized re-renders
   const isDbReady = use$(authState.isDbReady);
+
+  // Defer heavy rendering until after navigation animation
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      setIsReady(true);
+    });
+    return () => task.cancel();
+  }, []);
 
   // Server assigns bill number; do not generate locally
 
@@ -128,9 +138,12 @@ export default function CustomerBillScreen() {
     }
   }, [customerId, customerName, date, isDbReady]);
 
+  // Load data only after screen is ready (after navigation animation)
   useEffect(() => {
-    loadCustomerBill();
-  }, [loadCustomerBill]);
+    if (isReady) {
+      loadCustomerBill();
+    }
+  }, [isReady, loadCustomerBill]);
 
   const handlePayment = () => {
     if (!bill) return;

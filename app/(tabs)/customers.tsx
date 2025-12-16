@@ -1,3 +1,4 @@
+import { ListItemSkeleton } from "@/components/ui";
 import { useFocusRefresh } from "@/hooks/useFocusRefresh";
 import { useScreenPerformance } from "@/hooks/useScreenPerformance";
 import {
@@ -1196,9 +1197,12 @@ export default function CustomersScreen() {
       {/* Content */}
       <View className="flex-1">
         {customerLoading && !refreshing ? (
-          <View className="flex-1 justify-center items-center">
-            <ActivityIndicator size="large" color="#2563eb" />
-            <Text className="text-gray-600 mt-2">Loading customers...</Text>
+          <View className="px-4 pt-4">
+            <ListItemSkeleton />
+            <ListItemSkeleton />
+            <ListItemSkeleton />
+            <ListItemSkeleton />
+            <ListItemSkeleton />
           </View>
         ) : customerError ? (
           <View className="flex-1 justify-center items-center px-4">

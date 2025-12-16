@@ -2,6 +2,7 @@ import AddExpenseModal from "@/app/(modals)/add-expense";
 import { Loading } from "@/components/ui";
 // UnbilledOrdersCard removed as unbilled KOT concept deprecated
 import { theme } from "@/constants/theme";
+import { useFocusRefresh } from "@/hooks/useFocusRefresh";
 import { useScreenPerformance } from "@/hooks/useScreenPerformance";
 import { openDatabase } from "@/lib/db";
 import { logoutUser } from "@/services/authService";
@@ -29,7 +30,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -535,15 +536,26 @@ export default function HomeScreen() {
     }
   }, [getDateFilter]);
 
+  // Track last version to avoid redundant loads
+  const lastVersionRef = useRef<number>(0);
+  const ev = use$(appEvents);
+
+  // Use focus-aware refresh - only reload when screen focuses and data changed
+  useFocusRefresh(
+    useCallback(() => {
+      const currentVersion = ev.anyVersion;
+      if (currentVersion !== lastVersionRef.current) {
+        lastVersionRef.current = currentVersion;
+        loadDashboardData();
+      }
+    }, [ev.anyVersion, loadDashboardData]),
+    { minInterval: 5000, dependencies: [startDate, endDate] }
+  );
+
+  // Initial load and date filter change
   useEffect(() => {
     loadDashboardData();
   }, [loadDashboardData]);
-
-  // Auto-refresh dashboard on any data change
-  const ev = use$(appEvents);
-  useEffect(() => {
-    loadDashboardData();
-  }, [ev.anyVersion, loadDashboardData]);
 
   const handleRefresh = () => {
     setRefreshing(true);

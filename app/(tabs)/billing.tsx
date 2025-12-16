@@ -1,6 +1,7 @@
 import AddExpenseModal from "@/app/(modals)/add-expense";
 import { Loading, Typography } from "@/components/ui";
 import { theme } from "@/constants/theme";
+import { useFocusRefresh } from "@/hooks/useFocusRefresh";
 import {
   dashboardService,
   DateFilterOptions,
@@ -18,7 +19,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -237,20 +238,35 @@ export default function BillingScreen() {
     }
   }, [getDateFilter]);
 
+  // Track last version to avoid redundant loads
+  const lastVersionRef = useRef<number>(0);
+
+  // Use focus-aware refresh - only reload when screen focuses and data changed
+  useFocusRefresh(
+    useCallback(() => {
+      const currentVersion =
+        ev.expensesVersion +
+        ev.paymentsVersion +
+        ev.billsVersion +
+        ev.anyVersion;
+      if (currentVersion !== lastVersionRef.current) {
+        lastVersionRef.current = currentVersion;
+        loadExpenses();
+      }
+    }, [
+      ev.expensesVersion,
+      ev.paymentsVersion,
+      ev.billsVersion,
+      ev.anyVersion,
+      loadExpenses,
+    ]),
+    { minInterval: 5000, dependencies: [startDate, endDate] }
+  );
+
+  // Initial load and date filter change
   useEffect(() => {
     loadExpenses();
   }, [loadExpenses]);
-
-  // Auto-refresh when expenses/payments/bills change
-  useEffect(() => {
-    loadExpenses();
-  }, [
-    ev.expensesVersion,
-    ev.paymentsVersion,
-    ev.billsVersion,
-    ev.anyVersion,
-    loadExpenses,
-  ]);
 
   const handleRefresh = () => {
     setRefreshing(true);

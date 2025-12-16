@@ -1,3 +1,4 @@
+import { useFocusRefresh } from "@/hooks/useFocusRefresh";
 import { useScreenPerformance } from "@/hooks/useScreenPerformance";
 import { KotOrder, orderService } from "@/services/orderService";
 import { appEvents } from "@/state/appEvents";
@@ -6,7 +7,7 @@ import { orderState } from "@/state/orderState";
 import { use$ } from "@legendapp/state/react";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   FlatList,
   Platform,
@@ -118,19 +119,31 @@ export default function OrdersScreen() {
     }
   }, [selectedDate]);
 
-  useEffect(() => {
-    if (auth.isDbReady) {
-      loadOrders();
-    }
-  }, [auth.isDbReady, loadOrders]);
-
-  // Auto-refresh when orders or global changes occur
+  // Track last data version to avoid redundant loads
+  const lastVersionRef = useRef<number>(0);
   const ev = use$(appEvents);
+
+  // Use focus-aware refresh with 5-second minimum interval
+  useFocusRefresh(
+    useCallback(() => {
+      if (auth.isDbReady) {
+        const currentVersion = ev.ordersVersion + ev.anyVersion;
+        // Only reload if version changed or first load
+        if (currentVersion !== lastVersionRef.current) {
+          lastVersionRef.current = currentVersion;
+          loadOrders();
+        }
+      }
+    }, [auth.isDbReady, ev.ordersVersion, ev.anyVersion, loadOrders]),
+    { minInterval: 3000, dependencies: [selectedDate] }
+  );
+
+  // Load on date change
   useEffect(() => {
     if (auth.isDbReady) {
       loadOrders();
     }
-  }, [ev.ordersVersion, ev.anyVersion, auth.isDbReady, loadOrders]);
+  }, [auth.isDbReady, selectedDate, loadOrders]);
 
   const handleCreateOrder = () => {
     // Reset order state before navigation

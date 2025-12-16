@@ -89,9 +89,9 @@ export default function ReceiptScreen() {
             customerName,
             total
           );
-          // Navigate back after short delay
+          // Dismiss modal and navigate to customers tab
           setTimeout(() => {
-            router.push("/(tabs)/customers");
+            router.dismissTo("/(tabs)/customers");
           }, 300);
         } catch {
           setError("Failed to record credit sale");
@@ -108,8 +108,8 @@ export default function ReceiptScreen() {
       return;
     }
 
-    // Navigate back to customers list
-    router.push("/(tabs)/customers");
+    // Dismiss modal and navigate back to customers list
+    router.dismissTo("/(tabs)/customers");
   };
 
   const handleRetry = () => {
@@ -639,7 +639,7 @@ export default function ReceiptScreen() {
           },
           headerLeft: () => (
             <TouchableOpacity
-              onPress={() => router.push("/(tabs)/customers")}
+              onPress={() => router.dismissTo("/(tabs)/customers")}
               style={{ padding: 8, marginLeft: -8, borderRadius: 8 }}
             >
               <ArrowLeft size={24} color={theme.colors.text} />

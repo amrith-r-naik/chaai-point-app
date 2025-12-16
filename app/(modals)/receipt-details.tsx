@@ -595,7 +595,7 @@ export default function ReceiptDetailsScreen() {
         }}
       >
         <TouchableOpacity
-          onPress={() => router.push("/(tabs)/customers")}
+          onPress={() => router.dismissTo("/(tabs)/customers")}
           style={{
             backgroundColor: "#059669",
             paddingVertical: 16,

@@ -1,3 +1,4 @@
+import { useFocusRefresh } from "@/hooks/useFocusRefresh";
 import { useScreenPerformance } from "@/hooks/useScreenPerformance";
 import {
   getAllCustomers,
@@ -11,10 +12,9 @@ import { authState } from "@/state/authState";
 import { customerState } from "@/state/customerState";
 import { use$ } from "@legendapp/state/react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Lock } from "lucide-react-native";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -480,6 +480,9 @@ export default function CustomersScreen() {
     setSearchQuery(query);
   }, []);
 
+  // Track last version to avoid redundant loads
+  const lastVersionRef = useRef<number>(0);
+
   // Debounced search effect
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -502,29 +505,35 @@ export default function CustomersScreen() {
     loadCustomers();
   }, [loadCustomers, activeTab]);
 
-  // Auto-refresh when key data changes (orders/bills/payments/customers)
-  useEffect(() => {
-    if (auth.isDbReady) {
-      loadCustomers();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    ev.ordersVersion,
-    ev.billsVersion,
-    ev.paymentsVersion,
-    ev.customersVersion,
-    ev.anyVersion,
-    auth.isDbReady,
-    activeTab,
-  ]);
-
-  // Auto-refresh when screen comes into focus
-  useFocusEffect(
+  // Use focus-aware refresh - consolidated from multiple useEffects
+  useFocusRefresh(
     useCallback(() => {
-      if (auth.isDbReady) {
+      if (!auth.isDbReady) return;
+
+      const currentVersion =
+        ev.ordersVersion +
+        ev.billsVersion +
+        ev.paymentsVersion +
+        ev.customersVersion +
+        ev.anyVersion;
+
+      // Only reload if version changed
+      if (currentVersion !== lastVersionRef.current) {
+        lastVersionRef.current = currentVersion;
+        loadCustomers();
         loadOrdersData();
       }
-    }, [auth.isDbReady, loadOrdersData])
+    }, [
+      auth.isDbReady,
+      ev.ordersVersion,
+      ev.billsVersion,
+      ev.paymentsVersion,
+      ev.customersVersion,
+      ev.anyVersion,
+      loadCustomers,
+      loadOrdersData,
+    ]),
+    { minInterval: 3000, dependencies: [activeTab] }
   );
 
   const handleAddCustomer = () => {
@@ -814,6 +823,7 @@ export default function CustomersScreen() {
     );
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const renderCompletedBillDateSection = (date: string, group: any) => {
     const bills = group.bills || [];
     // Revenue-style total for the day: exclude pure credit (accrual) amounts
@@ -992,16 +1002,23 @@ export default function CustomersScreen() {
   const filteredDateGroups =
     isAllTab || isCompletedTab ? {} : (filteredData as any);
   const allCustomers = isAllTab ? allSummaries : [];
-  const completedBillGroups = isCompletedTab ? (filteredData as any) : {};
-  const sortedDates = isAllTab
-    ? []
-    : Object.keys(
-        isCompletedTab ? completedBillGroups : filteredDateGroups
-      ).sort(
-        (a, b) =>
-          new Date(b.split("-")[0]).getTime() -
-          new Date(a.split("-")[0]).getTime()
-      );
+  const completedBillGroups = useMemo(
+    () => (isCompletedTab ? (filteredData as any) : {}),
+    [isCompletedTab, filteredData]
+  );
+  const sortedDates = useMemo(
+    () =>
+      isAllTab
+        ? []
+        : Object.keys(
+            isCompletedTab ? completedBillGroups : filteredDateGroups
+          ).sort(
+            (a, b) =>
+              new Date(b.split("-")[0]).getTime() -
+              new Date(a.split("-")[0]).getTime()
+          ),
+    [isAllTab, isCompletedTab, completedBillGroups, filteredDateGroups]
+  );
 
   // Prepare section data for completed bills SectionList
   const completedBillSections = useMemo(() => {
@@ -1167,8 +1184,10 @@ export default function CustomersScreen() {
           // Use FlatList for "All" customers tab (virtualized for performance)
           <FlatList
             data={allCustomers}
-            keyExtractor={(item, index) => `cust-${item.id}-${index}`}
-            renderItem={({ item }) => (
+            keyExtractor={(item: any, index: number) =>
+              `cust-${item.id}-${index}`
+            }
+            renderItem={({ item }: { item: any }) => (
               <CustomerListItem
                 customer={item}
                 onPress={() =>
@@ -1200,7 +1219,7 @@ export default function CustomersScreen() {
             windowSize={5}
             removeClippedSubviews={true}
             updateCellsBatchingPeriod={50}
-            getItemLayout={(data, index) => ({
+            getItemLayout={(_data: any, index: number) => ({
               length: 76, // Approximate height of each item
               offset: 76 * index,
               index,
@@ -1210,8 +1229,10 @@ export default function CustomersScreen() {
           // Use SectionList for completed bills (virtualized with date sections)
           <SectionList
             sections={completedBillSections}
-            keyExtractor={(item, index) => `bill-${item.id}-${index}`}
-            renderItem={({ item }) => (
+            keyExtractor={(item: any, index: number) =>
+              `bill-${item.id}-${index}`
+            }
+            renderItem={({ item }: { item: any }) => (
               <CompletedBillItem
                 bill={item}
                 onPress={() => {
@@ -1227,7 +1248,7 @@ export default function CustomersScreen() {
                 }}
               />
             )}
-            renderSectionHeader={({ section }) => (
+            renderSectionHeader={({ section }: { section: any }) => (
               <View className="px-4 py-4 bg-gradient-to-r from-green-50 to-emerald-50 mb-3 rounded-lg mx-4 mt-4">
                 <View className="flex-row items-center justify-between mb-2">
                   <Text className="text-lg font-bold text-gray-900">

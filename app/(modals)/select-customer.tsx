@@ -1,4 +1,5 @@
 // app/(modals)/select-customer.tsx
+import { useMountedRef } from "@/hooks/useCleanup";
 import { use$ } from "@legendapp/state/react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Stack, useRouter } from "expo-router";
@@ -160,6 +161,7 @@ const CustomerItem = React.memo(
 
 export default function SelectCustomerScreen() {
   const router = useRouter();
+  const isMounted = useMountedRef();
   // Granular state subscriptions for optimized re-renders
   const customers = use$(customerState.customers);
   const customerLoading = use$(customerState.loading);
@@ -170,11 +172,11 @@ export default function SelectCustomerScreen() {
   useEffect(() => {
     if (isDbReady) {
       const task = InteractionManager.runAfterInteractions(() => {
-        loadCustomers();
+        if (isMounted.current) loadCustomers();
       });
       return () => task?.cancel?.();
     }
-  }, [isDbReady]);
+  }, [isDbReady, isMounted]);
 
   // Reload customers when screen comes back into focus (e.g., after adding a new customer)
   useFocusEffect(

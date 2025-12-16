@@ -1,6 +1,6 @@
 import { perfMonitor } from "@/utils/performanceMonitor";
-import { useFocusEffect } from "@react-navigation/native";
-import { useEffect, useRef } from "react";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useCallback, useEffect, useRef } from "react";
 
 /**
  * Hook to track screen performance metrics
@@ -9,6 +9,8 @@ import { useEffect, useRef } from "react";
 export function useScreenPerformance(screenName: string) {
   const mountTimeRef = useRef<number>(0);
   const isFirstRenderRef = useRef(true);
+  const focusStartRef = useRef<number>(0);
+  const navigation = useNavigation();
 
   // Track mount/unmount
   useEffect(() => {
@@ -43,9 +45,35 @@ export function useScreenPerformance(screenName: string) {
     };
   }, [screenName]);
 
+  // Track navigation focus timing (helps diagnose back navigation issues)
+  useEffect(() => {
+    if (!__DEV__) return;
+
+    const unsubscribe = navigation.addListener("focus", () => {
+      focusStartRef.current = performance.now();
+
+      // Measure time until screen is ready (next animation frame)
+      requestAnimationFrame(() => {
+        const focusDuration = performance.now() - focusStartRef.current;
+        if (focusDuration > 100) {
+          console.log(
+            `🔄 Focus ready [${screenName}]: ${focusDuration.toFixed(2)}ms`
+          );
+        }
+        if (focusDuration > 300) {
+          console.warn(
+            `⚠️  SLOW FOCUS [${screenName}]: ${focusDuration.toFixed(2)}ms (target: <300ms)`
+          );
+        }
+      });
+    });
+
+    return unsubscribe;
+  }, [navigation, screenName]);
+
   // Track focus/blur
   useFocusEffect(
-    useRef(() => {
+    useCallback(() => {
       if (!__DEV__) return;
 
       perfMonitor.logScreenFocus(screenName);
@@ -53,7 +81,7 @@ export function useScreenPerformance(screenName: string) {
       return () => {
         perfMonitor.logScreenBlur(screenName);
       };
-    }).current
+    }, [screenName])
   );
 }
 

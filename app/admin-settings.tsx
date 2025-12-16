@@ -139,6 +139,15 @@ export default function AdminSettingsScreen() {
     }
   };
 
+  const loadTableCounts = async () => {
+    try {
+      const counts = await adminService.getTableCounts();
+      setTableCounts(counts);
+    } catch (error) {
+      console.error("Error loading table counts:", error);
+    }
+  };
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const toggleAutoApplyAdvance = async () => {
     try {
@@ -252,15 +261,6 @@ export default function AdminSettingsScreen() {
       </SafeAreaView>
     );
   }
-
-  const loadTableCounts = async () => {
-    try {
-      const counts = await adminService.getTableCounts();
-      setTableCounts(counts);
-    } catch (error) {
-      console.error("Error loading table counts:", error);
-    }
-  };
 
   const handleClearAllTables = () => {
     Alert.alert(

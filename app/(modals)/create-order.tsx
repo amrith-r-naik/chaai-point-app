@@ -1,4 +1,5 @@
 // app/(modals)/create-order.tsx
+import { useModalCleanup } from "@/hooks/useCleanup";
 import { use$ } from "@legendapp/state/react";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Pencil, Plus, ShoppingBag, User } from "lucide-react-native";
@@ -19,6 +20,11 @@ export default function CreateOrderScreen() {
   const { customerId: presetCustomerId } = useLocalSearchParams<{
     customerId?: string;
   }>();
+
+  // Clear modal state on unmount (back navigation, dismiss, etc.)
+  useModalCleanup(() => {
+    orderState.isCreatingOrder.set(false);
+  });
 
   // Always start with a clean slate when opening the create order flow
   useEffect(() => {

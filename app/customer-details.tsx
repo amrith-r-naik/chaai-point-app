@@ -1,4 +1,5 @@
 import { theme } from "@/constants/theme";
+import { useMountedRef } from "@/hooks/useCleanup";
 import { advanceService } from "@/services/advanceService";
 import { paymentService } from "@/services/paymentService";
 import { appEvents } from "@/state/appEvents";
@@ -43,6 +44,7 @@ export default function CustomerDetailsScreen() {
     customerName: string;
   }>();
 
+  const isMounted = useMountedRef();
   const [billHistory, setBillHistory] = useState<any[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [advanceLedger, setAdvanceLedger] = useState<any[]>([]);
@@ -56,11 +58,20 @@ export default function CustomerDetailsScreen() {
   const events = use$(appEvents);
   const insets = useSafeAreaInsets();
 
+  // Cleanup large state arrays on unmount to free memory
+  useEffect(() => {
+    return () => {
+      if (billHistory.length > 50) setBillHistory([]);
+      if (paymentHistory.length > 50) setPaymentHistory([]);
+      if (advanceLedger.length > 50) setAdvanceLedger([]);
+    };
+  }, [billHistory.length, paymentHistory.length, advanceLedger.length]);
+
   const loadCustomerData = useCallback(async () => {
     if (!customerId || !isDbReady) return;
 
     try {
-      setLoading(true);
+      if (isMounted.current) setLoading(true);
       const creditBalance =
         await paymentService.getCustomerCreditBalance(customerId);
       const bills =
@@ -78,19 +89,25 @@ export default function CustomerDetailsScreen() {
       const lastBillAt = bills[0]?.createdAt || null;
       const advBal = await advanceService.getBalance(String(customerId));
       const advLedger = await advanceService.getLedger(String(customerId), 50);
-      setStats({ totalPaid, billCount, creditBalance, lastBillAt });
-      setBillHistory(bills);
-      setPaymentHistory(paymentRows);
-      setAdvanceBalance(advBal);
-      setAdvanceLedger(advLedger);
+      if (isMounted.current) {
+        setStats({ totalPaid, billCount, creditBalance, lastBillAt });
+        setBillHistory(bills);
+        setPaymentHistory(paymentRows);
+        setAdvanceBalance(advBal);
+        setAdvanceLedger(advLedger);
+      }
     } catch (error) {
       console.error("Error loading customer data:", error);
-      Alert.alert("Error", "Failed to load customer data");
+      if (isMounted.current) {
+        Alert.alert("Error", "Failed to load customer data");
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMounted.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, [customerId, isDbReady]);
+  }, [customerId, isDbReady, isMounted]);
 
   // Defer initial data load until after navigation animation completes
   useEffect(() => {

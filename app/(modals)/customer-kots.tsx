@@ -1,4 +1,5 @@
 import { theme } from "@/constants/theme";
+import { useMountedRef } from "@/hooks/useCleanup";
 import { orderService } from "@/services/orderService";
 import { authState } from "@/state/authState";
 import { customerState } from "@/state/customerState";
@@ -25,6 +26,7 @@ export default function CustomerKOTsScreen() {
   // Local date in YYYY-MM-DD (e.g., en-CA locale formats as 2025-09-05)
   const today = new Date().toLocaleDateString("en-CA");
 
+  const isMounted = useMountedRef();
   const [isReady, setIsReady] = useState(false);
   const [kots, setKots] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -34,29 +36,46 @@ export default function CustomerKOTsScreen() {
   // Defer heavy rendering until after navigation animation
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
-      setIsReady(true);
+      if (isMounted.current) setIsReady(true);
     });
     return () => task.cancel();
-  }, []);
+  }, [isMounted]);
+
+  // Cleanup large state on unmount
+  useEffect(() => {
+    return () => {
+      if (kots.length > 20) {
+        setKots([]);
+      }
+    };
+  }, [kots.length]);
 
   // Fetch KOTs for the selected customer and date
   const fetchKOTs = useCallback(async () => {
     if (!selectedCustomer?.id || !isDbReady) return;
-    setLoading(true);
-    setError("");
+    if (isMounted.current) {
+      setLoading(true);
+      setError("");
+    }
     try {
       const result = await orderService.getCustomerKOTsForDate(
         selectedCustomer.id,
         today,
         true
       );
-      setKots(result);
+      if (isMounted.current) {
+        setKots(result);
+      }
     } catch (err: any) {
-      setError(err.message || "Failed to load KOTs");
+      if (isMounted.current) {
+        setError(err.message || "Failed to load KOTs");
+      }
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+      }
     }
-  }, [selectedCustomer?.id, today, isDbReady]);
+  }, [selectedCustomer?.id, today, isDbReady, isMounted]);
 
   useEffect(() => {
     if (isReady) {

@@ -8,6 +8,10 @@ interface UseFocusRefreshOptions {
   forceRefresh?: boolean;
   /** Dependencies that should trigger a refresh even within the interval */
   dependencies?: any[];
+  /** Stale threshold (ms) - data older than this is considered stale. Default: 60000 (1 minute) */
+  staleThreshold?: number;
+  /** Custom function to check if data should be refreshed */
+  shouldRefresh?: () => boolean;
 }
 
 /**
@@ -16,7 +20,8 @@ interface UseFocusRefreshOptions {
  * 1. It's the first load, OR
  * 2. More than minInterval ms have passed since last load, OR
  * 3. forceRefresh is true, OR
- * 4. Any dependency has changed
+ * 4. Any dependency has changed, OR
+ * 5. Custom shouldRefresh function returns true
  *
  * Usage:
  * ```tsx
@@ -31,6 +36,8 @@ export function useFocusRefresh(
     minInterval = 5000,
     forceRefresh = false,
     dependencies = [],
+    staleThreshold = 60000, // 1 minute default
+    shouldRefresh: customShouldRefresh,
   } = options;
 
   const hasLoadedRef = useRef(false);
@@ -44,21 +51,89 @@ export function useFocusRefresh(
     useCallback(() => {
       const now = Date.now();
       const depsChanged = depsKey !== lastDepsRef.current;
+      const isStale = now - lastLoadRef.current > staleThreshold;
+      const intervalPassed = now - lastLoadRef.current > minInterval;
 
       // Determine if we should refresh
-      const shouldRefresh =
+      const shouldRefreshNow =
         forceRefresh ||
         !hasLoadedRef.current ||
-        now - lastLoadRef.current > minInterval ||
-        depsChanged;
+        intervalPassed ||
+        depsChanged ||
+        (customShouldRefresh ? customShouldRefresh() : false) ||
+        (isStale && !hasLoadedRef.current);
 
-      if (shouldRefresh) {
+      if (shouldRefreshNow) {
         loadData();
         hasLoadedRef.current = true;
         lastLoadRef.current = now;
         lastDepsRef.current = depsKey;
       }
-    }, [loadData, minInterval, forceRefresh, depsKey])
+    }, [
+      loadData,
+      minInterval,
+      forceRefresh,
+      depsKey,
+      staleThreshold,
+      customShouldRefresh,
+    ])
+  );
+
+  // Return utility function to manually mark data as fresh
+  return {
+    markFresh: useCallback(() => {
+      lastLoadRef.current = Date.now();
+      hasLoadedRef.current = true;
+    }, []),
+    getLastLoadTime: useCallback(() => lastLoadRef.current, []),
+    isStale: useCallback(
+      () => Date.now() - lastLoadRef.current > staleThreshold,
+      [staleThreshold]
+    ),
+  };
+}
+
+/**
+ * Smart focus refresh hook that only refreshes if data is stale.
+ * Useful for back navigation optimization.
+ *
+ * Usage:
+ * ```tsx
+ * useSmartFocusRefresh(loadData, {
+ *   staleThreshold: 60000, // 1 minute
+ *   dependencies: [someValue],
+ * });
+ * ```
+ */
+export function useSmartFocusRefresh(
+  loadData: () => void | Promise<void>,
+  options: { staleThreshold?: number; dependencies?: any[] } = {}
+) {
+  const { staleThreshold = 60000, dependencies = [] } = options;
+
+  const lastLoadRef = useRef<number>(0);
+  const lastDepsRef = useRef<string>("");
+  const isLoadingRef = useRef(false);
+
+  const depsKey = JSON.stringify(dependencies);
+
+  useFocusEffect(
+    useCallback(() => {
+      const now = Date.now();
+      const isStale = now - lastLoadRef.current > staleThreshold;
+      const depsChanged = depsKey !== lastDepsRef.current;
+      const isFirstLoad = lastLoadRef.current === 0;
+
+      // Only refresh if stale, first load, or dependencies changed
+      if ((isStale || isFirstLoad || depsChanged) && !isLoadingRef.current) {
+        isLoadingRef.current = true;
+        Promise.resolve(loadData()).finally(() => {
+          isLoadingRef.current = false;
+          lastLoadRef.current = Date.now();
+          lastDepsRef.current = depsKey;
+        });
+      }
+    }, [loadData, staleThreshold, depsKey])
   );
 }
 

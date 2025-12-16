@@ -1,5 +1,6 @@
 import { Button, Loading } from "@/components/ui";
 import { theme } from "@/constants/theme";
+import { useMountedRef } from "@/hooks/useCleanup";
 import { CustomerDue, dueService, DueUpdateData } from "@/services/dueService";
 import { Stack, useRouter } from "expo-router";
 import {
@@ -580,6 +581,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
 export default function DueManagementScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const isMounted = useMountedRef();
   const [isReady, setIsReady] = useState(false);
   const [customersWithDues, setCustomersWithDues] = useState<CustomerDue[]>([]);
   const [loading, setLoading] = useState(true);
@@ -593,28 +595,44 @@ export default function DueManagementScreen() {
   // Defer heavy rendering until after navigation animation
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
-      setIsReady(true);
+      if (isMounted.current) setIsReady(true);
     });
     return () => task.cancel();
-  }, []);
+  }, [isMounted]);
+
+  // Cleanup large state on unmount to free memory
+  useEffect(() => {
+    return () => {
+      // Clear large arrays on unmount
+      if (customersWithDues.length > 50) {
+        setCustomersWithDues([]);
+      }
+    };
+  }, [customersWithDues.length]);
 
   const loadDuesData = useCallback(async () => {
     try {
-      setLoading(true);
+      if (isMounted.current) setLoading(true);
       const [customers, total] = await Promise.all([
         dueService.getCustomersWithDues(),
         dueService.getTotalPendingDues(),
       ]);
-      setCustomersWithDues(customers);
-      setTotalDues(total);
+      if (isMounted.current) {
+        setCustomersWithDues(customers);
+        setTotalDues(total);
+      }
     } catch (error) {
       console.error("Error loading dues data:", error);
-      Alert.alert("Error", "Failed to load dues data");
+      if (isMounted.current) {
+        Alert.alert("Error", "Failed to load dues data");
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMounted.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, []);
+  }, [isMounted]);
 
   // Load data only after screen is ready (after navigation animation)
   useEffect(() => {

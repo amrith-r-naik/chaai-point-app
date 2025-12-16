@@ -1,4 +1,5 @@
 import { theme } from "@/constants/theme";
+import { useMountedRef } from "@/hooks/useCleanup";
 import { orderService } from "@/services/orderService";
 import { authState } from "@/state/authState";
 import { use$ } from "@legendapp/state/react";
@@ -43,6 +44,7 @@ export default function CustomerBillScreen() {
     date: string;
   }>();
 
+  const isMounted = useMountedRef();
   const [isReady, setIsReady] = useState(false);
   const [bill, setBill] = useState<Bill | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,10 +55,10 @@ export default function CustomerBillScreen() {
   // Defer heavy rendering until after navigation animation
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
-      setIsReady(true);
+      if (isMounted.current) setIsReady(true);
     });
     return () => task.cancel();
-  }, []);
+  }, [isMounted]);
 
   // Server assigns bill number; do not generate locally
 

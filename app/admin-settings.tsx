@@ -99,12 +99,18 @@ export default function AdminSettingsScreen() {
     }
 
     // Defer heavy data loading until after navigation animation completes
-    const task = InteractionManager.runAfterInteractions(() => {
+    const task = InteractionManager.runAfterInteractions(async () => {
       setIsReady(true);
-      loadTableCounts();
-      loadMenuItems();
-      loadSettings();
-      loadWalStatus();
+      // Open database once, then load data sequentially to avoid lock conflicts
+      try {
+        await openDatabase();
+        await loadTableCounts();
+        await loadMenuItems();
+        await loadSettings();
+        await loadWalStatus();
+      } catch (e) {
+        console.warn("Failed to load admin data:", e);
+      }
     });
 
     return () => task.cancel();
@@ -113,7 +119,6 @@ export default function AdminSettingsScreen() {
 
   const loadWalStatus = async () => {
     try {
-      await openDatabase();
       const status = await getWalStatus();
       setWalStatus(status);
     } catch (e) {

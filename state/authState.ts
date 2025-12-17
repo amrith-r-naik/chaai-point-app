@@ -24,12 +24,13 @@ export const saveUserSession = async (user: User) => {
   }
 };
 
-export const loadUserSession = async () => {
+export const loadUserSession = async (): Promise<User | null> => {
   try {
     const userSession = await AsyncStorage.getItem("userSession");
     if (userSession) {
-      const user = JSON.parse(userSession);
-      authState.user.set(user);
+      const user = JSON.parse(userSession) as User;
+      // Don't set authState here - let the caller decide
+      // This makes the function more predictable and testable
       return user;
     }
   } catch (error) {

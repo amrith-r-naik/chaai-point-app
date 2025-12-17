@@ -4,8 +4,8 @@ import { useEffect } from "react";
 import { Text, View } from "react-native";
 import { openDatabase } from "../lib/db";
 import { debugDatabase } from "../lib/dbDebug";
-import { initializeAuth } from "../services/authService";
-import { authState } from "../state/authState";
+import { validateSessionInBackground } from "../services/authService";
+import { authState, loadUserSession } from "../state/authState";
 import "./global.css";
 
 export default function RootLayout() {
@@ -14,30 +14,39 @@ export default function RootLayout() {
   // Granular state subscriptions for optimized re-renders
   const user = use$(authState.user);
   const isInitialized = use$(authState.isInitialized);
+  const initError = use$(authState.error);
 
   useEffect(() => {
     const initializeApp = async () => {
       try {
-        // Initialize database first
+        // PHASE 1: Database initialization (local-only, fast)
         await openDatabase();
-        console.log("Database opened successfully");
-        await debugDatabase();
-        // No user bootstrap: use Supabase Auth sign-in only
-        // await seedTestCustomers();
-        // await seedTestMenuItems();
-        // await seedTestOrders();
-
-        // Mark database as ready
         authState.isDbReady.set(true);
 
-        // Add a small delay to ensure everything is properly initialized
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Debug only in development
+        if (__DEV__) {
+          await debugDatabase();
+        }
 
-        // Then initialize auth (check for existing session)
-        await initializeAuth();
+        // PHASE 2: Load cached session immediately (instant, no network)
+        const cachedUser = await loadUserSession();
+        if (cachedUser) {
+          // User found in cache - navigate immediately
+          authState.user.set(cachedUser);
+        }
+
+        // Mark initialized BEFORE network calls for instant UI
+        authState.isInitialized.set(true);
+
+        // PHASE 3: Background session validation (non-blocking)
+        // This validates the Supabase session and updates role if needed
+        validateSessionInBackground();
       } catch (error) {
         console.error("App initialization error:", error);
-        authState.isInitialized.set(true);
+        authState.error.set(
+          error instanceof Error ? error.message : "Initialization failed"
+        );
+        authState.isInitialized.set(true); // Allow app to show error state
       }
     };
 
@@ -66,6 +75,21 @@ export default function RootLayout() {
       <View className="flex-1 justify-center items-center bg-white">
         <Text className="text-lg text-gray-600 mb-2">Initializing...</Text>
         <Text className="text-sm text-gray-400">Setting up your session</Text>
+      </View>
+    );
+  }
+
+  // Show error state if initialization failed
+  if (initError && !user) {
+    return (
+      <View className="flex-1 justify-center items-center bg-white px-6">
+        <Text className="text-lg text-red-600 mb-2">Initialization Error</Text>
+        <Text className="text-sm text-gray-500 text-center mb-4">
+          {initError}
+        </Text>
+        <Text className="text-xs text-gray-400 text-center">
+          Please restart the app. If the problem persists, try reinstalling.
+        </Text>
       </View>
     );
   }

@@ -20,7 +20,14 @@ import { authState } from "@/state/authState";
 
 import { use$ } from "@legendapp/state/react";
 import { router } from "expo-router";
-import { Database, Lock, Settings, Trash2, X } from "lucide-react-native";
+import {
+  ArrowLeft,
+  Database,
+  Lock,
+  Settings,
+  Trash2,
+  X,
+} from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -781,33 +788,40 @@ export default function AdminSettingsScreen() {
         <View
           style={{
             backgroundColor: theme.colors.primary,
-            paddingTop: 32,
+            paddingTop: 16,
             paddingBottom: 24,
-            paddingHorizontal: 24,
+            paddingHorizontal: 16,
           }}
         >
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Settings size={28} color="white" />
-            <Text
-              style={{
-                color: "white",
-                fontSize: 24,
-                fontWeight: "bold",
-                marginLeft: 12,
-              }}
-            >
-              Admin Settings
-            </Text>
-          </View>
-          <Text
+          {/* Header Row */}
+          <View
             style={{
-              color: "rgba(255,255,255,0.8)",
-              fontSize: 14,
-              marginTop: 4,
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 0,
             }}
           >
-            Manage your application data and settings
-          </Text>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={{
+                padding: 4,
+                marginLeft: -4,
+              }}
+            >
+              <ArrowLeft size={26} color="white" />
+            </TouchableOpacity>
+            <View style={{ flex: 1, alignItems: "center", marginRight: 24 }}>
+              <Text
+                style={{
+                  color: "white",
+                  fontSize: 20,
+                  fontWeight: "bold",
+                }}
+              >
+                Admin Settings
+              </Text>
+            </View>
+          </View>
         </View>
       </SafeAreaView>
 

@@ -524,6 +524,23 @@ export default function HomeScreen() {
   const [pullRunning, setPullRunning] = useState(false);
   const [lastPushTime, setLastPushTime] = useState<string | null>(null);
   const [lastPullTime, setLastPullTime] = useState<string | null>(null);
+  const [greeting, setGreeting] = useState("Good Morning");
+
+  // Update greeting based on current time
+  const updateGreeting = React.useCallback(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) setGreeting("Good Morning");
+    else if (hour < 17) setGreeting("Good Afternoon");
+    else setGreeting("Good Evening");
+  }, []);
+
+  // Update greeting on mount and when screen becomes active
+  React.useEffect(() => {
+    updateGreeting();
+    // Update every minute in case user keeps app open
+    const interval = setInterval(updateGreeting, 60000);
+    return () => clearInterval(interval);
+  }, [updateGreeting]);
 
   const getDateFilter = React.useCallback((): DateFilterOptions => {
     // Use local calendar day to avoid UTC shift issues
@@ -678,13 +695,6 @@ export default function HomeScreen() {
     loadDashboardData();
   };
 
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good Morning";
-    if (hour < 17) return "Good Afternoon";
-    return "Good Evening";
-  };
-
   if (!user) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.surface }}>
@@ -712,7 +722,7 @@ export default function HomeScreen() {
           <View style={styles.headerContent}>
             <View style={styles.headerTop}>
               <View style={styles.headerLeft}>
-                <Text style={styles.greeting}>{getGreeting()}</Text>
+                <Text style={styles.greeting}>{greeting}</Text>
                 <Text style={styles.headerTitle}>Dashboard</Text>
               </View>
               <View style={styles.headerActions}>

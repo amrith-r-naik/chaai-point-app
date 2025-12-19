@@ -155,6 +155,121 @@ export async function saveCSVToFile(
   return filePath;
 }
 
+// Cached SAF directory URI for Downloads
+let cachedDownloadsUri: string | null = null;
+
+/**
+ * Gets or requests the Downloads directory permission using SAF
+ */
+async function getDownloadsDirectoryUri(): Promise<string | null> {
+  if (cachedDownloadsUri) {
+    return cachedDownloadsUri;
+  }
+  
+  try {
+    const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+    if (permissions.granted) {
+      cachedDownloadsUri = permissions.directoryUri;
+      return cachedDownloadsUri;
+    }
+  } catch (e) {
+    console.error("[CSV Export] SAF permission error:", e);
+  }
+  return null;
+}
+
+/**
+ * Request user to pick a folder and save the file there
+ */
+export async function saveToPickedLocation(
+  internalFilePath: string,
+  filename: string,
+  mimeType: string = "text/csv"
+): Promise<{ success: boolean; savedPath?: string; error?: string }> {
+  try {
+    // Determine encoding
+    const isZip = filename.toLowerCase().endsWith(".zip");
+    const encoding = isZip ? FileSystem.EncodingType.Base64 : FileSystem.EncodingType.UTF8;
+
+    // Read content
+    const content = await FileSystem.readAsStringAsync(internalFilePath, { encoding });
+
+    // 1. Pick Directory
+    const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+    if (!permissions.granted) {
+      return { success: false, error: "Selection cancelled" };
+    }
+    const directoryUri = permissions.directoryUri;
+
+    // 2. Create File
+    const newFileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+      directoryUri,
+      filename,
+      mimeType
+    );
+
+    // 3. Write Content
+    await FileSystem.writeAsStringAsync(newFileUri, content, { encoding });
+
+    return { success: true, savedPath: newFileUri };
+  } catch (error) {
+    console.error("[CSV Export] Save to location error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Save failed",
+    };
+  }
+}
+
+/**
+ * Saves a file to the Downloads folder using SAF (Android) or returns internal path (iOS)
+ * Returns the saved file path or null if failed
+ */
+export async function saveToDownloads(
+  internalFilePath: string,
+  filename: string,
+  mimeType: string = "text/csv"
+): Promise<{ success: boolean; savedPath?: string; error?: string }> {
+  try {
+    // Determine encoding based on file extension
+    const isZip = filename.toLowerCase().endsWith(".zip");
+    const encoding = isZip ? FileSystem.EncodingType.Base64 : FileSystem.EncodingType.UTF8;
+
+    // Read the file content
+    const content = await FileSystem.readAsStringAsync(internalFilePath, {
+      encoding,
+    });
+    
+    // Get SAF directory
+    const directoryUri = await getDownloadsDirectoryUri();
+    if (!directoryUri) {
+      return { success: false, error: "Storage permission not granted" };
+    }
+    
+    // Create file in Downloads
+    // Note: SAF uses the mimeType and filename. If filename has extension, it often appends it again 
+    // depending on the mimeType. Providing a precise mimeType helps.
+    const newFileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+      directoryUri,
+      filename,
+      mimeType
+    );
+    
+    // Write content
+    await FileSystem.writeAsStringAsync(newFileUri, content, {
+      encoding,
+    });
+    
+    return { success: true, savedPath: newFileUri };
+  } catch (error) {
+    console.error("[CSV Export] Save to downloads error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Save failed",
+    };
+  }
+}
+
 /**
  * Checks if sharing is available on this device
  */
@@ -299,6 +414,8 @@ export function formatTimeRemaining(seconds: number): string {
 export const csvExporter = {
   toCSV,
   saveCSVToFile,
+  saveToPickedLocation,
+  saveToDownloads,
   shareFile,
   exportAndShare,
   deleteFile,

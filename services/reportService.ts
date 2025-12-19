@@ -26,6 +26,8 @@ import {
   SalesRegisterEntry,
   UPIBookEntry,
 } from "@/types/reports";
+import * as FileSystem from "expo-file-system";
+import JSZip from "jszip";
 
 // ============================================================================
 // Utility Functions
@@ -2103,7 +2105,7 @@ class ReportService {
     options: ReportOptions,
     onProgress?: (progress: ReportProgress) => void,
     cancellationToken?: CancellationToken
-  ): Promise<{ success: boolean; filePath?: string; error?: string }> {
+  ): Promise<{ success: boolean; filePath?: string; savedToDownloads?: string; error?: string }> {
     try {
       const report = await this.generateReport(
         type,
@@ -2117,8 +2119,19 @@ class ReportService {
         report.filename
       );
 
-      // File saved - sharing is now user-initiated from the dialog
-      return { success: true, filePath };
+      // Auto-save removed as per user request
+      // const downloadResult = await csvExporter.saveToDownloads(
+      //   filePath,
+      //   report.filename,
+      //   "text/csv"
+      // );
+
+      // If successful, we can return the download path, but we keep the internal filePath for other ops
+      return { 
+        success: true, 
+        filePath,
+        savedToDownloads: undefined 
+      };
     } catch (error) {
       if (error instanceof Error && error.message === "CANCELLED") {
         return { success: false, error: "Operation cancelled" };
@@ -2127,6 +2140,84 @@ class ReportService {
       return {
         success: false,
         error: error instanceof Error ? error.message : "Export failed",
+      };
+    }
+  }
+
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Download All Reports as ZIP
+  // ─────────────────────────────────────────────────────────────────────────
+  async downloadAllReports(
+    options: ReportOptions,
+    onProgress?: (progress: {
+      total: number;
+      completed: number;
+      currentReport: string;
+    }) => void
+  ): Promise<{ success: boolean; filePath?: string; savedToDownloads?: string; error?: string }> {
+    try {
+      const zip = new JSZip();
+      const folder = zip.folder("reports");
+
+      let completed = 0;
+      const total = REPORT_DEFINITIONS.length;
+
+      for (const def of REPORT_DEFINITIONS) {
+        onProgress?.({
+          total,
+          completed,
+          currentReport: def.name,
+        });
+
+        try {
+          // Generate report content (skip saving to file for individual reports to save time/space)
+          // We can reuse generateReport but it calls setProgress which updates the single report UI
+          // For now, we reuse it but ignore its file output since we just want content
+          // Actually generateReport returns { filename, content, name }
+          const report = await this.generateReport(def.type, options);
+          
+          if (folder) {
+            folder.file(report.filename, report.content);
+          }
+        } catch (e) {
+          console.error(`Failed to generate ${def.name} for zip:`, e);
+          // Continue with other reports? Or fail? Let's continue.
+        }
+        completed++;
+      }
+
+      onProgress?.({
+        total,
+        completed,
+        currentReport: "Finalizing ZIP...",
+      });
+
+      // Generate ZIP
+      const base64 = await zip.generateAsync({ type: "base64" });
+      const filename = csvExporter.generateZipFilename(options.dateRange.startDate, options.dateRange.endDate);
+      const directory = FileSystem.documentDirectory;
+      if (!directory) throw new Error("Document directory not available");
+      
+      const filePath = `${directory}${filename}`;
+      await FileSystem.writeAsStringAsync(filePath, base64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      // Auto-save removed as per user request
+      // const downloadResult = await csvExporter.saveToDownloads(filePath, filename, "application/zip");
+
+      return {
+        success: true,
+        filePath,
+        savedToDownloads: undefined,
+      };
+
+    } catch (error) {
+      console.error("[ReportService] Download All failed:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Download All failed",
       };
     }
   }

@@ -346,13 +346,15 @@ export const ProgressDialog: React.FC<ProgressDialogProps> = ({
           <Eye size={16} color={theme.colors.text} style={{ marginRight: 4 }} />
           <Text style={styles.buttonSecondaryText}>View</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.button, styles.buttonSecondary, { flex: 1 }]}
-          onPress={onSave}
-        >
-          <Save size={16} color={theme.colors.text} style={{ marginRight: 4 }} />
-          <Text style={styles.buttonSecondaryText}>Save</Text>
-        </TouchableOpacity>
+        {onSave && (
+          <TouchableOpacity
+            style={[styles.button, styles.buttonSecondary, { flex: 1 }]}
+            onPress={onSave}
+          >
+            <Save size={16} color={theme.colors.text} style={{ marginRight: 4 }} />
+            <Text style={styles.buttonSecondaryText}>Save</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={[styles.button, styles.buttonPrimary, { flex: 1 }]}
           onPress={onShare}

@@ -10,6 +10,7 @@ import {
   ReportSectionHeader,
 } from "@/components/reports/ReportCard";
 import { theme } from "@/constants/theme";
+import { csvExporter } from "@/services/csvExporter";
 import { reportService } from "@/services/reportService";
 import { authState } from "@/state/authState";
 import {
@@ -22,6 +23,7 @@ import {
 } from "@/types/reports";
 import { use$ } from "@legendapp/state/react";
 import * as FileSystem from "expo-file-system";
+import * as IntentLauncher from "expo-intent-launcher";
 import { router } from "expo-router";
 import * as Sharing from "expo-sharing";
 import {
@@ -220,7 +222,14 @@ export default function ReportsScreen() {
 
         if (result.success) {
           const endTime = Date.now();
-          setDialogState((prev) => ({
+          // Auto-save toast removed
+          // if (result.savedToDownloads && Platform.OS === "android") {
+          //   ToastAndroid.show(
+          //     `Saved to Downloads/${result.savedToDownloads.split("/").pop()}`,
+          //     ToastAndroid.LONG
+          //   );
+          // }
+           setDialogState((prev) => ({
             ...prev,
             isComplete: true,
             completedFileCount: 1,
@@ -251,13 +260,86 @@ export default function ReportsScreen() {
     [dateRange]
   );
 
-  const handleDownloadAll = useCallback(() => {
-    Alert.alert(
-      "Coming Soon",
-      "Download All Reports feature will be available once all individual reports are implemented.",
-      [{ text: "OK" }]
-    );
-  }, []);
+  const handleDownloadAll = useCallback(async () => {
+    // Create cancellation token
+    cancellationTokenRef.current = new CancellationToken();
+    const startTime = Date.now();
+
+    setDialogState({
+      visible: true,
+      mode: "all",
+      singleProgress: null,
+      allProgress: {
+        totalReports: REPORT_DEFINITIONS.length,
+        completedReports: 0,
+        currentReport: null,
+        completedList: [],
+        pendingList: REPORT_DEFINITIONS.map((d) => ({
+          type: d.type,
+          name: d.name,
+        })),
+        estimatedSecondsRemaining: 60,
+        isCancelled: false,
+        isComplete: false,
+      },
+      isComplete: false,
+      error: null,
+      isCancelled: false,
+      completedFileCount: 0,
+      totalFileSize: "",
+      completionTime: 0,
+      filePath: null,
+    });
+
+    try {
+      const result = await reportService.downloadAllReports(
+        { dateRange },
+        (progress) => {
+          setDialogState((prev) => {
+            const currentAll = prev.allProgress!;
+            return {
+              ...prev,
+              allProgress: {
+                ...currentAll,
+                completedReports: progress.completed,
+                // We don't have detailed currentReport progress here, just name
+                currentReport: null, 
+              },
+            };
+          });
+        }
+      );
+
+      if (result.success) {
+        const endTime = Date.now();
+        // Auto-save toast removed
+        // if (result.savedToDownloads && Platform.OS === "android") {
+        //   ToastAndroid.show(
+        //     `ZIP saved to Downloads`,
+        //     ToastAndroid.LONG
+        //   );
+        // }
+        setDialogState((prev) => ({
+          ...prev,
+          isComplete: true,
+          completedFileCount: REPORT_DEFINITIONS.length,
+          completionTime: Math.round((endTime - startTime) / 1000),
+          filePath: result.filePath || null,
+        }));
+      } else {
+        setDialogState((prev) => ({
+          ...prev,
+          error: result.error || "Download All failed",
+        }));
+      }
+    } catch (error) {
+      console.error("[Reports] Download All error:", error);
+      setDialogState((prev) => ({
+        ...prev,
+        error: error instanceof Error ? error.message : "Download All failed",
+      }));
+    }
+  }, [dateRange]);
 
   const handleCancelDownload = useCallback(() => {
     cancellationTokenRef.current?.cancel();
@@ -283,49 +365,57 @@ export default function ReportsScreen() {
     });
   }, []);
 
-  // View: Open the file with an external app using content URI
+  // View: Open the file directly using Android Intent with Read Permission
+  // This solves the "Google Sheets cannot open" error by legally granting permission via the Intent
   const handleView = useCallback(async () => {
     if (!dialogState.filePath) return;
     try {
-      // Get content URI that can be shared with other apps
       const contentUri = await FileSystem.getContentUriAsync(dialogState.filePath);
-      // Use Linking to open - this triggers Android's file handler picker
-      const supported = await Linking.canOpenURL(contentUri);
-      if (supported) {
-        await Linking.openURL(contentUri);
-      } else {
-        // Fallback to share sheet if direct opening not supported
-        await Sharing.shareAsync(dialogState.filePath, {
-          mimeType: "text/csv",
-          dialogTitle: "Open with...",
+      
+      if (Platform.OS === "android") {
+        const isZip = dialogState.filePath.toLowerCase().endsWith(".zip");
+        // FLAG_GRANT_READ_URI_PERMISSION = 1
+        await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+          data: contentUri,
+          flags: 1, 
+          type: isZip ? "application/zip" : "text/csv",
         });
+      } else {
+        // Fallback for iOS (Linking usually works fine there, or we can use Sharing)
+        // Since user is Android-focused, we keep simple Linking here
+        await Linking.openURL(contentUri);
       }
     } catch (e) {
       console.error("View failed", e);
-      // Fallback to share sheet
-      try {
-        await Sharing.shareAsync(dialogState.filePath, {
-          mimeType: "text/csv",
-          dialogTitle: "Open with...",
-        });
-      } catch (e2) {
-        Alert.alert("Error", "Could not open file");
-      }
+      Alert.alert(
+        "Cannot Open File",
+        "No app found to open this file. Please verify you have Google Sheets or a File Manager installed."
+      );
     }
     // Dialog stays open
   }, [dialogState.filePath]);
 
-  // Save: Copy file to Downloads using Sharing with save hint
+  // Save: Use SAF picker to let user choose exact location
   const handleSave = useCallback(async () => {
     if (!dialogState.filePath) return;
     try {
-      // On both Android and iOS, the share sheet allows "Save to Files" / "Save to Downloads"
-      await Sharing.shareAsync(dialogState.filePath, {
-        mimeType: "text/csv",
-        dialogTitle: "Save to Downloads",
-      });
-      if (Platform.OS === "android") {
-        ToastAndroid.show("Choose 'Files' or 'Downloads' to save", ToastAndroid.LONG);
+      const isZip = dialogState.filePath.toLowerCase().endsWith(".zip");
+      const filename = dialogState.filePath.split("/").pop() || "report";
+      
+      const result = await csvExporter.saveToPickedLocation(
+        dialogState.filePath,
+        filename,
+        isZip ? "application/zip" : "text/csv"
+      );
+
+      if (result.success) {
+        if (Platform.OS === "android") {
+          ToastAndroid.show("File saved successfully", ToastAndroid.SHORT);
+        } else {
+          Alert.alert("Success", "File saved successfully");
+        }
+      } else if (result.error !== "Selection cancelled") {
+         Alert.alert("Error", result.error || "Failed to save file");
       }
     } catch (e) {
       console.error("Save failed", e);

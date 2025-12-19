@@ -23,6 +23,7 @@ import { router } from "expo-router";
 import {
   ArrowLeft,
   Database,
+  FileText,
   Lock,
   Settings,
   Trash2,
@@ -1103,6 +1104,55 @@ export default function AdminSettingsScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Reports */}
+        <View style={{ marginBottom: 32 }}>
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: "bold",
+              color: theme.colors.text,
+              marginBottom: 8,
+            }}
+          >
+            📊 Reports
+          </Text>
+          <Text
+            style={{
+              fontSize: 14,
+              color: theme.colors.textSecondary,
+              marginBottom: 12,
+            }}
+          >
+            Download financial reports and ledgers as CSV for accounting and
+            analysis
+          </Text>
+          <TouchableOpacity
+            onPress={() => router.push("/reports")}
+            style={{
+              backgroundColor: "#039464",
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              paddingVertical: 16,
+              paddingHorizontal: 20,
+              borderRadius: 12,
+              ...theme.shadows.sm,
+            }}
+          >
+            <FileText size={20} color="white" />
+            <Text
+              style={{
+                color: "white",
+                fontSize: 16,
+                fontWeight: "600",
+                marginLeft: 8,
+              }}
+            >
+              View Reports
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {process.env.NODE_ENV === "development" && (
           <>

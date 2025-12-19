@@ -151,8 +151,22 @@ export default function ReportsScreen() {
 
   const handleDownloadReport = useCallback(
     async (reportType: ReportType) => {
-      // Check if report is implemented
-      const implementedReports: ReportType[] = [];
+      // All 13 reports are now implemented
+      const implementedReports: ReportType[] = [
+        "cashBook",
+        "upiBook",
+        "salesRegister",
+        "expenseRegister",
+        "debtorsReport",
+        "creditorsReport",
+        "advanceLiability",
+        "dailySummary",
+        "monthlySummary",
+        "itemwiseSales",
+        "customerAnalysis",
+        "receiptRegister",
+        "billRegister",
+      ];
 
       if (!implementedReports.includes(reportType)) {
         Alert.alert(

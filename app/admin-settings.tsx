@@ -17,17 +17,22 @@ import {
 import { settingsService } from "@/services/settingsService";
 import { runAllSyncDiagnostics, TestResult } from "@/services/syncDiagnostics";
 import { authState } from "@/state/authState";
-
 import { use$ } from "@legendapp/state/react";
 import { router } from "expo-router";
 import {
+  Activity,
+  AlertTriangle,
   ArrowLeft,
+  BarChart3,
+  ChevronRight,
   Database,
-  FileText,
+  LayoutGrid,
   Lock,
-  Settings,
+  RefreshCw,
   Trash2,
+  Utensils,
   X,
+  Zap
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
@@ -62,6 +67,7 @@ export default function AdminSettingsScreen() {
   const [auditResult, setAuditResult] = useState<{
     billIssues: any[];
     creditIssues: any[];
+    expenseIssues: any[];
   } | null>(null);
   const [auditError, setAuditError] = useState<string | null>(null);
   const [autoApplyAdvance, setAutoApplyAdvance] = useState<boolean>(false);
@@ -73,6 +79,7 @@ export default function AdminSettingsScreen() {
     walPages: number;
     walSizeBytes: number;
   } | null>(null);
+  const [showAdvancedDB, setShowAdvancedDB] = useState(false);
 
   const categories = [
     "Tea",
@@ -431,7 +438,7 @@ export default function AdminSettingsScreen() {
               Alert.alert(
                 "Error",
                 error?.message ||
-                  "Failed to delete local menu items. If items are referenced in orders, delete those first or clear all business data."
+                "Failed to delete local menu items. If items are referenced in orders, delete those first or clear all business data."
               );
             } finally {
               setLoading(false);
@@ -446,11 +453,16 @@ export default function AdminSettingsScreen() {
     try {
       setAuditRunning(true);
       setAuditError(null);
+      setAuditResult(null);
       await openDatabase();
       const result = await runIntegrityAudit();
       setAuditResult(result);
+      if (result.billIssues.length === 0 && result.creditIssues.length === 0 && result.expenseIssues.length === 0) {
+        Alert.alert("Audit Complete", "✅ No integrity issues found.");
+      }
     } catch (e: any) {
       setAuditError(e?.message || String(e));
+      Alert.alert("Audit Failed", e?.message || String(e));
     } finally {
       setAuditRunning(false);
     }
@@ -492,10 +504,10 @@ export default function AdminSettingsScreen() {
               Alert.alert(
                 "Maintenance Complete",
                 `✅ Database maintenance finished in ${result.totalDurationMs.toFixed(0)}ms\n\n` +
-                  `ANALYZE: ${result.analyze.success ? "✓" : "✗"} (${result.analyze.durationMs.toFixed(0)}ms)\n` +
-                  `VACUUM: ${result.vacuum.success ? "✓" : "✗"} (${result.vacuum.durationMs.toFixed(0)}ms)\n` +
-                  `Space reclaimed: ${spaceReclaimed}\n` +
-                  `WAL Checkpoint: ${result.checkpoint.success ? "✓" : "✗"} (${result.checkpoint.durationMs.toFixed(0)}ms)`
+                `ANALYZE: ${result.analyze.success ? "✓" : "✗"} (${result.analyze.durationMs.toFixed(0)}ms)\n` +
+                `VACUUM: ${result.vacuum.success ? "✓" : "✗"} (${result.vacuum.durationMs.toFixed(0)}ms)\n` +
+                `Space reclaimed: ${spaceReclaimed}\n` +
+                `WAL Checkpoint: ${result.checkpoint.success ? "✓" : "✗"} (${result.checkpoint.durationMs.toFixed(0)}ms)`
               );
             } catch (e: any) {
               Alert.alert("Maintenance Failed", e?.message || String(e));
@@ -576,70 +588,6 @@ export default function AdminSettingsScreen() {
     }
   };
 
-  // Sync & Backup actions removed from Admin Settings
-
-  // Menu Management Functions
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleAddMenuItem = () => {
-    setEditingItem(null);
-    setMenuForm({ name: "", category: "", price: "" });
-    setShowMenuModal(true);
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleEditMenuItem = (item: MenuItem) => {
-    setEditingItem(item);
-    setMenuForm({
-      name: item.name,
-      category: item.category || "",
-      price: item.price.toString(),
-    });
-    setShowMenuModal(true);
-  };
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleDeleteMenuItem = (item: MenuItem) => {
-    Alert.alert(
-      "Delete Menu Item",
-      `Are you sure you want to delete "${item.name}"? This action cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setLoading(true);
-              await menuService.deleteMenuItem(item.id);
-              await loadMenuItems();
-              await loadTableCounts();
-              Alert.alert("Success", "Menu item deleted successfully");
-            } catch (error: any) {
-              Alert.alert(
-                "Error",
-                error.message || "Failed to delete menu item"
-              );
-            } finally {
-              setLoading(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const validateMenuForm = (): string | null => {
-    if (!menuForm.name.trim()) return "Item name is required";
-    if (!menuForm.category.trim()) return "Category is required";
-    if (!menuForm.price.trim()) return "Price is required";
-
-    const price = parseFloat(menuForm.price);
-    if (isNaN(price) || price <= 0)
-      return "Price must be a valid positive number";
-
-    return null;
-  };
-
   const handleSaveMenuItem = async () => {
     const validationError = validateMenuForm();
     if (validationError) {
@@ -675,79 +623,19 @@ export default function AdminSettingsScreen() {
     }
   };
 
-  const AdminCard = ({
-    title,
-    description,
-    icon: Icon,
-    onPress,
-    destructive = false,
-    disabled = false,
-  }: {
-    title: string;
-    description: string;
-    icon: any;
-    onPress: () => void;
-    destructive?: boolean;
-    disabled?: boolean;
-  }) => (
-    <TouchableOpacity
-      onPress={onPress}
-      disabled={disabled || loading}
-      style={{
-        backgroundColor: theme.colors.background,
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: destructive ? "#fee2e2" : theme.colors.border,
-        opacity: disabled || loading ? 0.6 : 1,
-        ...theme.shadows.sm,
-      }}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <View
-          style={{
-            width: 48,
-            height: 48,
-            borderRadius: 12,
-            backgroundColor: destructive
-              ? "#fee2e2"
-              : theme.colors.primaryLight,
-            justifyContent: "center",
-            alignItems: "center",
-            marginRight: 12,
-          }}
-        >
-          <Icon
-            size={24}
-            color={destructive ? "#dc2626" : theme.colors.primary}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text
-            style={{
-              fontSize: 16,
-              fontWeight: "600",
-              color: destructive ? "#dc2626" : theme.colors.text,
-              marginBottom: 4,
-            }}
-          >
-            {title}
-          </Text>
-          <Text
-            style={{
-              fontSize: 14,
-              color: theme.colors.textSecondary,
-              lineHeight: 20,
-            }}
-          >
-            {description}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+  const validateMenuForm = (): string | null => {
+    if (!menuForm.name.trim()) return "Item name is required";
+    if (!menuForm.category.trim()) return "Category is required";
+    if (!menuForm.price.trim()) return "Price is required";
 
+    const price = parseFloat(menuForm.price);
+    if (isNaN(price) || price <= 0)
+      return "Price must be a valid positive number";
+
+    return null;
+  };
+
+  // UI Components
   const StatCard = ({ label, count }: { label: string; count: number }) => (
     <View
       style={{
@@ -784,662 +672,434 @@ export default function AdminSettingsScreen() {
     </View>
   );
 
+  const ActionCard = ({
+    title,
+    description,
+    icon: Icon,
+    onPress,
+    color = theme.colors.primary,
+  }: {
+    title: string;
+    description: string;
+    icon: any;
+    onPress: () => void;
+    color?: string;
+  }) => (
+    <TouchableOpacity
+      onPress={onPress}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "white",
+        padding: 20,
+        borderRadius: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        ...theme.shadows.sm,
+      }}
+    >
+      <View
+        style={{
+          width: 56,
+          height: 56,
+          borderRadius: 14,
+          backgroundColor: `${color}15`,
+          justifyContent: "center",
+          alignItems: "center",
+          marginRight: 16,
+        }}
+      >
+        <Icon size={28} color={color} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 17, fontWeight: "700", color: theme.colors.text, marginBottom: 4 }}>
+          {title}
+        </Text>
+        <Text style={{ fontSize: 13, color: theme.colors.textSecondary, lineHeight: 18 }}>
+          {description}
+        </Text>
+      </View>
+      <ChevronRight size={20} color={theme.colors.textSecondary} />
+    </TouchableOpacity>
+  );
+
+  const SectionHeader = ({ title }: { title: string }) => (
+    <Text
+      style={{
+        fontSize: 14,
+        fontWeight: "700",
+        color: theme.colors.textSecondary,
+        textTransform: "uppercase",
+        letterSpacing: 0.5,
+        marginTop: 24,
+        marginBottom: 12,
+        marginLeft: 4,
+      }}
+    >
+      {title}
+    </Text>
+  );
+
   return (
-    <View style={{ flex: 1 }}>
-      {/* Header inside Safe Area to avoid overlap with status bar/notch */}
+    <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
+      {/* Header */}
       <SafeAreaView
         edges={["top"]}
-        style={{ backgroundColor: theme.colors.primary }}
+        style={{
+          backgroundColor: "white",
+          borderBottomWidth: 1,
+          borderBottomColor: theme.colors.border,
+        }}
       >
         <View
           style={{
-            backgroundColor: theme.colors.primary,
-            paddingTop: 16,
-            paddingBottom: 24,
+            flexDirection: "row",
+            alignItems: "center",
             paddingHorizontal: 16,
+            paddingVertical: 12,
+            height: 56,
           }}
         >
-          {/* Header Row */}
-          <View
+          <TouchableOpacity
+            onPress={() => router.back()}
             style={{
-              flexDirection: "row",
+              width: 40,
+              height: 40,
+              justifyContent: "center",
               alignItems: "center",
-              marginBottom: 0,
+              marginRight: 8,
+              borderRadius: 20,
             }}
           >
-            <TouchableOpacity
-              onPress={() => router.back()}
-              style={{
-                padding: 4,
-                marginLeft: -4,
-              }}
-            >
-              <ArrowLeft size={26} color="white" />
-            </TouchableOpacity>
-            <View style={{ flex: 1, alignItems: "center", marginRight: 24 }}>
-              <Text
-                style={{
-                  color: "white",
-                  fontSize: 20,
-                  fontWeight: "bold",
-                }}
-              >
-                Admin Settings
-              </Text>
-            </View>
-          </View>
+            <ArrowLeft size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+          <Text style={{ fontSize: 20, fontWeight: "bold", color: theme.colors.text }}>
+            Admin Dashboard
+          </Text>
         </View>
       </SafeAreaView>
 
-      <ScrollView style={{ flex: 1, padding: 24 }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Database Statistics */}
-        <View style={{ marginBottom: 32 }}>
-          <Text
-            style={{
-              fontSize: 18,
-              fontWeight: "bold",
-              color: theme.colors.text,
-              marginBottom: 16,
-            }}
-          >
-            Database Overview
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <StatCard label="Users" count={tableCounts.users || 0} />
-            <StatCard label="Customers" count={tableCounts.customers || 0} />
-            <StatCard label="Menu Items" count={tableCounts.menu_items || 0} />
-            <StatCard label="Orders" count={tableCounts.kot_orders || 0} />
-            <StatCard label="Order Items" count={tableCounts.kot_items || 0} />
-            <StatCard label="Expenses" count={tableCounts.expenses || 0} />
-          </ScrollView>
-        </View>
-
-        {/* Menu Management */}
-        <View style={{ marginBottom: 32 }}>
-          <Text
-            style={{
-              fontSize: 18,
-              fontWeight: "bold",
-              color: theme.colors.text,
-              marginBottom: 16,
-            }}
-          >
-            Menu Management ({menuItems.length} items)
-          </Text>
-
-          {/* Manage Button */}
-          <TouchableOpacity
-            onPress={() => router.push("/menu-management")}
-            style={{
-              backgroundColor: theme.colors.primary,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              paddingVertical: 16,
-              paddingHorizontal: 20,
-              borderRadius: 12,
-              ...theme.shadows.sm,
-              marginBottom: 12,
-            }}
-          >
-            <Settings size={20} color="white" />
-            <Text
-              style={{
-                color: "white",
-                fontSize: 16,
-                fontWeight: "600",
-                marginLeft: 8,
-              }}
-            >
-              Manage Menu Items
-            </Text>
-          </TouchableOpacity>
-
-          {/* Add Sample Menu Items Button */}
-          <TouchableOpacity
-            onPress={handleAddDemoMenuItems}
-            disabled={loading}
-            style={{
-              backgroundColor: "#10B981",
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              paddingVertical: 12,
-              paddingHorizontal: 16,
-              borderRadius: 12,
-              ...theme.shadows.sm,
-              opacity: loading ? 0.6 : 1,
-            }}
-          >
-            <Settings size={18} color="white" />
-            <Text
-              style={{
-                color: "white",
-                fontSize: 14,
-                fontWeight: "600",
-                marginLeft: 8,
-              }}
-            >
-              Add Sample Menu Items
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Dev-only tools for Menu */}
-        {process.env.NODE_ENV === "development" && (
-          <View style={{ marginBottom: 24 }}>
-            <AdminCard
-              title="Hard Delete Local Menu Items"
-              description="Dev-only: Permanently delete all menu items from local DB (does not touch cloud)"
-              icon={Trash2}
-              onPress={handleHardDeleteLocalMenuItems}
-              destructive
-            />
-          </View>
-        )}
-
-        {/* Database Management */}
         <Text
           style={{
-            fontSize: 18,
-            fontWeight: "bold",
-            color: theme.colors.text,
-            marginBottom: 16,
+            fontSize: 14,
+            fontWeight: "700",
+            color: theme.colors.textSecondary,
+            textTransform: "uppercase",
+            letterSpacing: 0.5,
+            marginBottom: 12,
+            marginLeft: 4,
           }}
         >
-          Database Management
+          Database Overview
         </Text>
-        <AdminCard
-          title="Clear All Business Data"
-          description="⚠️ Permanently delete ALL business data. User accounts are preserved."
-          icon={Trash2}
-          onPress={handleClearAllTables}
-          destructive
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <StatCard label="Users" count={tableCounts.users || 0} />
+          <StatCard label="Customers" count={tableCounts.customers || 0} />
+          <StatCard label="Menu Items" count={tableCounts.menu_items || 0} />
+          <StatCard label="Orders" count={tableCounts.kot_orders || 0} />
+          <StatCard label="Order Items" count={tableCounts.kot_items || 0} />
+          <StatCard label="Expenses" count={tableCounts.expenses || 0} />
+        </ScrollView>
+
+
+        {/* Primary Management */}
+        <SectionHeader title="Management" />
+
+        <ActionCard
+          title="Menu Management"
+          description="Edit items, update prices, and manage categories."
+          icon={Utensils}
+          onPress={() => router.push("/menu-management")}
+          color={theme.colors.primary}
         />
 
-        {/* Database Maintenance (Phase 2.3) */}
-        <View style={{ marginBottom: 24, marginTop: 16 }}>
-          <Text
-            style={{
-              fontSize: 18,
-              fontWeight: "bold",
-              color: theme.colors.text,
-              marginBottom: 8,
-            }}
-          >
-            Database Maintenance
-          </Text>
-          <Text
-            style={{
-              fontSize: 12,
-              color: theme.colors.textSecondary,
-              marginBottom: 12,
-            }}
-          >
-            Optimize database performance by reclaiming space and updating query
-            statistics.
-            {walStatus &&
-              ` WAL: ${walStatus.walPages} pages (${(walStatus.walSizeBytes / 1024).toFixed(1)}KB)`}
-          </Text>
+        <ActionCard
+          title="Reports & Analytics"
+          description="View sales reports, export CSVs, and analyze trends."
+          icon={BarChart3}
+          onPress={() => router.push("/reports")}
+          color="#8B5CF6"
+        />
 
-          {/* Full Maintenance Button */}
-          <TouchableOpacity
-            onPress={handleRunMaintenance}
-            disabled={maintenanceRunning}
-            style={{
-              backgroundColor: "#10B981",
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              paddingVertical: 14,
-              paddingHorizontal: 16,
-              borderRadius: 8,
-              opacity: maintenanceRunning ? 0.6 : 1,
-              ...theme.shadows.sm,
-              marginBottom: 12,
-            }}
-          >
-            {maintenanceRunning ? (
-              <ActivityIndicator color="white" size="small" />
-            ) : (
-              <Database size={18} color="white" />
-            )}
-            <Text style={{ color: "white", fontWeight: "600", marginLeft: 8 }}>
-              {maintenanceRunning
-                ? "Running Maintenance..."
-                : "Run Full Maintenance"}
-            </Text>
-          </TouchableOpacity>
+        <SectionHeader title="System Health" />
 
-          {/* Individual Operations */}
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <TouchableOpacity
-              onPress={handleAnalyzeOnly}
-              disabled={maintenanceRunning}
+        <View
+          style={{
+            backgroundColor: "white",
+            padding: 16,
+            borderRadius: 16,
+            marginBottom: 12,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            ...theme.shadows.sm,
+          }}
+        >
+          <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+            <View
               style={{
-                flex: 1,
-                backgroundColor: "#3B82F6",
-                paddingVertical: 10,
-                paddingHorizontal: 8,
-                borderRadius: 6,
-                alignItems: "center",
-                opacity: maintenanceRunning ? 0.6 : 1,
-              }}
-            >
-              <Text style={{ color: "white", fontWeight: "500", fontSize: 12 }}>
-                ANALYZE
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleVacuumOnly}
-              disabled={maintenanceRunning}
-              style={{
-                flex: 1,
-                backgroundColor: "#8B5CF6",
-                paddingVertical: 10,
-                paddingHorizontal: 8,
-                borderRadius: 6,
-                alignItems: "center",
-                opacity: maintenanceRunning ? 0.6 : 1,
-              }}
-            >
-              <Text style={{ color: "white", fontWeight: "500", fontSize: 12 }}>
-                VACUUM
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleWalCheckpoint}
-              disabled={maintenanceRunning}
-              style={{
-                flex: 1,
-                backgroundColor: "#F59E0B",
-                paddingVertical: 10,
-                paddingHorizontal: 8,
-                borderRadius: 6,
-                alignItems: "center",
-                opacity: maintenanceRunning ? 0.6 : 1,
-              }}
-            >
-              <Text style={{ color: "white", fontWeight: "500", fontSize: 12 }}>
-                WAL Checkpoint
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Sync Diagnostics */}
-        {process.env.NODE_ENV === "development" && (
-          <View style={{ marginBottom: 24 }}>
-            <Text
-              style={{
-                fontSize: 18,
-                fontWeight: "bold",
-                color: theme.colors.text,
-                marginBottom: 12,
-              }}
-            >
-              Sync Diagnostics
-            </Text>
-            <TouchableOpacity
-              onPress={handleRunSyncDiagnostics}
-              disabled={diagRunning}
-              style={{
-                backgroundColor: theme.colors.primary,
-                flexDirection: "row",
+                width: 56,
+                height: 56,
+                borderRadius: 12,
+                backgroundColor: "#ECFDF5",
                 alignItems: "center",
                 justifyContent: "center",
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                borderRadius: 8,
-                opacity: diagRunning ? 0.6 : 1,
-                ...theme.shadows.sm,
               }}
             >
-              <Database size={18} color="white" />
-              <Text
-                style={{ color: "white", fontWeight: "600", marginLeft: 8 }}
-              >
-                {diagRunning ? "Running…" : "Run Sync Diagnostics"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+              <Database size={28} color="#10B981" />
+            </View>
 
-        {/* Reports */}
-        <View style={{ marginBottom: 32 }}>
-          <Text
-            style={{
-              fontSize: 18,
-              fontWeight: "bold",
-              color: theme.colors.text,
-              marginBottom: 8,
-            }}
-          >
-            📊 Reports
-          </Text>
-          <Text
-            style={{
-              fontSize: 14,
-              color: theme.colors.textSecondary,
-              marginBottom: 12,
-            }}
-          >
-            Download financial reports and ledgers as CSV for accounting and
-            analysis
-          </Text>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 16, fontWeight: "700", color: theme.colors.text }}>
+                    Database Health
+                  </Text>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 2 }}>
+                    WAL: {walStatus?.walPages ?? "..."} pages ({walStatus ? (walStatus.walSizeBytes / 1024).toFixed(1) : "0"} KB)
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  onPress={handleRunMaintenance}
+                  disabled={maintenanceRunning}
+                  style={{
+                    backgroundColor: theme.colors.primary + "15",
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 8,
+                  }}
+                >
+                  {maintenanceRunning ? (
+                    <ActivityIndicator size="small" color={theme.colors.primary} />
+                  ) : (
+                    <Text style={{ color: theme.colors.primary, fontWeight: "600", fontSize: 13 }}>Optimize</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+
+            </View>
+
+          </View>
           <TouchableOpacity
-            onPress={() => router.push("/reports")}
-            style={{
-              backgroundColor: "#039464",
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              paddingVertical: 16,
-              paddingHorizontal: 20,
-              borderRadius: 12,
-              ...theme.shadows.sm,
-            }}
+            onPress={() => setShowAdvancedDB(!showAdvancedDB)}
+            style={{ marginTop: 12, alignSelf: "flex-start" }}
           >
-            <FileText size={20} color="white" />
-            <Text
-              style={{
-                color: "white",
-                fontSize: 16,
-                fontWeight: "600",
-                marginLeft: 8,
-              }}
-            >
-              View Reports
+            <Text style={{ fontSize: 12, color: theme.colors.textSecondary, textDecorationLine: "underline" }}>
+              {showAdvancedDB ? "Hide Advanced Tools" : "Show Advanced Tools"}
             </Text>
           </TouchableOpacity>
+
+          {showAdvancedDB && (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+              <DBButton title="ANALYZE" onPress={handleAnalyzeOnly} />
+              <DBButton title="VACUUM" onPress={handleVacuumOnly} />
+              <DBButton title="CHECKPOINT" onPress={handleWalCheckpoint} />
+            </View>
+          )}
         </View>
 
-        {process.env.NODE_ENV === "development" && (
-          <>
-            {/* Integrity Audit and Dev Tools */}
-
-            {/* Integrity Audit */}
-            <View style={{ marginBottom: 32 }}>
-              <Text
-                style={{
-                  fontSize: 18,
-                  fontWeight: "bold",
-                  color: theme.colors.text,
-                  marginBottom: 8,
-                }}
-              >
-                Integrity Audit
-              </Text>
-              <Text
-                style={{
-                  fontSize: 14,
-                  color: theme.colors.textSecondary,
-                  marginBottom: 12,
-                }}
-              >
-                Check for mismatched bill totals and incorrect customer credit
-                balances.
-              </Text>
-
-              <View style={{ flexDirection: "row", gap: 12, marginBottom: 8 }}>
-                <TouchableOpacity
-                  onPress={handleRunAudit}
-                  disabled={auditRunning}
-                  style={{
-                    backgroundColor: theme.colors.primary,
-                    paddingVertical: 12,
-                    paddingHorizontal: 16,
-                    borderRadius: 8,
-                    alignSelf: "flex-start",
-                    opacity: auditRunning ? 0.6 : 1,
-                    ...theme.shadows.sm,
-                  }}
-                >
-                  <Text style={{ color: "white", fontWeight: "600" }}>
-                    {auditRunning ? "Running…" : "Run Audit"}
-                  </Text>
-                </TouchableOpacity>
-
-                {auditResult && (
-                  <TouchableOpacity
-                    onPress={() => setAuditResult(null)}
-                    style={{
-                      backgroundColor: theme.colors.background,
-                      paddingVertical: 12,
-                      paddingHorizontal: 16,
-                      borderRadius: 8,
-                      borderWidth: 1,
-                      borderColor: theme.colors.border,
-                      alignSelf: "flex-start",
-                    }}
-                  >
-                    <Text
-                      style={{ color: theme.colors.text, fontWeight: "600" }}
-                    >
-                      Clear
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {auditError && (
-                <Text style={{ color: "#dc2626", marginBottom: 8 }}>
-                  {auditError}
-                </Text>
-              )}
-
-              {auditResult && (
-                <View
-                  style={{
-                    marginTop: 8,
-                    backgroundColor: theme.colors.background,
-                    padding: 16,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: theme.colors.border,
-                    ...theme.shadows.sm,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 16,
-                      fontWeight: "600",
-                      color: theme.colors.text,
-                      marginBottom: 8,
-                    }}
-                  >
-                    Summary
-                  </Text>
-                  <Text
-                    style={{
-                      color: theme.colors.textSecondary,
-                      marginBottom: 12,
-                    }}
-                  >
-                    Bills with mismatched totals:{" "}
-                    {auditResult.billIssues.length} • Customers with incorrect
-                    credit: {auditResult.creditIssues.length}
-                  </Text>
-
-                  {auditResult.billIssues.length === 0 &&
-                  auditResult.creditIssues.length === 0 ? (
-                    <View style={{ paddingVertical: 4 }}>
-                      <Text style={{ color: "#16a34a", fontWeight: "600" }}>
-                        No issues found.
-                      </Text>
-                    </View>
-                  ) : (
-                    <>
-                      {auditResult.billIssues.length > 0 && (
-                        <View style={{ marginTop: 8 }}>
-                          <Text
-                            style={{
-                              fontWeight: "600",
-                              color: theme.colors.text,
-                              marginBottom: 6,
-                            }}
-                          >
-                            Bill Issues
-                          </Text>
-                          {auditResult.billIssues
-                            .slice(0, 10)
-                            .map((b: any, idx: number) => (
-                              <View
-                                key={idx}
-                                style={{
-                                  paddingVertical: 6,
-                                  borderTopWidth: idx ? 1 : 0,
-                                  borderTopColor: theme.colors.border,
-                                }}
-                              >
-                                <Text
-                                  style={{ color: theme.colors.textSecondary }}
-                                >
-                                  Bill ID: {b.billId}
-                                </Text>
-                                <Text
-                                  style={{ color: theme.colors.textSecondary }}
-                                >
-                                  Stored: ₹{b.stored} • Recomputed: ₹
-                                  {b.recomputed} • Paid: ₹{b.paid} • Credit: ₹
-                                  {b.credit}
-                                </Text>
-                              </View>
-                            ))}
-                          {auditResult.billIssues.length > 10 && (
-                            <Text
-                              style={{
-                                color: theme.colors.textSecondary,
-                                marginTop: 6,
-                              }}
-                            >
-                              +{auditResult.billIssues.length - 10} more…
-                            </Text>
-                          )}
-                        </View>
-                      )}
-
-                      {auditResult.creditIssues.length > 0 && (
-                        <View style={{ marginTop: 12 }}>
-                          <Text
-                            style={{
-                              fontWeight: "600",
-                              color: theme.colors.text,
-                              marginBottom: 6,
-                            }}
-                          >
-                            Customer Credit Issues
-                          </Text>
-                          {auditResult.creditIssues
-                            .slice(0, 10)
-                            .map((c: any, idx: number) => (
-                              <View
-                                key={idx}
-                                style={{
-                                  paddingVertical: 6,
-                                  borderTopWidth: idx ? 1 : 0,
-                                  borderTopColor: theme.colors.border,
-                                }}
-                              >
-                                <Text
-                                  style={{ color: theme.colors.textSecondary }}
-                                >
-                                  Customer ID: {c.customerId}
-                                </Text>
-                                <Text
-                                  style={{ color: theme.colors.textSecondary }}
-                                >
-                                  Stored: ₹{c.stored} • Expected: ₹{c.expected}
-                                </Text>
-                              </View>
-                            ))}
-                          {auditResult.creditIssues.length > 10 && (
-                            <Text
-                              style={{
-                                color: theme.colors.textSecondary,
-                                marginTop: 6,
-                              }}
-                            >
-                              +{auditResult.creditIssues.length - 10} more…
-                            </Text>
-                          )}
-                        </View>
-                      )}
-                    </>
-                  )}
-                </View>
-              )}
-            </View>
-
-            <View style={{ marginBottom: 32 }}>
-              <Text
-                style={{
-                  fontSize: 18,
-                  fontWeight: "bold",
-                  color: theme.colors.text,
-                  marginBottom: 8,
-                }}
-              >
-                Dummy Data for Testing
-              </Text>
-              <Text
-                style={{
-                  fontSize: 14,
-                  color: theme.colors.textSecondary,
-                  marginBottom: 12,
-                }}
-              >
-                Dummy data added for reports testing
-              </Text>
-
-              <View style={{ flexDirection: "row", gap: 12, marginBottom: 8 }}>
-                <TouchableOpacity
-                  onPress={handleSetupDemoData}
-                  style={{
-                    backgroundColor: theme.colors.primary,
-                    paddingVertical: 12,
-                    paddingHorizontal: 16,
-                    borderRadius: 8,
-                    alignSelf: "flex-start",
-                    ...theme.shadows.sm,
-                  }}
-                >
-                  <Text style={{ color: "white", fontWeight: "600" }}>
-                    Dummy Data for Testing
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </>
-        )}
-
-        {loading && (
+        <TouchableOpacity
+          onPress={handleRunSyncDiagnostics}
+          disabled={diagRunning}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            backgroundColor: "white",
+            padding: 20,
+            borderRadius: 16,
+            marginBottom: 12,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            ...theme.shadows.sm,
+          }}
+        >
           <View
             style={{
-              backgroundColor: theme.colors.background,
-              padding: 20,
-              borderRadius: 12,
+              width: 56,
+              height: 56,
+              borderRadius: 14,
+              backgroundColor: `#0EA5E915`,
+              justifyContent: "center",
               alignItems: "center",
-              marginBottom: 20,
-              borderWidth: 1,
-              borderColor: theme.colors.border,
+              marginRight: 16,
             }}
           >
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text
-              style={{
-                marginTop: 12,
-                color: theme.colors.textSecondary,
-                fontSize: 16,
-              }}
-            >
-              Processing...
+            {diagRunning ? (<ActivityIndicator size={"small"} color="#add1e1ff" />) : (<RefreshCw size={28} color="#0EA5E9" />)}
+          </View>
+          {diagRunning ? (<View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 17, fontWeight: "700", color: theme.colors.textLight, marginBottom: 4 }}>
+              Running Sync Diagnostics...
             </Text>
+          </View>) : (<View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 17, fontWeight: "700", color: theme.colors.text, marginBottom: 4 }}>
+              Sync Diagnostics
+            </Text>
+            <Text style={{ fontSize: 13, color: theme.colors.textSecondary, lineHeight: 18 }}>
+              Check cloud connectivity and resolve sync issues.
+            </Text>
+          </View>)}
+        </TouchableOpacity>
+
+        <View style={{ height: 12 }} />
+
+        {/* Development & Danger Zone */}
+        <SectionHeader title="Danger Zone" />
+
+        <View style={{ backgroundColor: "#FEF2F2", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#FCA5A5" }}>
+
+          {/* Add Standard Menu Items */}
+          <TouchableOpacity
+            onPress={handleAddDemoMenuItems}
+            style={{ flexDirection: "row", alignItems: "center", paddingVertical: 12 }}
+          >
+            <LayoutGrid size={20} color="#DC2626" />
+            <View style={{ marginLeft: 12, flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: "600", color: "#991B1B" }}>Add Default Menu Items</Text>
+              <Text style={{ fontSize: 12, color: "#B91C1C" }}>Populate the menu with standard items.</Text>
+            </View>
+          </TouchableOpacity>
+
+          <View style={{ height: 1, backgroundColor: "#FCA5A5", marginVertical: 4 }} />
+
+          {/* Clear Menu */}
+          <TouchableOpacity
+            onPress={handleClearMenuItems}
+            style={{ flexDirection: "row", alignItems: "center", paddingVertical: 12 }}
+          >
+            <Trash2 size={20} color="#DC2626" />
+            <View style={{ marginLeft: 12, flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: "600", color: "#991B1B" }}>Clear Menu</Text>
+              <Text style={{ fontSize: 12, color: "#B91C1C" }}>Delete all menu items.</Text>
+            </View>
+          </TouchableOpacity>
+
+          <View style={{ height: 1, backgroundColor: "#FCA5A5", marginVertical: 4 }} />
+
+          {/* Clear All Data */}
+          <TouchableOpacity
+            onPress={handleClearAllTables}
+            style={{ flexDirection: "row", alignItems: "center", paddingVertical: 12 }}
+          >
+            <AlertTriangle size={20} color="#DC2626" />
+            <View style={{ marginLeft: 12, flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: "600", color: "#991B1B" }}>Reset Business Data</Text>
+              <Text style={{ fontSize: 12, color: "#B91C1C" }}>Permanently delete all orders and data.</Text>
+            </View>
+          </TouchableOpacity>
+
+          {process.env.NODE_ENV === "development" && (
+            <>
+              <View style={{ height: 1, backgroundColor: "#FCA5A5", marginVertical: 4 }} />
+              {/* Add Demo Data (Full Seeding) */}
+              <TouchableOpacity
+                onPress={handleSetupDemoData}
+                style={{ flexDirection: "row", alignItems: "center", paddingVertical: 12 }}
+              >
+                <Zap size={20} color="#DC2626" />
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "600", color: "#991B1B" }}>Setup Full Demo Data</Text>
+                  <Text style={{ fontSize: 12, color: "#B91C1C" }}>Wipe database and seed 3 months of history.</Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Integrity Audit */}
+              <View style={{ height: 1, backgroundColor: "#FCA5A5", marginVertical: 4 }} />
+              {auditRunning ? (
+                <TouchableOpacity
+                  disabled
+                  onPress={handleRunAudit}
+                  style={{ flexDirection: "row", alignItems: "center", paddingVertical: 12 }}
+                >
+                  <ActivityIndicator size={"small"} color="#e7a8a8ff" />
+                  <View style={{ marginLeft: 12, flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontWeight: "600", color: "#e7a8a8ff" }}>Running Integrity Audit...</Text>
+                    <Text style={{ fontSize: 12, color: "#e7a8a8ff" }}>Checking for data consistency.</Text>
+                  </View>
+                </TouchableOpacity>) : (
+                <TouchableOpacity
+                  onPress={handleRunAudit}
+                  style={{ flexDirection: "row", alignItems: "center", paddingVertical: 12 }}
+                >
+                  <Activity size={20} color="#DC2626" />
+                  <View style={{ marginLeft: 12, flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontWeight: "600", color: "#991B1B" }}>Run Integrity Audit</Text>
+                    <Text style={{ fontSize: 12, color: "#B91C1C" }}>Check for data consistency.</Text>
+                  </View>
+                </TouchableOpacity>)}</>
+          )}
+        </View>
+
+        {/* Audit Results */}
+        {(auditResult || auditError) && (
+          <View style={{ marginTop: 20, padding: 16, backgroundColor: "white", borderRadius: 12, borderWidth: 1, borderColor: theme.colors.border }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <Text style={{ fontSize: 16, fontWeight: "bold" }}>Integrity Audit Result</Text>
+              <TouchableOpacity onPress={() => { setAuditResult(null); setAuditError(null); }}>
+                <X size={20} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {auditError && (
+              <Text style={{ color: "#DC2626", marginBottom: 8, fontSize: 14 }}>
+                ❌ Error: {auditError}
+              </Text>
+            )}
+
+            {auditResult && (
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontSize: 14, color: auditResult.billIssues.length > 0 ? "#DC2626" : "#059669", fontWeight: "500" }}>
+                  • Bills: {auditResult.billIssues.length > 0 ? `${auditResult.billIssues.length} mismatch(es)` : "No issues"}
+                </Text>
+                <Text style={{ fontSize: 14, color: auditResult.creditIssues.length > 0 ? "#DC2626" : "#059669", fontWeight: "500" }}>
+                  • Customer Credits: {auditResult.creditIssues.length > 0 ? `${auditResult.creditIssues.length} mismatch(es)` : "No issues"}
+                </Text>
+                <Text style={{ fontSize: 14, color: auditResult.expenseIssues.length > 0 ? "#DC2626" : "#059669", fontWeight: "500" }}>
+                  • Expenses: {auditResult.expenseIssues.length > 0 ? `${auditResult.expenseIssues.length} mismatch(es)` : "No issues"}
+                </Text>
+
+                {(auditResult.billIssues.length > 0 || auditResult.creditIssues.length > 0 || auditResult.expenseIssues.length > 0) && (
+                  <Text style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 4, fontStyle: "italic" }}>
+                    Check console logs for specific IDs and details.
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
         )}
+
       </ScrollView>
 
-      {/* Menu Item Form Modal */}
+      {/* Loading Overlay */}
+      {loading && (
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <View style={{ backgroundColor: "white", padding: 24, borderRadius: 16, alignItems: "center" }}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={{ marginTop: 16, fontWeight: "600", color: theme.colors.text }}>Processing...</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Menu Item Form Modal - Kept minimal for now, or could be extracted */}
       <Modal
         visible={showMenuModal}
         animationType="slide"
@@ -1598,7 +1258,7 @@ export default function AdminSettingsScreen() {
                 onChangeText={(text: string) =>
                   setMenuForm({ ...menuForm, price: text })
                 }
-                placeholder="Enter price"
+                placeholder="0.00"
                 keyboardType="numeric"
                 style={{
                   borderWidth: 1,
@@ -1619,72 +1279,99 @@ export default function AdminSettingsScreen() {
       <Modal
         visible={showDiagModal}
         animationType="slide"
-        onRequestClose={() => setShowDiagModal(false)}
         presentationStyle="pageSheet"
+        onRequestClose={() => setShowDiagModal(false)}
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
           <View
             style={{
+              padding: 16,
+              borderBottomWidth: 1,
+              borderBottomColor: theme.colors.border,
               flexDirection: "row",
               justifyContent: "space-between",
               alignItems: "center",
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              borderBottomWidth: 1,
-              borderBottomColor: theme.colors.border,
             }}
           >
+            <Text style={{ fontSize: 18, fontWeight: "bold" }}>
+              Diagnostics Results
+            </Text>
             <TouchableOpacity onPress={() => setShowDiagModal(false)}>
               <X size={24} color={theme.colors.text} />
             </TouchableOpacity>
-            <Text
-              style={{
-                fontSize: 18,
-                fontWeight: "600",
-                color: theme.colors.text,
-              }}
-            >
-              Sync Diagnostics
-            </Text>
-            <View style={{ width: 24 }} />
           </View>
           <ScrollView style={{ flex: 1, padding: 16 }}>
-            {!diagResults && (
-              <Text style={{ color: theme.colors.textSecondary }}>
-                No results yet.
-              </Text>
-            )}
-            {diagResults &&
-              diagResults.map((r, i) => (
+            {diagResults?.map((r, i) => (
+              <View
+                key={i}
+                style={{
+                  marginBottom: 12,
+                  padding: 12,
+                  borderRadius: 8,
+                  backgroundColor: r.passed ? "#ecfdf5" : "#fef2f2",
+                  borderWidth: 1,
+                  borderColor: r.passed ? "#a7f3d0" : "#fecaca",
+                }}
+              >
                 <View
-                  key={`${r.name}-${i}`}
                   style={{
-                    backgroundColor: "white",
-                    borderWidth: 1,
-                    borderColor: r.passed ? "#d1fae5" : "#fee2e2",
-                    borderRadius: 8,
-                    padding: 12,
-                    marginBottom: 10,
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    marginBottom: 4,
                   }}
                 >
+                  <Text style={{ fontWeight: "600" }}>{r.name}</Text>
                   <Text
                     style={{
-                      fontWeight: "600",
-                      color: r.passed ? "#065f46" : "#991b1b",
-                      marginBottom: 6,
+                      color: r.passed ? "green" : "red",
+                      fontWeight: "bold",
                     }}
                   >
-                    {r.name}
-                  </Text>
-                  <Text style={{ color: theme.colors.textSecondary }}>
-                    {r.passed ? "Passed" : "Failed"}
-                    {r.details ? ` • ${r.details}` : ""}
+                    {r.passed ? "PASS" : "FAIL"}
                   </Text>
                 </View>
-              ))}
+                <Text style={{ color: theme.colors.textSecondary }}>
+                  {r.details || "No details available"}
+                </Text>
+              </View>
+            ))}
           </ScrollView>
         </SafeAreaView>
       </Modal>
     </View>
   );
 }
+
+const DBButton = ({ title, onPress }: { title: string; onPress: () => void }) => (
+  <TouchableOpacity
+    onPress={onPress}
+    style={{
+      flex: 1,
+      padding: 8,
+      backgroundColor: "white",
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: 8,
+      alignItems: "center",
+      ...theme.shadows.sm,
+    }}
+  >
+    <Text style={{ fontSize: 11, fontWeight: "600", color: theme.colors.textSecondary }}>{title}</Text>
+  </TouchableOpacity>
+);
+
+const styles = {
+  card: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    ...theme.shadows.sm,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: theme.colors.text,
+  },
+} as const;

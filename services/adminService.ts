@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
+import { seedDemoData } from "@/scripts/seed-demo-data";
 import { createCustomer } from "./customerService";
-import { menuService } from "./menuService";
 
 class AdminService {
   // Helper: check if a table exists in the current SQLite database
@@ -233,16 +233,9 @@ class AdminService {
   // Setup demo data
   async setupDemoData(): Promise<void> {
     try {
-      // Clear existing data first (preserves users)
-      await this.clearAllTables();
-
-      // Add demo menu items
-      await menuService.addDemoMenuItems();
-
-      // Add demo customers
-      await this.addDemoCustomers();
-
-      console.log("Demo data setup completed");
+      // Use the robust seeder script
+      await seedDemoData();
+      console.log("Demo data setup completed via seed script");
     } catch (error) {
       console.error("Error setting up demo data:", error);
       throw error;

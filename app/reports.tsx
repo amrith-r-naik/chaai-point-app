@@ -21,7 +21,9 @@ import {
   ReportType,
 } from "@/types/reports";
 import { use$ } from "@legendapp/state/react";
+import * as FileSystem from "expo-file-system";
 import { router } from "expo-router";
+import * as Sharing from "expo-sharing";
 import {
   ArrowLeft,
   Banknote,
@@ -34,9 +36,12 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  Linking,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  ToastAndroid,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -59,6 +64,7 @@ interface DialogState {
   completedFileCount: number;
   totalFileSize: string;
   completionTime: number;
+  filePath: string | null;
 }
 
 // ============================================================================
@@ -108,6 +114,7 @@ export default function ReportsScreen() {
     completedFileCount: 0,
     totalFileSize: "",
     completionTime: 0,
+    filePath: null,
   });
 
   // Redirect if not logged in
@@ -193,6 +200,7 @@ export default function ReportsScreen() {
         completedFileCount: 0,
         totalFileSize: "",
         completionTime: 0,
+        filePath: null,
       });
 
       setLoadingReport(reportType);
@@ -217,6 +225,7 @@ export default function ReportsScreen() {
             isComplete: true,
             completedFileCount: 1,
             completionTime: Math.round((endTime - startTime) / 1000),
+            filePath: result.filePath || null,
           }));
         } else if (result.error === "Operation cancelled") {
           setDialogState((prev) => ({
@@ -270,13 +279,74 @@ export default function ReportsScreen() {
       completedFileCount: 0,
       totalFileSize: "",
       completionTime: 0,
+      filePath: null,
     });
   }, []);
 
-  const handleShare = useCallback(() => {
-    // The file was already shared when export completed
-    handleCloseDialog();
-  }, [handleCloseDialog]);
+  // View: Open the file with an external app using content URI
+  const handleView = useCallback(async () => {
+    if (!dialogState.filePath) return;
+    try {
+      // Get content URI that can be shared with other apps
+      const contentUri = await FileSystem.getContentUriAsync(dialogState.filePath);
+      // Use Linking to open - this triggers Android's file handler picker
+      const supported = await Linking.canOpenURL(contentUri);
+      if (supported) {
+        await Linking.openURL(contentUri);
+      } else {
+        // Fallback to share sheet if direct opening not supported
+        await Sharing.shareAsync(dialogState.filePath, {
+          mimeType: "text/csv",
+          dialogTitle: "Open with...",
+        });
+      }
+    } catch (e) {
+      console.error("View failed", e);
+      // Fallback to share sheet
+      try {
+        await Sharing.shareAsync(dialogState.filePath, {
+          mimeType: "text/csv",
+          dialogTitle: "Open with...",
+        });
+      } catch (e2) {
+        Alert.alert("Error", "Could not open file");
+      }
+    }
+    // Dialog stays open
+  }, [dialogState.filePath]);
+
+  // Save: Copy file to Downloads using Sharing with save hint
+  const handleSave = useCallback(async () => {
+    if (!dialogState.filePath) return;
+    try {
+      // On both Android and iOS, the share sheet allows "Save to Files" / "Save to Downloads"
+      await Sharing.shareAsync(dialogState.filePath, {
+        mimeType: "text/csv",
+        dialogTitle: "Save to Downloads",
+      });
+      if (Platform.OS === "android") {
+        ToastAndroid.show("Choose 'Files' or 'Downloads' to save", ToastAndroid.LONG);
+      }
+    } catch (e) {
+      console.error("Save failed", e);
+      Alert.alert("Error", "Failed to save file");
+    }
+    // Dialog stays open
+  }, [dialogState.filePath]);
+
+  // Share: System share sheet for sending to apps
+  const handleShare = useCallback(async () => {
+    if (!dialogState.filePath) return;
+    try {
+      await Sharing.shareAsync(dialogState.filePath, {
+        mimeType: "text/csv",
+        dialogTitle: "Share Report",
+      });
+    } catch (e) {
+      console.error("Share failed", e);
+    }
+    // Dialog stays open
+  }, [dialogState.filePath]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Render: Access Denied for non-admin
@@ -433,6 +503,8 @@ export default function ReportsScreen() {
         isCancelled={dialogState.isCancelled}
         hasPartialResults={false}
         onCancel={handleCancelDownload}
+        onView={handleView}
+        onSave={handleSave}
         onShare={handleShare}
         onClose={handleCloseDialog}
       />

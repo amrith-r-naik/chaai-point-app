@@ -2117,10 +2117,7 @@ class ReportService {
         report.filename
       );
 
-      await csvExporter.shareFile(filePath, {
-        dialogTitle: `Export ${report.name}`,
-      });
-
+      // File saved - sharing is now user-initiated from the dialog
       return { success: true, filePath };
     } catch (error) {
       if (error instanceof Error && error.message === "CANCELLED") {

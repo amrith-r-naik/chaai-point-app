@@ -4,29 +4,31 @@
 import { theme } from "@/constants/theme";
 import { csvExporter } from "@/services/csvExporter";
 import {
-  DownloadAllProgress,
-  REPORT_DEFINITIONS,
-  ReportProgress,
-  ReportType,
+    DownloadAllProgress,
+    REPORT_DEFINITIONS,
+    ReportProgress,
+    ReportType,
 } from "@/types/reports";
 import {
-  AlertCircle,
-  Check,
-  CheckCircle,
-  Circle,
-  Download,
-  Loader2,
-  XCircle,
+    AlertCircle,
+    Check,
+    CheckCircle,
+    Circle,
+    Eye,
+    Loader2,
+    Save,
+    Share2,
+    XCircle
 } from "lucide-react-native";
 import React from "react";
 import {
-  ActivityIndicator,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 // ============================================================================
@@ -58,6 +60,8 @@ interface ProgressDialogProps {
 
   // Actions
   onCancel: () => void;
+  onView?: () => void;
+  onSave?: () => void;
   onShare?: () => void;
   onDownloadPartial?: () => void;
   onDiscard?: () => void;
@@ -228,6 +232,8 @@ export const ProgressDialog: React.FC<ProgressDialogProps> = ({
   isCancelled,
   hasPartialResults,
   onCancel,
+  onView,
+  onSave,
   onShare,
   onDownloadPartial,
   onDiscard,
@@ -331,21 +337,38 @@ export const ProgressDialog: React.FC<ProgressDialogProps> = ({
         )}
       </View>
 
+      {/* Three action buttons */}
       <View style={styles.buttonRow}>
         <TouchableOpacity
           style={[styles.button, styles.buttonSecondary, { flex: 1 }]}
-          onPress={onClose || onCancel}
+          onPress={onView}
         >
-          <Text style={styles.buttonSecondaryText}>Close</Text>
+          <Eye size={16} color={theme.colors.text} style={{ marginRight: 4 }} />
+          <Text style={styles.buttonSecondaryText}>View</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.button, styles.buttonSecondary, { flex: 1 }]}
+          onPress={onSave}
+        >
+          <Save size={16} color={theme.colors.text} style={{ marginRight: 4 }} />
+          <Text style={styles.buttonSecondaryText}>Save</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.button, styles.buttonPrimary, { flex: 1 }]}
           onPress={onShare}
         >
-          <Download size={18} color="#fff" style={{ marginRight: 6 }} />
-          <Text style={styles.buttonPrimaryText}>Share / Save</Text>
+          <Share2 size={16} color="#fff" style={{ marginRight: 4 }} />
+          <Text style={styles.buttonPrimaryText}>Share</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Separate Close button */}
+      <TouchableOpacity
+        style={[styles.button, styles.buttonSecondary, { marginTop: 12, width: "100%" }]}
+        onPress={onClose || onCancel}
+      >
+        <Text style={styles.buttonSecondaryText}>Close</Text>
+      </TouchableOpacity>
     </View>
   );
 

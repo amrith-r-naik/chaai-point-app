@@ -1,12 +1,15 @@
 import { theme } from "@/constants/theme";
+import { orderService } from "@/services/orderService";
 import { paymentService } from "@/services/paymentService";
 import { authState } from "@/state/authState";
+import { orderState } from "@/state/orderState";
 import { use$ } from "@legendapp/state/react";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, FileText } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -57,6 +60,24 @@ export default function ReceiptDetailsScreen() {
       month: "2-digit",
       year: "numeric",
     });
+  };
+
+  const handleViewKot = async (kotId: string) => {
+    try {
+      setLoading(true);
+      const order = await orderService.getOrderById(kotId);
+      if (order) {
+        orderState.selectedOrder.set(order);
+        router.push("/(modals)/order-details");
+      } else {
+        Alert.alert("Error", "Could not find order details");
+      }
+    } catch (e) {
+      console.error("Failed to load order", e);
+      Alert.alert("Error", "Failed to load order details");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const formatTime = (dateString: string) => {
@@ -484,7 +505,9 @@ export default function ReceiptDetailsScreen() {
               </View>
 
               {billDetails.kots.map((kot: any, index: number) => (
-                <View
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => handleViewKot(kot.id)}
                   key={kot.id}
                   style={{
                     backgroundColor: "white",
@@ -546,7 +569,7 @@ export default function ReceiptDetailsScreen() {
                   >
                     {kot.items}
                   </Text>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           )}

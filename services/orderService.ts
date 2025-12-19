@@ -369,8 +369,9 @@ class OrderService {
         const placeholders = uncachedIds.map(() => "?").join(",");
 
         const rows = (await db!.getAllAsync(
-          `SELECT ki.id, ki.kotId, ki.itemId, ki.quantity, ki.priceAtTime
+          `SELECT ki.id, ki.kotId, ki.itemId, ki.quantity, ki.priceAtTime, mi.name as itemName
            FROM kot_items ki
+           LEFT JOIN menu_items mi ON ki.itemId = mi.id
            WHERE ki.kotId IN (${placeholders})`,
           uncachedIds
         )) as any[];
@@ -387,6 +388,14 @@ class OrderService {
             itemId: r.itemId,
             quantity: r.quantity,
             priceAtTime: r.priceAtTime,
+            // Map the fetched name to the 'name' property expected by the UI/OrderItemsCache
+            name: r.itemName,
+            // Also populate menuItem object if needed by some consumers
+             menuItem: {
+              id: r.itemId,
+              name: r.itemName,
+              price: r.priceAtTime
+            }
           });
         }
 

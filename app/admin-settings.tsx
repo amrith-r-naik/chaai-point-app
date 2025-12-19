@@ -1370,6 +1370,46 @@ export default function AdminSettingsScreen() {
                 </View>
               )}
             </View>
+
+            <View style={{ marginBottom: 32 }}>
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: "bold",
+                  color: theme.colors.text,
+                  marginBottom: 8,
+                }}
+              >
+                Dummy Data for Testing
+              </Text>
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: theme.colors.textSecondary,
+                  marginBottom: 12,
+                }}
+              >
+                Dummy data added for reports testing
+              </Text>
+
+              <View style={{ flexDirection: "row", gap: 12, marginBottom: 8 }}>
+                <TouchableOpacity
+                  onPress={handleSetupDemoData}
+                  style={{
+                    backgroundColor: theme.colors.primary,
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    borderRadius: 8,
+                    alignSelf: "flex-start",
+                    ...theme.shadows.sm,
+                  }}
+                >
+                  <Text style={{ color: "white", fontWeight: "600" }}>
+                    Dummy Data for Testing
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </>
         )}
 
